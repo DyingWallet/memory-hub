@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/protocol" },
+    { "path": "./packages/core" },
+    { "path": "./packages/server" },
+    { "path": "./packages/sdk" },
+    { "path": "./packages/admin" },
+    { "path": "./packages/adapter-dsh" },
+    { "path": "./packages/adapter-qq" }
+  ]
+}

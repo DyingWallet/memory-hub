@@ -1,0 +1,7 @@
+packages:
+  - 'packages/*'
+
+# Windows note: pnpm's default "isolated" layout creates directory junctions
+# that Node's realpath does not follow on this machine, so fastify cannot find
+# its own deps. A flat (hoisted) node_modules avoids junctions entirely.
+nodeLinker: hoisted

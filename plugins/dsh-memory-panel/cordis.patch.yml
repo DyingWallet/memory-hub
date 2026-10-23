@@ -1,0 +1,4 @@
+- insert:
+    - id: dsh-memory-panel
+      name: dsh-memory-panel
+      config: {}

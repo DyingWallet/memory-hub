@@ -1,0 +1,38 @@
+{
+  "name": "memory-hub",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first memory service (memd) + DSH plugin + QQ bridge adapter",
+  "type": "module",
+  "packageManager": "pnpm@11.28.5",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "node node_modules/typescript/bin/tsc -b && node packages/adapter-qq/scripts/postbuild.mjs",
+    "build:tests": "node node_modules/typescript/bin/tsc -p tsconfig.tests.json",
+    "clean": "node node_modules/typescript/bin/tsc -b --clean",
+    "gen:openapi": "node scripts/gen-openapi.mjs",
+    "setup:dsh": "node scripts/setup-dsh-mcp.mjs",
+    "verify:recall": "node scripts/verify-recall.mjs",
+    "archive:facts": "node scripts/archive-facts.mjs",
+    "backup": "node scripts/backup.mjs",
+    "monitor": "node scripts/monitor.mjs",
+    "prestart": "node node_modules/typescript/bin/tsc -b",
+    "pretest": "node node_modules/typescript/bin/tsc -b && node node_modules/typescript/bin/tsc -p tsconfig.tests.json && node packages/adapter-qq/scripts/postbuild.mjs",
+    "test": "node --test --test-isolation=none \"tests/dist/**/*.test.js\"",
+    "start": "node packages/server/dist/index.js",
+    "admin": "node packages/admin/dist/cli.js"
+  },
+  "devDependencies": {
+    "@memsvc/adapter-dsh": "workspace:*",
+    "@memsvc/adapter-qq": "workspace:*",
+    "@memsvc/admin": "workspace:*",
+    "@memsvc/core": "workspace:*",
+    "@memsvc/protocol": "workspace:*",
+    "@memsvc/sdk": "workspace:*",
+    "@memsvc/server": "workspace:*",
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  }
+}

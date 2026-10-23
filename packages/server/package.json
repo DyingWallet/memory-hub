@@ -1,0 +1,58 @@
+{
+  "name": "@memsvc/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./app": {
+      "types": "./dist/app.d.ts",
+      "import": "./dist/app.js"
+    },
+    "./audit": {
+      "types": "./dist/audit.d.ts",
+      "import": "./dist/audit.js"
+    },
+    "./indexer": {
+      "types": "./dist/indexer.d.ts",
+      "import": "./dist/indexer.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
+    "./db": {
+      "types": "./dist/db.d.ts",
+      "import": "./dist/db.js"
+    },
+    "./tokens": {
+      "types": "./dist/tokens.d.ts",
+      "import": "./dist/tokens.js"
+    },
+    "./review": {
+      "types": "./dist/review.d.ts",
+      "import": "./dist/review.js"
+    },
+    "./archive": {
+      "types": "./dist/archive.d.ts",
+      "import": "./dist/archive.js"
+    },
+    "./backup": {
+      "types": "./dist/backup.d.ts",
+      "import": "./dist/backup.js"
+    },
+    "./metrics": {
+      "types": "./dist/metrics.d.ts",
+      "import": "./dist/metrics.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@fastify/type-provider-typebox": "^5.2.0",
+    "@memsvc/core": "workspace:*",
+    "@memsvc/protocol": "workspace:*",
+    "@sinclair/typebox": "^0.34.41",
+    "fastify": "^5.6.2"
+  }
+}

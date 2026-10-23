@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.tsbuildinfo
+data/
+index/
+config.json
+*.token
+logs/
+backups/
+*.bak-*
+_tmp/

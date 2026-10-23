@@ -1,0 +1,45 @@
+{
+  "hosts": [
+    "127.0.0.1",
+    "172.22.0.10"
+  ],
+  "port": 8787,
+  "dataDir": "data",
+  "memoriesDir": "../memories",
+  "watch": true,
+  "searchDefaultK": 5,
+  "searchMaxK": 10,
+  "searchDefaultChars": 600,
+  "recallMaxMessages": 8,
+  "writeMaxChars": 8000,
+  "logLevel": "info",
+  "instructions": "需要细节时调用 memory_search；先 5 条，不够再 k=10。不要一次取全量，也不要编造没检索到的记忆。",
+  "privacy": {
+    "sensitiveScope": "sensitive:read",
+    "sensitiveAudiences": [
+      "main",
+      "qq:owner"
+    ],
+    "ownerAudiences": [
+      "main",
+      "qq:owner"
+    ]
+  },
+  "shortTerm": {
+    "enabled": true,
+    "ttlHours": 24,
+    "maxTtlHours": 168,
+    "reviewLookbackHours": 72,
+    "reviewLimit": 30,
+    "reviewIntervalHours": 20
+  },
+  "archive": {
+    "enabled": false,
+    "keepMonths": 12
+  },
+  "backup": {
+    "enabled": true,
+    "dir": "../backups/memory-hub",
+    "keepDays": 14
+  }
+}

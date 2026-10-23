@@ -1,0 +1,7 @@
+- insert:
+    - id: dsh-memory
+      name: dsh-memory
+      config:
+        endpoint: http://127.0.0.1:8787
+        tokenFile: C:\Users\70903\.dsh\memory-token
+        scene: main

@@ -1,0 +1,17 @@
+{
+  "name": "@memsvc/admin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "memd-admin": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@memsvc/core": "workspace:*",
+    "@memsvc/protocol": "workspace:*",
+    "@memsvc/server": "workspace:*"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "dsh-memory-panel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Read-only memory-hub status page for the DSH settings UI",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    }
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  }
+}

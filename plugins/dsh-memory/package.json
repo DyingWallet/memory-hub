@@ -1,0 +1,13 @@
+{
+  "name": "dsh-memory",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ingest DSH session messages into memory-hub as short-term memories",
+  "type": "module",
+  "main": "./lib/index.js",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

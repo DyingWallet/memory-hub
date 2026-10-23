@@ -1,0 +1,10 @@
+{
+  "name": "@memsvc/adapter-qq",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/memory-client.mjs",
+  "scripts": {
+    "build": "tsc -b && node scripts/postbuild.mjs"
+  }
+}

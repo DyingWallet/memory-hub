@@ -1,0 +1,2102 @@
+openapi: 3.1.0
+info:
+  title: memory-hub
+  version: 0.1.0
+  description: "Local-first, scope-filtered text memory for DSH and the QQ bridge."
+servers:
+  - url: "http://127.0.0.1:8787"
+    description: loopback
+  - url: "http://172.22.0.10:8787"
+    description: ZeroTier VLAN
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: "msv1_<id>_<secret>"
+  schemas:
+    ErrorBody:
+      additionalProperties: false
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          additionalProperties: false
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            requestId:
+              type: string
+            details:
+              type: object
+              patternProperties:
+                "^(.*)$": {}
+    healthResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - ok
+        - version
+        - uptime_s
+        - index
+      properties:
+        ok:
+          type: boolean
+        version:
+          type: string
+        uptime_s:
+          type: number
+        index:
+          additionalProperties: false
+          type: object
+          required:
+            - docs
+            - facts
+            - chunks
+          properties:
+            docs:
+              type: integer
+            facts:
+              type: integer
+            chunks:
+              type: integer
+            built_at:
+              type: string
+    capabilitiesResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - protocol
+        - version
+        - tools
+        - features
+        - limits
+      properties:
+        protocol:
+          const: v1
+          type: string
+        version:
+          type: string
+        tools:
+          type: array
+          items:
+            type: string
+        features:
+          additionalProperties: false
+          type: object
+          required:
+            - images
+            - documents
+            - semantic
+            - offline
+            - short_term
+          properties:
+            images:
+              type: boolean
+            documents:
+              type: boolean
+            semantic:
+              type: boolean
+            offline:
+              type: boolean
+            short_term:
+              type: boolean
+        limits:
+          additionalProperties: false
+          type: object
+          required:
+            - search_default_k
+            - search_max_k
+            - search_default_chars
+            - recall_max_messages
+            - write_max_chars
+          properties:
+            search_default_k:
+              type: integer
+            search_max_k:
+              type: integer
+            search_default_chars:
+              type: integer
+            recall_max_messages:
+              type: integer
+            write_max_chars:
+              type: integer
+    configSchemaResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - title
+        - description
+        - schema
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        schema:
+          type: object
+          patternProperties:
+            "^(.*)$": {}
+    getConfigResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - shortTerm
+        - privacy
+        - archive
+      properties:
+        shortTerm:
+          additionalProperties: false
+          type: object
+          required:
+            - enabled
+            - ttlHours
+            - maxTtlHours
+            - reviewLookbackHours
+            - reviewLimit
+            - reviewIntervalHours
+          properties:
+            enabled:
+              type: boolean
+            ttlHours:
+              type: number
+            maxTtlHours:
+              type: number
+            reviewLookbackHours:
+              type: number
+            reviewLimit:
+              type: integer
+            reviewIntervalHours:
+              type: number
+        privacy:
+          additionalProperties: false
+          type: object
+          required:
+            - sensitiveScope
+            - sensitiveAudiences
+            - ownerAudiences
+          properties:
+            sensitiveScope:
+              type: string
+            sensitiveAudiences:
+              type: array
+              items:
+                type: string
+            ownerAudiences:
+              type: array
+              items:
+                type: string
+        archive:
+          additionalProperties: false
+          type: object
+          required:
+            - enabled
+            - keepMonths
+          properties:
+            enabled:
+              type: boolean
+            keepMonths:
+              type: integer
+    updateConfigRequest:
+      additionalProperties: false
+      minProperties: 1
+      type: object
+      properties:
+        shortTerm:
+          additionalProperties: false
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            ttlHours:
+              minimum: 0.1
+              maximum: 720
+              type: number
+            maxTtlHours:
+              minimum: 0.1
+              maximum: 8760
+              type: number
+            reviewLookbackHours:
+              minimum: 1
+              maximum: 336
+              type: number
+            reviewLimit:
+              minimum: 1
+              maximum: 100
+              type: integer
+            reviewIntervalHours:
+              minimum: 1
+              maximum: 168
+              type: number
+        privacy:
+          additionalProperties: false
+          type: object
+          properties:
+            sensitiveScope:
+              maxLength: 64
+              type: string
+            sensitiveAudiences:
+              maxItems: 32
+              type: array
+              items:
+                maxLength: 120
+                type: string
+            ownerAudiences:
+              maxItems: 32
+              type: array
+              items:
+                maxLength: 120
+                type: string
+        archive:
+          additionalProperties: false
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            keepMonths:
+              minimum: 0
+              maximum: 120
+              type: integer
+    updateConfigResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - ok
+        - applied
+      properties:
+        ok:
+          type: boolean
+        applied:
+          type: array
+          items:
+            type: string
+    getTokensResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - tokens
+      properties:
+        tokens:
+          type: array
+          items:
+            additionalProperties: false
+            type: object
+            required:
+              - id
+              - name
+              - surface
+              - scenes
+              - scopes
+              - created_at
+              - revoked_at
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              surface:
+                type: string
+              scenes:
+                type: array
+                items:
+                  type: string
+              scopes:
+                type: array
+                items:
+                  type: string
+              created_at:
+                type: string
+              revoked_at:
+                anyOf:
+                  - type: string
+                  - type: null
+              last_used_at:
+                type: string
+    revokeTokenRequest:
+      additionalProperties: false
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          minLength: 1
+          maxLength: 100
+          type: string
+    revokeTokenResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - ok
+        - id
+      properties:
+        ok:
+          type: boolean
+        id:
+          type: string
+    bootstrapRequest:
+      additionalProperties: false
+      type: object
+      properties:
+        surface:
+          maxLength: 120
+          type: string
+        scene:
+          maxLength: 120
+          type: string
+    bootstrapResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - identity
+        - audience
+        - recent
+        - counts
+        - instructions
+      properties:
+        identity:
+          type: string
+        audience:
+          additionalProperties: false
+          type: object
+          required:
+            - id
+            - face
+          properties:
+            id:
+              type: string
+            face:
+              type: string
+            name:
+              type: string
+            kind:
+              type: string
+            relationship:
+              type: string
+            boundaries:
+              type: array
+              items:
+                type: string
+            known:
+              type: array
+              items:
+                type: string
+        recent:
+          type: array
+          items:
+            additionalProperties: false
+            type: object
+            required:
+              - id
+              - title
+              - kind
+            properties:
+              id:
+                type: string
+              title:
+                type: string
+              kind:
+                anyOf:
+                  - const: note
+                    type: string
+                  - const: event
+                    type: string
+                  - const: stance
+                    type: string
+                  - const: promise
+                    type: string
+                  - const: person
+                    type: string
+                  - const: identity
+                    type: string
+                  - const: chat
+                    type: string
+                  - const: qq-topic
+                    type: string
+                  - const: qq-impression
+                    type: string
+                  - const: journal
+                    type: string
+                  - const: decision
+                    type: string
+                  - const: knowledge
+                    type: string
+                  - const: audience
+                    type: string
+                  - const: project
+                    type: string
+                  - const: profile
+                    type: string
+                  - const: preference
+                    type: string
+              updated_at:
+                type: string
+        counts:
+          additionalProperties: false
+          type: object
+          required:
+            - docs
+            - facts
+          properties:
+            docs:
+              type: integer
+            facts:
+              type: integer
+        instructions:
+          type: string
+    searchRequest:
+      additionalProperties: false
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          minLength: 1
+          maxLength: 2000
+          type: string
+        k:
+          minimum: 1
+          maximum: 10
+          type: integer
+        scene:
+          maxLength: 120
+          type: string
+        kinds:
+          maxItems: 16
+          type: array
+          items:
+            anyOf:
+              - const: note
+                type: string
+              - const: event
+                type: string
+              - const: stance
+                type: string
+              - const: promise
+                type: string
+              - const: person
+                type: string
+              - const: identity
+                type: string
+              - const: chat
+                type: string
+              - const: qq-topic
+                type: string
+              - const: qq-impression
+                type: string
+              - const: journal
+                type: string
+              - const: decision
+                type: string
+              - const: knowledge
+                type: string
+              - const: audience
+                type: string
+              - const: project
+                type: string
+              - const: profile
+                type: string
+              - const: preference
+                type: string
+        path_prefix:
+          maxLength: 200
+          type: string
+        max_chars:
+          minimum: 40
+          maximum: 6000
+          type: integer
+    searchResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - query
+        - results
+        - weak
+        - scanned
+      properties:
+        query:
+          type: string
+        results:
+          type: array
+          items:
+            additionalProperties: false
+            type: object
+            required:
+              - id
+              - title
+              - kind
+              - render
+            properties:
+              id:
+                type: string
+              title:
+                type: string
+              kind:
+                anyOf:
+                  - const: note
+                    type: string
+                  - const: event
+                    type: string
+                  - const: stance
+                    type: string
+                  - const: promise
+                    type: string
+                  - const: person
+                    type: string
+                  - const: identity
+                    type: string
+                  - const: chat
+                    type: string
+                  - const: qq-topic
+                    type: string
+                  - const: qq-impression
+                    type: string
+                  - const: journal
+                    type: string
+                  - const: decision
+                    type: string
+                  - const: knowledge
+                    type: string
+                  - const: audience
+                    type: string
+                  - const: project
+                    type: string
+                  - const: profile
+                    type: string
+                  - const: preference
+                    type: string
+              render:
+                additionalProperties: false
+                type: object
+                required:
+                  - type
+                  - text
+                properties:
+                  type:
+                    const: text
+                    type: string
+                  text:
+                    maxLength: 20000
+                    type: string
+              path:
+                type: string
+              heading:
+                type: string
+              updated_at:
+                type: string
+              score:
+                type: number
+              stage:
+                anyOf:
+                  - const: short
+                    type: string
+                  - const: long
+                    type: string
+              expires_at:
+                type: string
+              disclosure:
+                const: owner_initiated
+                type: string
+        weak:
+          type: boolean
+        scanned:
+          type: integer
+    getRequest:
+      additionalProperties: false
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          minLength: 1
+          maxLength: 200
+          type: string
+        scene:
+          maxLength: 120
+          type: string
+        max_chars:
+          minimum: 40
+          maximum: 20000
+          type: integer
+    getResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - memory
+      properties:
+        memory:
+          anyOf:
+            - additionalProperties: false
+              type: object
+              required:
+                - id
+                - title
+                - kind
+                - render
+              properties:
+                id:
+                  type: string
+                title:
+                  type: string
+                kind:
+                  anyOf:
+                    - const: note
+                      type: string
+                    - const: event
+                      type: string
+                    - const: stance
+                      type: string
+                    - const: promise
+                      type: string
+                    - const: person
+                      type: string
+                    - const: identity
+                      type: string
+                    - const: chat
+                      type: string
+                    - const: qq-topic
+                      type: string
+                    - const: qq-impression
+                      type: string
+                    - const: journal
+                      type: string
+                    - const: decision
+                      type: string
+                    - const: knowledge
+                      type: string
+                    - const: audience
+                      type: string
+                    - const: project
+                      type: string
+                    - const: profile
+                      type: string
+                    - const: preference
+                      type: string
+                render:
+                  additionalProperties: false
+                  type: object
+                  required:
+                    - type
+                    - text
+                  properties:
+                    type:
+                      const: text
+                      type: string
+                    text:
+                      maxLength: 20000
+                      type: string
+                path:
+                  type: string
+                heading:
+                  type: string
+                updated_at:
+                  type: string
+                score:
+                  type: number
+                stage:
+                  anyOf:
+                    - const: short
+                      type: string
+                    - const: long
+                      type: string
+                expires_at:
+                  type: string
+                disclosure:
+                  const: owner_initiated
+                  type: string
+            - type: null
+    recentRequest:
+      additionalProperties: false
+      type: object
+      properties:
+        k:
+          minimum: 1
+          maximum: 10
+          type: integer
+        scene:
+          maxLength: 120
+          type: string
+        kinds:
+          maxItems: 16
+          type: array
+          items:
+            anyOf:
+              - const: note
+                type: string
+              - const: event
+                type: string
+              - const: stance
+                type: string
+              - const: promise
+                type: string
+              - const: person
+                type: string
+              - const: identity
+                type: string
+              - const: chat
+                type: string
+              - const: qq-topic
+                type: string
+              - const: qq-impression
+                type: string
+              - const: journal
+                type: string
+              - const: decision
+                type: string
+              - const: knowledge
+                type: string
+              - const: audience
+                type: string
+              - const: project
+                type: string
+              - const: profile
+                type: string
+              - const: preference
+                type: string
+    recentResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - results
+      properties:
+        results:
+          type: array
+          items:
+            additionalProperties: false
+            type: object
+            required:
+              - id
+              - title
+              - kind
+              - render
+            properties:
+              id:
+                type: string
+              title:
+                type: string
+              kind:
+                anyOf:
+                  - const: note
+                    type: string
+                  - const: event
+                    type: string
+                  - const: stance
+                    type: string
+                  - const: promise
+                    type: string
+                  - const: person
+                    type: string
+                  - const: identity
+                    type: string
+                  - const: chat
+                    type: string
+                  - const: qq-topic
+                    type: string
+                  - const: qq-impression
+                    type: string
+                  - const: journal
+                    type: string
+                  - const: decision
+                    type: string
+                  - const: knowledge
+                    type: string
+                  - const: audience
+                    type: string
+                  - const: project
+                    type: string
+                  - const: profile
+                    type: string
+                  - const: preference
+                    type: string
+              render:
+                additionalProperties: false
+                type: object
+                required:
+                  - type
+                  - text
+                properties:
+                  type:
+                    const: text
+                    type: string
+                  text:
+                    maxLength: 20000
+                    type: string
+              path:
+                type: string
+              heading:
+                type: string
+              updated_at:
+                type: string
+              score:
+                type: number
+              stage:
+                anyOf:
+                  - const: short
+                    type: string
+                  - const: long
+                    type: string
+              expires_at:
+                type: string
+              disclosure:
+                const: owner_initiated
+                type: string
+    recallRequest:
+      additionalProperties: false
+      type: object
+      required:
+        - messages
+      properties:
+        messages:
+          maxItems: 8
+          type: array
+          items:
+            additionalProperties: false
+            type: object
+            required:
+              - role
+              - text
+            properties:
+              role:
+                maxLength: 20
+                type: string
+              text:
+                maxLength: 4000
+                type: string
+              from_owner:
+                type: boolean
+        k:
+          minimum: 1
+          maximum: 5
+          type: integer
+        scene:
+          maxLength: 120
+          type: string
+        max_chars:
+          minimum: 40
+          maximum: 1000
+          type: integer
+    recallResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - keywords
+        - results
+      properties:
+        keywords:
+          type: array
+          items:
+            type: string
+        results:
+          type: array
+          items:
+            additionalProperties: false
+            type: object
+            required:
+              - id
+              - title
+              - kind
+              - render
+            properties:
+              id:
+                type: string
+              title:
+                type: string
+              kind:
+                anyOf:
+                  - const: note
+                    type: string
+                  - const: event
+                    type: string
+                  - const: stance
+                    type: string
+                  - const: promise
+                    type: string
+                  - const: person
+                    type: string
+                  - const: identity
+                    type: string
+                  - const: chat
+                    type: string
+                  - const: qq-topic
+                    type: string
+                  - const: qq-impression
+                    type: string
+                  - const: journal
+                    type: string
+                  - const: decision
+                    type: string
+                  - const: knowledge
+                    type: string
+                  - const: audience
+                    type: string
+                  - const: project
+                    type: string
+                  - const: profile
+                    type: string
+                  - const: preference
+                    type: string
+              render:
+                additionalProperties: false
+                type: object
+                required:
+                  - type
+                  - text
+                properties:
+                  type:
+                    const: text
+                    type: string
+                  text:
+                    maxLength: 20000
+                    type: string
+              path:
+                type: string
+              heading:
+                type: string
+              updated_at:
+                type: string
+              score:
+                type: number
+              stage:
+                anyOf:
+                  - const: short
+                    type: string
+                  - const: long
+                    type: string
+              expires_at:
+                type: string
+              disclosure:
+                const: owner_initiated
+                type: string
+        review:
+          additionalProperties: false
+          type: object
+          required:
+            - should_review
+          properties:
+            should_review:
+              type: boolean
+            reminder_since:
+              type: string
+            last_reviewed_at:
+              type: string
+    writeRequest:
+      additionalProperties: false
+      type: object
+      required:
+        - kind
+        - text
+      properties:
+        kind:
+          anyOf:
+            - const: note
+              type: string
+            - const: event
+              type: string
+            - const: stance
+              type: string
+            - const: promise
+              type: string
+            - const: person
+              type: string
+            - const: identity
+              type: string
+            - const: chat
+              type: string
+            - const: qq-topic
+              type: string
+            - const: qq-impression
+              type: string
+            - const: journal
+              type: string
+            - const: decision
+              type: string
+            - const: knowledge
+              type: string
+            - const: audience
+              type: string
+            - const: project
+              type: string
+            - const: profile
+              type: string
+            - const: preference
+              type: string
+        text:
+          minLength: 1
+          maxLength: 8000
+          type: string
+        tags:
+          maxItems: 24
+          type: array
+          items:
+            maxLength: 64
+            type: string
+        audience:
+          uniqueItems: true
+          maxItems: 32
+          type: array
+          items:
+            minLength: 1
+            maxLength: 120
+            type: string
+        privacy:
+          minLength: 1
+          maxLength: 40
+          pattern: "^[a-z][a-z0-9_-]*$"
+          type: string
+        source:
+          anyOf:
+            - const: main
+              type: string
+            - const: qq
+              type: string
+            - const: import
+              type: string
+            - const: work
+              type: string
+        scene:
+          maxLength: 120
+          type: string
+        supersedes:
+          maxLength: 200
+          type: string
+        stage:
+          anyOf:
+            - const: short
+              type: string
+            - const: long
+              type: string
+        expires_at:
+          maxLength: 40
+          type: string
+        source_message_id:
+          maxLength: 200
+          type: string
+        meta:
+          type: object
+          patternProperties:
+            "^(.*)$": {}
+        idempotency_key:
+          maxLength: 200
+          type: string
+    writeResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - id
+        - indexed
+        - duplicate
+      properties:
+        id:
+          type: string
+        indexed:
+          type: boolean
+        duplicate:
+          type: boolean
+    forgetRequest:
+      additionalProperties: false
+      minProperties: 1
+      type: object
+      properties:
+        id:
+          maxLength: 200
+          type: string
+        idempotency_key:
+          maxLength: 200
+          type: string
+    forgetResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - forgotten
+        - missing
+      properties:
+        forgotten:
+          type: array
+          items:
+            type: string
+        missing:
+          type: array
+          items:
+            type: string
+    ingestRequest:
+      additionalProperties: false
+      type: object
+      required:
+        - messages
+      properties:
+        scene:
+          maxLength: 120
+          type: string
+        ttl_hours:
+          minimum: 0.1
+          maximum: 720
+          type: number
+        messages:
+          minItems: 1
+          maxItems: 50
+          type: array
+          items:
+            additionalProperties: false
+            type: object
+            required:
+              - role
+              - text
+            properties:
+              message_id:
+                maxLength: 200
+                type: string
+              role:
+                maxLength: 20
+                type: string
+              author:
+                maxLength: 120
+                type: string
+              text:
+                minLength: 1
+                maxLength: 4000
+                type: string
+              ts:
+                maxLength: 40
+                type: string
+    ingestResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - written
+        - skipped
+      properties:
+        written:
+          type: integer
+        skipped:
+          type: integer
+    reviewRequest:
+      additionalProperties: false
+      type: object
+      properties:
+        scene:
+          maxLength: 120
+          type: string
+        lookback_hours:
+          minimum: 1
+          maximum: 336
+          type: integer
+        limit:
+          minimum: 1
+          maximum: 100
+          type: integer
+        status_only:
+          type: boolean
+    reviewResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - should_review
+        - counts
+        - results
+      properties:
+        should_review:
+          type: boolean
+        reminder_since:
+          type: string
+        last_reviewed_at:
+          type: string
+        counts:
+          additionalProperties: false
+          type: object
+          required:
+            - short
+            - reviewable
+          properties:
+            short:
+              type: integer
+            reviewable:
+              type: integer
+        results:
+          type: array
+          items:
+            additionalProperties: false
+            type: object
+            required:
+              - id
+              - title
+              - kind
+              - render
+            properties:
+              id:
+                type: string
+              title:
+                type: string
+              kind:
+                anyOf:
+                  - const: note
+                    type: string
+                  - const: event
+                    type: string
+                  - const: stance
+                    type: string
+                  - const: promise
+                    type: string
+                  - const: person
+                    type: string
+                  - const: identity
+                    type: string
+                  - const: chat
+                    type: string
+                  - const: qq-topic
+                    type: string
+                  - const: qq-impression
+                    type: string
+                  - const: journal
+                    type: string
+                  - const: decision
+                    type: string
+                  - const: knowledge
+                    type: string
+                  - const: audience
+                    type: string
+                  - const: project
+                    type: string
+                  - const: profile
+                    type: string
+                  - const: preference
+                    type: string
+              render:
+                additionalProperties: false
+                type: object
+                required:
+                  - type
+                  - text
+                properties:
+                  type:
+                    const: text
+                    type: string
+                  text:
+                    maxLength: 20000
+                    type: string
+              path:
+                type: string
+              heading:
+                type: string
+              updated_at:
+                type: string
+              score:
+                type: number
+              stage:
+                anyOf:
+                  - const: short
+                    type: string
+                  - const: long
+                    type: string
+              expires_at:
+                type: string
+              disclosure:
+                const: owner_initiated
+                type: string
+    persistRequest:
+      additionalProperties: false
+      type: object
+      required:
+        - ids
+      properties:
+        ids:
+          maxItems: 50
+          type: array
+          items:
+            maxLength: 200
+            type: string
+        note:
+          additionalProperties: false
+          type: object
+          required:
+            - text
+          properties:
+            kind:
+              anyOf:
+                - const: note
+                  type: string
+                - const: event
+                  type: string
+                - const: stance
+                  type: string
+                - const: promise
+                  type: string
+                - const: person
+                  type: string
+                - const: identity
+                  type: string
+                - const: chat
+                  type: string
+                - const: qq-topic
+                  type: string
+                - const: qq-impression
+                  type: string
+                - const: journal
+                  type: string
+                - const: decision
+                  type: string
+                - const: knowledge
+                  type: string
+                - const: audience
+                  type: string
+                - const: project
+                  type: string
+                - const: profile
+                  type: string
+                - const: preference
+                  type: string
+            text:
+              minLength: 1
+              maxLength: 4000
+              type: string
+            tags:
+              maxItems: 24
+              type: array
+              items:
+                maxLength: 64
+                type: string
+    persistResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - persisted
+      properties:
+        persisted:
+          type: array
+          items:
+            type: string
+        merged:
+          type: array
+          items:
+            additionalProperties: false
+            type: object
+            required:
+              - from
+              - into
+            properties:
+              from:
+                type: string
+              into:
+                type: string
+        note_id:
+          type: string
+    audienceRequest:
+      additionalProperties: false
+      type: object
+      properties:
+        scene:
+          maxLength: 120
+          type: string
+    audienceResponse:
+      additionalProperties: false
+      type: object
+      required:
+        - audience
+      properties:
+        audience:
+          additionalProperties: false
+          type: object
+          required:
+            - id
+            - face
+          properties:
+            id:
+              type: string
+            face:
+              type: string
+            name:
+              type: string
+            kind:
+              type: string
+            relationship:
+              type: string
+            boundaries:
+              type: array
+              items:
+                type: string
+            known:
+              type: array
+              items:
+                type: string
+paths:
+  "/v1/health":
+    get:
+      operationId: health
+      summary: "Liveness, version, and index statistics."
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/healthResponse"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+  "/v1/capabilities":
+    get:
+      operationId: capabilities
+      summary: "Tools, limits, and feature flags (images/documents/semantic/offline are false in v1)."
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/capabilitiesResponse"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  "/v1/config-schema":
+    get:
+      operationId: configSchema
+      summary: "JSON Schema for the DSH settings page (renderer only, not the config source of truth)."
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/configSchemaResponse"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  "/v1/config-state":
+    get:
+      operationId: getConfig
+      summary: Read the editable runtime config (root token only; settings page backfill).
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/getConfigResponse"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        403:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  "/v1/config":
+    post:
+      operationId: updateConfig
+      summary: Update whitelisted runtime config (shortTerm / privacy.autoClassify); root token only.
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/updateConfigResponse"
+        400:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        403:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/updateConfigRequest"
+      security:
+        - bearerAuth: []
+  "/v1/tokens":
+    get:
+      operationId: getTokens
+      summary: List token metadata (root only; hashes are never returned).
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/getTokensResponse"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        403:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  "/v1/tokens/revoke":
+    post:
+      operationId: revokeToken
+      summary: Revoke one token by id (root only). Issuing stays in the admin CLI.
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/revokeTokenResponse"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        403:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        404:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/revokeTokenRequest"
+      security:
+        - bearerAuth: []
+  "/v1/bootstrap":
+    post:
+      operationId: bootstrap
+      summary: "Identity, audience face, and recent titles for session start."
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/bootstrapResponse"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/bootstrapRequest"
+      security:
+        - bearerAuth: []
+  "/v1/search":
+    post:
+      operationId: search
+      summary: "Keyword search over visible chunks (default k=5, max 10)."
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/searchResponse"
+        400:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/searchRequest"
+      security:
+        - bearerAuth: []
+  "/v1/get":
+    post:
+      operationId: get
+      summary: Fetch one chunk by id; 404 when absent or not visible in this scene.
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/getResponse"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        404:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/getRequest"
+      security:
+        - bearerAuth: []
+  "/v1/recent":
+    post:
+      operationId: recent
+      summary: Most recently updated visible memories.
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/recentResponse"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/recentRequest"
+      security:
+        - bearerAuth: []
+  "/v1/recall":
+    post:
+      operationId: recall
+      summary: Keyword recall from recent chat messages; returns 2–3 short snippets.
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/recallResponse"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/recallRequest"
+      security:
+        - bearerAuth: []
+  "/v1/write":
+    post:
+      operationId: write
+      summary: Append one fact to facts/YYYY-MM.jsonl and index it.
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/writeResponse"
+        400:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        409:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        413:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/writeRequest"
+      security:
+        - bearerAuth: []
+  "/v1/forget":
+    post:
+      operationId: forget
+      summary: Forget one fact by id (or idempotency key); the JSONL keeps a tombstone.
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/forgetResponse"
+        400:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        403:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        404:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/forgetRequest"
+      security:
+        - bearerAuth: []
+  "/v1/ingest":
+    post:
+      operationId: ingest
+      summary: Store ordinary chat messages as short-term memories with a TTL (forgetting curve).
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ingestResponse"
+        400:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        413:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/ingestRequest"
+      security:
+        - bearerAuth: []
+  "/v1/review":
+    post:
+      operationId: review
+      summary: "Short-term memories due for the daily review, for the model to promote or let expire."
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/reviewResponse"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/reviewRequest"
+      security:
+        - bearerAuth: []
+  "/v1/persist":
+    post:
+      operationId: persist
+      summary: "Promote short-term memories to long-term, optionally with a distilled note."
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/persistResponse"
+        400:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        404:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/persistRequest"
+      security:
+        - bearerAuth: []
+  "/v1/audience":
+    post:
+      operationId: audience
+      summary: Read the audience card for a scene (owner-only in practice).
+      tags:
+        - memory
+      responses:
+        200:
+          description: Success
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/audienceResponse"
+        401:
+          description: Missing or invalid token
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        404:
+          description: Error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        500:
+          description: Internal error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/audienceRequest"
+      security:
+        - bearerAuth: []
