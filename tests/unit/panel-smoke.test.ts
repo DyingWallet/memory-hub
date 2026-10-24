@@ -155,6 +155,19 @@ test('panel host injects the root token when the page sends none', () => {
   assert.match(host, /readFileSync\(TOKEN_FILE, 'utf8'\)/);
 });
 
+/**
+ * 重启后验证：两个插件加载时各写一条 data/plugin-load/<name>.json，
+ * doctor 拿它和 data/setup-stamp.json 比对，判断安装后是否已经加载。
+ */
+test('both plugins write a load marker for the post-restart check', () => {
+  for (const file of ['dsh-memory', 'dsh-memory-panel']) {
+    const source = readFileSync(new URL(`../../../plugins/${file}/lib/index.js`, import.meta.url), 'utf8');
+    assert.match(source, /function writeLoadMarker\(name\)/, `${file} defines the marker writer`);
+    assert.match(source, /'plugin-load'/, `${file} targets data/plugin-load`);
+    assert.match(source, /writeLoadMarker\('(dsh-memory|dsh-memory-panel)'\)/, `${file} calls it from apply()`);
+  }
+});
+
 test('panel groups each hint with its own section', () => {
   // useState 顺序：health, token, config, configError, saveState, tokens, ...
   const tree = textOf(renderPanel([{ loading: true }, 'token-value', CONFIG_STATE]));

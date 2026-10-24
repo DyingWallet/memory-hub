@@ -99,6 +99,38 @@ if (health && token) {
   }
 }
 
+/* ── 插件是否真的被加载（重启后验证） ─────────────────────── */
+const stampFile = join(root, 'data', 'setup-stamp.json');
+let installedAt = 0;
+try {
+  installedAt = Date.parse(JSON.parse(readFileSync(stampFile, 'utf8').replace(/^\uFEFF/, '')).at);
+} catch {
+  installedAt = 0;
+}
+for (const plugin of ['dsh-memory', 'dsh-memory-panel']) {
+  const markerFile = join(root, 'data', 'plugin-load', `${plugin}.json`);
+  let marker = null;
+  try {
+    marker = JSON.parse(readFileSync(markerFile, 'utf8').replace(/^\uFEFF/, ''));
+  } catch {
+    marker = null;
+  }
+  if (!marker) {
+    add(`loaded.${plugin}`, `插件 ${plugin} 已加载`, false, '没有加载标记：从未在 DSH 里加载过，或插件未启用');
+    continue;
+  }
+  const loadedAt = Date.parse(marker.at);
+  const afterInstall = installedAt === 0 || loadedAt >= installedAt;
+  add(
+    `loaded.${plugin}`,
+    `插件 ${plugin} 已加载`,
+    afterInstall,
+    afterInstall
+      ? `加载于 ${marker.at}（pid ${marker.pid}）`
+      : `上次加载 ${marker.at}，早于本次安装（${new Date(installedAt).toISOString()}）→ 需要重启 DSH`,
+  );
+}
+
 /* ── 模型目录（语义的前置） ───────────────────────────────── */
 const modelFile = join(root, 'models', 'bge-small-zh-v1.5', 'onnx', 'model_quantized.onnx');
 if (existsSync(modelFile)) {

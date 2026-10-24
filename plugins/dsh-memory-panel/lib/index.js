@@ -12,9 +12,10 @@
  * already runs in the trusted renderer, so this only removes a manual step. The
  * panel still accepts an explicit token and then forwards that instead.
  */
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const name = 'dsh-memory-panel';
 export const inject = ['webServer'];
@@ -67,7 +68,25 @@ function hostAuthorization() {
   }
 }
 
+/** 在 memory-hub/data/plugin-load/<name>.json 写一条带时间戳与 pid 的加载记录。 */
+function writeLoadMarker(name) {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const file = join(here, '..', '..', '..', 'data', 'plugin-load', `${name}.json`);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(
+      file,
+      `${JSON.stringify({ name, at: new Date().toISOString(), pid: process.pid }, null, 2)}\n`,
+      'utf8',
+    );
+  } catch {
+    // 只影响自检，不影响代理。
+  }
+}
+
 export function apply(ctx) {
+  // 加载标记：doctor 用它判断「安装之后有没有重启」。
+  writeLoadMarker('dsh-memory-panel');
   for (const [path, route] of ROUTES) {
     ctx.effect(() =>
       ctx.webServer.register({

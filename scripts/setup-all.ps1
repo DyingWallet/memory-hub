@@ -107,12 +107,26 @@ if ($Semantic) {
   else { Write-Host 'memd is not running; start it, then run: node scripts\embed.mjs' -ForegroundColor Yellow }
 }
 
-# 6. doctor
+# 6. stamp: doctor uses this to tell "installed" from "installed AND loaded"
+$stamp = [ordered]@{
+  at = (Get-Date).ToUniversalTime().ToString('o')
+  plugins = @('dsh-memory', 'dsh-memory-panel')
+  tokenFile = (Join-Path $env:USERPROFILE '.dsh\memory-token')
+} | ConvertTo-Json -Depth 3
+$dataDir = Join-Path $root 'data'
+if (-not (Test-Path -LiteralPath $dataDir)) { New-Item -ItemType Directory -Path $dataDir | Out-Null }
+[IO.File]::WriteAllText((Join-Path $dataDir 'setup-stamp.json'), "$stamp`n", (New-Object System.Text.UTF8Encoding($false)))
+
+# 7. doctor
 Write-Host ''
 & $node (Join-Path $root 'scripts\doctor.mjs')
 $doctorExit = $LASTEXITCODE
 Write-Host ''
-if ($doctorExit -ne 0) { Write-Host 'doctor reported missing items (see above).' -ForegroundColor Yellow }
+if ($doctorExit -ne 0) {
+  # 刚装完还没重启时，doctor 会报「插件尚未加载」——这是预期，不是安装失败。
+  Write-Host 'doctor reported missing items (see above).' -ForegroundColor Yellow
+  Write-Host 'If the failures are only "plugin ... not loaded", restart DSH and re-run -Check:' -ForegroundColor Yellow
+  Write-Host "  powershell -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Check" -ForegroundColor Yellow
+}
 Write-Host 'done. Restart DSH Desktop to load the MCP server and both plugins.'
-Write-Host 'verify later with: powershell -ExecutionPolicy Bypass -File scripts\setup-all.ps1 -Check'
-exit $doctorExit
+exit 0

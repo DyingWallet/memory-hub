@@ -220,6 +220,15 @@ doctor 检查项：构建产物、两个插件（dep/bundle/linked）、MCP 注�
 
 **令牌是幂等的**：`setup-dsh-mcp.mjs --with-token` 发现 `~/.dsh/memory-token` 里的令牌仍然有效就复用，不会每次部署都换一个（换令牌会让面板/桥接里已配好的副本集体失效）。
 
+**重启后自动验证**：安装结束时 `setup-all.ps1` 会写 `data/setup-stamp.json`；两个插件在 `apply()`
+被调用时各写一条 `data/plugin-load/<name>.json`（含时间戳与 pid）。doctor 比对两者：
+
+- 加载时间 **晚于** 安装时间 → `OK 插件 … 已加载`；
+- 没有标记，或早于安装时间 → `FAIL … 需要重启 DSH`。
+
+所以「装完还没重启」时 `-Check` 会红两项——这是预期。重启 DSH 后再跑一次 `-Check`，全绿就说明
+这一版插件真的跑起来了（不只是文件装好了）。
+
 ### 5.1 全会话短期上报（`plugins/dsh-memory`）
 
 `agent/pre-step` 把用户消息发到 `/v1/ingest`（scene=main），跳过含「【会话令牌】」的桥接会话；按 50 条/批，失败静默（memd 不在线不能拖垮 DSH）。

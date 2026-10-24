@@ -9,9 +9,10 @@
  * - Every call is fire-and-forget: memd being down must not affect a turn.
  */
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const name = 'dsh-memory';
 
@@ -43,9 +44,29 @@ export function messageIdFor(sessionId, turn, step, text) {
   return `${sessionId}:${turn}:${step}:${createHash('sha256').update(text).digest('hex').slice(0, 16)}`;
 }
 
+/** 在 memory-hub/data/plugin-load/<name>.json 写一条带时间戳与 pid 的加载记录。 */
+function writeLoadMarker(name) {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const file = join(here, '..', '..', '..', 'data', 'plugin-load', `${name}.json`);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(
+      file,
+      `${JSON.stringify({ name, at: new Date().toISOString(), pid: process.pid }, null, 2)}\n`,
+      'utf8',
+    );
+  } catch {
+    // 只影响自检，不影响 ingest。
+  }
+}
+
 export function apply(ctx, config = {}) {
   const options = { ...DEFAULTS, ...config };
   if (options.enabled === false) return;
+
+  // 加载标记：证明这一版插件真的被 DSH 加载了（`scripts/doctor.mjs` 用它和
+  // data/setup-stamp.json 比对，判断「安装后有没有重启」）。写失败不能影响插件。
+  writeLoadMarker('dsh-memory');
 
   ctx.on(
     'agent/pre-step',
