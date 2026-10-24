@@ -181,7 +181,9 @@ const DEFAULTS: Omit<ServerConfig, 'dataDir' | 'memoriesDir' | 'indexFile' | 'to
     batchSize: 8,
     threads: 1,
     backfillThreads: 4,
-    maxCandidates: 200,
+    // 每次检索取多少个向量候选再与 FTS 融合。实测 50 与 200 的排序结果一致，
+    // 但 200 会多花约 1 ms（782 个 chunk 时 4.32 → 3.35 ms）。
+    maxCandidates: 50,
   },
 };
 

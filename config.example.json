@@ -53,6 +53,6 @@
     "batchSize": 8,
     "threads": 1,
     "backfillThreads": 4,
-    "maxCandidates": 200
+    "maxCandidates": 50
   }
 }

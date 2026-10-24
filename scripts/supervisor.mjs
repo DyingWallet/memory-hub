@@ -85,6 +85,17 @@ function runNodeScript(script, logName) {
   return new Promise((resolve) => {
     mkdirSync(LOG_DIR, { recursive: true });
     const fd = openSync(join(LOG_DIR, logName), 'a');
+    // 'error' 和 'exit' 都可能触发，重复 closeSync 会抛 EBADF，把看护进程直接带崩。
+    let closed = false;
+    const closeFd = () => {
+      if (closed) return;
+      closed = true;
+      try {
+        closeSync(fd);
+      } catch {
+        // 已经关掉了，忽略
+      }
+    };
     let child;
     try {
       child = spawn(process.execPath, [join(ROOT, 'scripts', script)], {
@@ -93,16 +104,16 @@ function runNodeScript(script, logName) {
         stdio: ['ignore', fd, fd],
       });
     } catch (error) {
-      closeSync(fd);
+      closeFd();
       resolve({ ok: false, detail: `spawn failed: ${error?.message ?? error}` });
       return;
     }
     child.once('error', (error) => {
-      closeSync(fd);
+      closeFd();
       resolve({ ok: false, detail: `spawn error: ${error?.message ?? error}` });
     });
     child.once('exit', (code) => {
-      closeSync(fd);
+      closeFd();
       resolve({ ok: code === 0, detail: `exit=${code}` });
     });
   });
@@ -112,17 +123,27 @@ function startMemd() {
   return new Promise((resolve) => {
     mkdirSync(LOG_DIR, { recursive: true });
     const fd = openSync(join(LOG_DIR, 'supervisor-start.log'), 'a');
+    let closed = false;
+    const closeFd = () => {
+      if (closed) return;
+      closed = true;
+      try {
+        closeSync(fd);
+      } catch {
+        // 已经关掉了，忽略
+      }
+    };
     const child = spawn(
       'powershell.exe',
       ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', join(ROOT, 'scripts', 'start.ps1'), '-NoWait'],
       { cwd: ROOT, windowsHide: true, stdio: ['ignore', fd, fd] },
     );
     child.once('error', (error) => {
-      closeSync(fd);
+      closeFd();
       resolve({ ok: false, detail: `spawn error: ${error?.message ?? error}` });
     });
     child.once('exit', (code) => {
-      closeSync(fd);
+      closeFd();
       resolve({ ok: code === 0, detail: `start.ps1 exit=${code}` });
     });
   });

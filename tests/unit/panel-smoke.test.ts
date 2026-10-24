@@ -137,6 +137,10 @@ test('panel bundle registers a settings section and uses the proxy paths', () =>
   assert.match(source, /semantic: \{ enabled: config\.semantic\.enabled \}/);
   assert.match(source, /pnpm fetch:model/);
   assert.match(source, /config\.semantic\.ready/);
+
+  // 令牌框要防抖：每敲一个字符就发两个请求太浪费。
+  assert.match(source, /setTimeout\(\(\) => setCommittedToken\(token\.trim\(\)\), 300\)/);
+  assert.match(source, /\}, \[committedToken, reloadKey\]\);/);
 });
 
 test('panel groups each hint with its own section', () => {

@@ -85,6 +85,9 @@ export interface CreateSemanticOptions {
 }
 
 export class SemanticIndex {
+  /** 上一次「完全对齐」时的变更指纹；相同就跳过整轮检查。 */
+  private syncKey: string | null = null;
+
   private constructor(
     private readonly db: Db,
     private readonly config: SemanticConfig,
@@ -150,6 +153,12 @@ export class SemanticIndex {
    */
   async sync(options: { max?: number } = {}): Promise<{ embedded: number; removed: number; pending: number }> {
     const max = Math.max(1, options.max ?? 64);
+
+    // 服务里每 5 秒调一次，绝大多数时候什么都没变。全量读 chunks.text 大约 2 ms，
+    // 先用一个便宜的指纹（行数 + 最大 rowid + 最后更新时间 + 向量数）判断要不要干活。
+    const fingerprint = this.fingerprint();
+    if (this.syncKey === fingerprint) return { embedded: 0, removed: 0, pending: 0 };
+
     const rows = this.db.prepare('SELECT id, text FROM chunks').all() as { id: string; text: string }[];
     const chunkIds = new Set(rows.map((row) => row.id));
     const existing = new Set(
@@ -161,7 +170,11 @@ export class SemanticIndex {
 
     const missing = rows.filter((row) => !existing.has(row.id));
     const batch = missing.slice(0, max);
-    if (batch.length === 0) return { embedded: 0, removed: orphans.length, pending: 0 };
+    if (batch.length === 0) {
+      // 一次完整的检查确认没有缺口也没孤儿：记下指纹，下一次同样状态直接返回。
+      if (orphans.length === 0) this.syncKey = fingerprint;
+      return { embedded: 0, removed: orphans.length, pending: 0 };
+    }
 
     const vectors = await this.runtime.embed(batch.map((row) => row.text));
     const items: { id: string; vector: Float32Array }[] = [];
@@ -253,6 +266,19 @@ export class SemanticIndex {
     } catch {
       return 0;
     }
+  }
+
+  /**
+   * 便宜的变更指纹：chunk 行数 + 最大 rowid + 最后更新时间 + 向量数。
+   * 覆盖插入（行数/rowid 变）、删除（行数变）、重建（updated_at 变）。
+   */
+  private fingerprint(): string {
+    const row = this.db
+      .prepare(
+        'SELECT COUNT(*) AS n, COALESCE(MAX(rowid), 0) AS maxRowid, COALESCE(MAX(updated_at), 0) AS last FROM chunks',
+      )
+      .get() as { n: number; maxRowid: number; last: number };
+    return `${row.n}:${row.maxRowid}:${row.last}:${this.countVectors()}`;
   }
 
   private knn(query: Float32Array, limit: number): { id: string; cosine: number }[] {

@@ -169,8 +169,16 @@ window.__ModuleLoader__.load({
         };
       }, []);
 
+      // 令牌框每敲一个字符就发请求太浪费（68 字符 = 136 个请求）。输入停下 300 ms
+      // 才把值提交给下面的两个取数 effect；保存/吊销这些显式操作仍然用即时值。
+      const [committedToken, setCommittedToken] = useState(token);
       useEffect(() => {
-        const authToken = token.trim();
+        const timer = setTimeout(() => setCommittedToken(token.trim()), 300);
+        return () => clearTimeout(timer);
+      }, [token]);
+
+      useEffect(() => {
+        const authToken = committedToken;
         if (!authToken) {
           setConfig(null);
           return undefined;
@@ -199,10 +207,10 @@ window.__ModuleLoader__.load({
         return () => {
           alive = false;
         };
-      }, [token, reloadKey]);
+      }, [committedToken, reloadKey]);
 
       useEffect(() => {
-        const authToken = token.trim();
+        const authToken = committedToken;
         if (!authToken) {
           setTokens(null);
           return undefined;
@@ -227,7 +235,7 @@ window.__ModuleLoader__.load({
         return () => {
           alive = false;
         };
-      }, [token, revokeState]);
+      }, [committedToken, revokeState]);
 
       const revoke = async (id) => {
         if (!window.confirm('吊销 token ' + id + '？吊销后立即失效。')) return;
