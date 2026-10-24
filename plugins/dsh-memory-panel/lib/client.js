@@ -36,21 +36,61 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function Field({ label, children }) {
+    /**
+     * 一行「标签 + 输入框」，提示语紧跟在它自己的输入框下面（缩进到输入框那一列），
+     * 不再把说明堆到页面末尾。
+     */
+    function Field({ label, hint, children }) {
       return h(
-        'label',
-        { style: { display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0' } },
-        h('span', { style: { width: 150, opacity: 0.8 } }, label),
+        'div',
+        { style: { margin: '6px 0' } },
+        h(
+          'label',
+          { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          h('span', { style: { width: 150, opacity: 0.8 } }, label),
+          children,
+        ),
+        hint
+          ? h(
+              'p',
+              { style: { opacity: 0.55, fontSize: 11, margin: '2px 0 0 158px', lineHeight: 1.5 } },
+              hint,
+            )
+          : null,
+      );
+    }
+
+    /** 一组相关字段：带边框的区块，区块自己的说明放在字段下面。 */
+    function Section({ title, hint, tone, children }) {
+      const hintColor = tone === 'warn' ? '#d94f3d' : undefined;
+      return h(
+        'div',
+        {
+          style: {
+            margin: '12px 0',
+            padding: '10px 12px',
+            border: '1px solid ' + (tone === 'warn' ? 'rgba(217,79,61,0.5)' : 'rgba(127,127,127,0.18)'),
+            borderRadius: 8,
+          },
+        },
+        h('h4', { style: { margin: '0 0 6px', fontSize: 13 } }, title),
         children,
+        hint
+          ? h(
+              'p',
+              { style: { opacity: 0.6, fontSize: 11, margin: '6px 0 0', lineHeight: 1.5, color: hintColor } },
+              hint,
+            )
+          : null,
       );
     }
 
     const inputStyle = { width: 90, padding: '2px 6px' };
 
-    function NumberField({ label, value, onChange, min, max, step }) {
+    function NumberField({ label, value, onChange, min, max, step, hint }) {
       return h(
         Field,
-        { label },
+        { label, ...(hint ? { hint } : {}) },
         h('input', {
           type: 'number',
           value,
@@ -60,6 +100,30 @@ window.__ModuleLoader__.load({
           style: inputStyle,
           onChange: (event) => onChange(Number(event.target.value)),
         }),
+      );
+    }
+
+    /** 语义检索那一组的状态说明：关闭 / 就绪 / 不可用，各自给出下一步。 */
+    function semanticHint(semantic) {
+      if (!semantic) return '';
+      if (!semantic.enabled) return '关闭时只走 FTS（关键词/子串），不加载模型、不占内存。';
+      if (semantic.ready) {
+        return (
+          '已就绪：' +
+          semantic.vectors +
+          ' 个向量（' +
+          semantic.dim +
+          ' 维，α=' +
+          semantic.alpha +
+          '，模型 ' +
+          semantic.model +
+          '）。开关只改配置，安装由 pnpm 管。'
+        );
+      }
+      return (
+        '已启用但不可用：' +
+        (semantic.reason || '未知原因') +
+        '。先在终端跑 pnpm fetch:model 下载模型（23 MB），再 pnpm embed 回填；在那之前检索仍走 FTS。'
       );
     }
 
@@ -245,7 +309,13 @@ window.__ModuleLoader__.load({
         h('h3', { style: { margin: '16px 0 4px' } }, '可编辑配置'),
         h(
           Field,
-          { label: 'root 令牌' },
+          {
+            label: 'root 令牌',
+            hint:
+              '文件 %USERPROFILE%\\.dsh\\memory-token；已输入 ' +
+              token.trim().length +
+              ' 字符（自动去掉首尾空白）',
+          },
           h('input', {
             type: 'password',
             value: token,
@@ -255,138 +325,137 @@ window.__ModuleLoader__.load({
           }),
         ),
         configError ? h('p', { style: { color: '#d94f3d' } }, configError) : null,
-        h(
-          'p',
-          { style: { opacity: 0.6, fontSize: 12, margin: '0 0 4px' } },
-          '已输入 ' + token.trim().length + ' 字符（会自动去掉首尾空白）',
-        ),
         !config
           ? h('p', { style: { opacity: 0.6, fontSize: 12 } }, '填入 root 令牌后可读取/修改配置。')
           : h(
               'div',
               null,
-              h(NumberField, {
-                label: '短期 TTL（小时）',
-                value: config.shortTerm.ttlHours,
-                min: 0.1,
-                max: 720,
-                step: 0.1,
-                onChange: (value) => patch('shortTerm', 'ttlHours', value),
-              }),
-              h(NumberField, {
-                label: 'TTL 上限（小时）',
-                value: config.shortTerm.maxTtlHours,
-                min: 0.1,
-                max: 8760,
-                step: 0.1,
-                onChange: (value) => patch('shortTerm', 'maxTtlHours', value),
-              }),
-              h(NumberField, {
-                label: '回顾回看（小时）',
-                value: config.shortTerm.reviewLookbackHours,
-                min: 1,
-                max: 336,
-                onChange: (value) => patch('shortTerm', 'reviewLookbackHours', value),
-              }),
-              h(NumberField, {
-                label: '回顾条数上限',
-                value: config.shortTerm.reviewLimit,
-                min: 1,
-                max: 100,
-                onChange: (value) => patch('shortTerm', 'reviewLimit', value),
-              }),
-              h(NumberField, {
-                label: '回顾间隔（小时）',
-                value: config.shortTerm.reviewIntervalHours,
-                min: 1,
-                max: 168,
-                onChange: (value) => patch('shortTerm', 'reviewIntervalHours', value),
-              }),
               h(
-                Field,
-                { label: '敏感记忆 scope' },
-                h('input', {
-                  type: 'text',
-                  value: config.privacy.sensitiveScope,
-                  style: { width: 200, padding: '2px 6px' },
-                  onChange: (event) => patch('privacy', 'sensitiveScope', event.target.value.trim()),
-                }),
-              ),
-              h(
-                Field,
-                { label: '敏感可见范围' },
-                h('input', {
-                  type: 'text',
-                  value: (config.privacy.sensitiveAudiences || []).join(', '),
-                  style: { width: 280, padding: '2px 6px' },
-                  onChange: (event) => patch('privacy', 'sensitiveAudiences', splitList(event.target.value)),
-                }),
-              ),
-              h(
-                Field,
-                { label: 'owner 可见范围' },
-                h('input', {
-                  type: 'text',
-                  value: (config.privacy.ownerAudiences || []).join(', '),
-                  style: { width: 280, padding: '2px 6px' },
-                  onChange: (event) => patch('privacy', 'ownerAudiences', splitList(event.target.value)),
-                }),
-              ),
-              h(
-                Field,
-                { label: '月度归档' },
-                h('input', {
-                  type: 'checkbox',
-                  checked: config.archive.enabled,
-                  onChange: (event) => patch('archive', 'enabled', event.target.checked),
-                }),
-              ),
-              h(NumberField, {
-                label: '保留最近几个月',
-                value: config.archive.keepMonths,
-                min: 0,
-                max: 120,
-                onChange: (value) => patch('archive', 'keepMonths', value),
-              }),
-              h(
-                Field,
-                { label: '语义检索' },
-                h('input', {
-                  type: 'checkbox',
-                  checked: config.semantic.enabled,
-                  onChange: (event) => patch('semantic', 'enabled', event.target.checked),
-                }),
-              ),
-              h(
-                'p',
+                Section,
                 {
-                  style: {
-                    opacity: config.semantic.enabled && !config.semantic.ready ? 0.95 : 0.6,
-                    fontSize: 12,
-                    margin: '0 0 8px',
-                    color: config.semantic.enabled && !config.semantic.ready ? '#d94f3d' : undefined,
-                  },
+                  title: '短期记忆',
+                  hint: '普通聊天进短期层：到期未回顾会被遗忘，回顾过才转长期。',
                 },
-                !config.semantic.enabled
-                  ? '关闭时只走 FTS（子串/关键词），不加载模型、不占内存。'
-                  : config.semantic.ready
-                    ? '已就绪：' +
-                      config.semantic.vectors +
-                      ' 个向量（' +
-                      config.semantic.dim +
-                      ' 维，α=' +
-                      config.semantic.alpha +
-                      '，模型 ' +
-                      config.semantic.model +
-                      '）'
-                    : '已启用但不可用：' +
-                      (config.semantic.reason || '未知原因') +
-                      '。开关不会安装任何东西——先在终端跑 pnpm fetch:model（模型 23 MB，需 pnpm install 过的 onnxruntime-node），再 pnpm embed 回填。',
+                h(NumberField, {
+                  label: '短期 TTL（小时）',
+                  value: config.shortTerm.ttlHours,
+                  min: 0.1,
+                  max: 720,
+                  step: 0.1,
+                  hint: '一条普通聊天默认保留多久',
+                  onChange: (value) => patch('shortTerm', 'ttlHours', value),
+                }),
+                h(NumberField, {
+                  label: 'TTL 上限（小时）',
+                  value: config.shortTerm.maxTtlHours,
+                  min: 0.1,
+                  max: 8760,
+                  step: 0.1,
+                  hint: '被反复召回后最长能延长到（须 ≥ TTL）',
+                  onChange: (value) => patch('shortTerm', 'maxTtlHours', value),
+                }),
+                h(NumberField, {
+                  label: '回顾回看（小时）',
+                  value: config.shortTerm.reviewLookbackHours,
+                  min: 1,
+                  max: 336,
+                  hint: '回顾时往回看多远',
+                  onChange: (value) => patch('shortTerm', 'reviewLookbackHours', value),
+                }),
+                h(NumberField, {
+                  label: '回顾条数上限',
+                  value: config.shortTerm.reviewLimit,
+                  min: 1,
+                  max: 100,
+                  hint: '一次回顾最多列出多少条候选',
+                  onChange: (value) => patch('shortTerm', 'reviewLimit', value),
+                }),
+                h(NumberField, {
+                  label: '回顾间隔（小时）',
+                  value: config.shortTerm.reviewIntervalHours,
+                  min: 1,
+                  max: 168,
+                  hint: '两次回顾的最小间隔；到点会在 recall 结果里提示',
+                  onChange: (value) => patch('shortTerm', 'reviewIntervalHours', value),
+                }),
               ),
               h(
-                'p',
-                { style: { opacity: 0.6, fontSize: 12, margin: '0 0 8px' } },
-                '逗号分隔。敏感记忆只会写进「敏感可见范围」；「owner 可见范围」用于对方自己提起时的临时披露。接入微信时把 wx:owner 加进这两个列表即可。',
+                Section,
+                {
+                  title: '隐私与可见范围',
+                  hint: '逗号分隔。接入微信时把 wx:owner 加进这两个列表即可。',
+                },
+                h(
+                  Field,
+                  { label: '敏感记忆 scope', hint: '只有带这个 scope 的 token 才能读取敏感记忆' },
+                  h('input', {
+                    type: 'text',
+                    value: config.privacy.sensitiveScope,
+                    style: { width: 200, padding: '2px 6px' },
+                    onChange: (event) => patch('privacy', 'sensitiveScope', event.target.value.trim()),
+                  }),
+                ),
+                h(
+                  Field,
+                  { label: '敏感可见范围', hint: '敏感记忆只会写进这些范围；群和第三人永远看不到' },
+                  h('input', {
+                    type: 'text',
+                    value: (config.privacy.sensitiveAudiences || []).join(', '),
+                    style: { width: 280, padding: '2px 6px' },
+                    onChange: (event) => patch('privacy', 'sensitiveAudiences', splitList(event.target.value)),
+                  }),
+                ),
+                h(
+                  Field,
+                  { label: 'owner 可见范围', hint: '对方自己提起某话题时的临时披露范围' },
+                  h('input', {
+                    type: 'text',
+                    value: (config.privacy.ownerAudiences || []).join(', '),
+                    style: { width: 280, padding: '2px 6px' },
+                    onChange: (event) => patch('privacy', 'ownerAudiences', splitList(event.target.value)),
+                  }),
+                ),
+              ),
+              h(
+                Section,
+                {
+                  title: '月度归档',
+                  hint: '默认关。开启后每月把更早的事实压成 .gz，索引照常可读。',
+                },
+                h(
+                  Field,
+                  { label: '月度归档' },
+                  h('input', {
+                    type: 'checkbox',
+                    checked: config.archive.enabled,
+                    onChange: (event) => patch('archive', 'enabled', event.target.checked),
+                  }),
+                ),
+                h(NumberField, {
+                  label: '保留最近几个月',
+                  value: config.archive.keepMonths,
+                  min: 0,
+                  max: 120,
+                  hint: '0 = 不裁剪',
+                  onChange: (value) => patch('archive', 'keepMonths', value),
+                }),
+              ),
+              h(
+                Section,
+                {
+                  title: '语义检索',
+                  tone: config.semantic.enabled && !config.semantic.ready ? 'warn' : undefined,
+                  hint: semanticHint(config.semantic),
+                },
+                h(
+                  Field,
+                  { label: '语义检索' },
+                  h('input', {
+                    type: 'checkbox',
+                    checked: config.semantic.enabled,
+                    onChange: (event) => patch('semantic', 'enabled', event.target.checked),
+                  }),
+                ),
               ),
               h('button', { onClick: save, style: { marginTop: 8, cursor: 'pointer' } }, '保存'),
               saveState ? h('p', { style: { opacity: 0.8, fontSize: 12 } }, saveState) : null,
