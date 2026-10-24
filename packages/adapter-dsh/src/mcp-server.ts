@@ -156,7 +156,8 @@ export function createMemoryMcpServer(client: MemoryApi, options: McpServerOptio
     'memory_timeline',
     {
       title: '时间线',
-      description: '按时间倒出「那阵子发生了什么」：给年月范围，返回按月分组的记忆，不走相似度。',
+      description:
+        '按时间倒出「那阵子发生了什么」：给年月范围，返回按月分组的记忆，不走相似度。满页时返回 next_before，把它当下一次的 to 就是上一页。',
       inputSchema: {
         from: z.string().max(40).optional().describe('起点：YYYY / YYYY-MM / YYYY-MM-DD；省略=一年前'),
         to: z.string().max(40).optional().describe('终点（不含）；省略=现在'),

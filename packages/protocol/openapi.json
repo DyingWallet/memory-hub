@@ -2125,6 +2125,9 @@
           "total": {
             "type": "integer"
           },
+          "next_before": {
+            "type": "string"
+          },
           "months": {
             "type": "array",
             "items": {

@@ -450,6 +450,11 @@ export const TTimelineResponse = Type.Object(
     from: Type.String(),
     to: Type.String(),
     total: Type.Integer(),
+    /**
+     * Set when `total` reached `limit`: pass it as `to` to read the previous
+     * page. No cursor object — the boundary is just the oldest item returned.
+     */
+    next_before: Type.Optional(Type.String()),
     months: Type.Array(
       Type.Object(
         {

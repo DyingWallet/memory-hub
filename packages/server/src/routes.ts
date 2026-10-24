@@ -730,12 +730,13 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       const to = timelineBound(body.to, 'to');
       if (to <= from) throw errors.invalid('"to" must be after "from"');
 
+      const limit = clamp(body.limit ?? 200, 1, 1000);
       const docs = timelineDocs(db, auth.view, auth.scene, restrictionFor(auth.view.scopes, auth.scene, config.privacy), {
         from,
         to,
         ...(body.subject ? { subject: body.subject } : {}),
         ...(body.kinds ? { kinds: body.kinds } : {}),
-        limit: clamp(body.limit ?? 200, 1, 1000),
+        limit,
         maxChars: clamp(body.max_chars ?? 160, 40, 1000),
       });
 
@@ -759,10 +760,14 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       }
 
       finish('timeline', auth, started, docs.map((doc) => doc.id));
+      // A full page means there is probably an older one: the oldest item's
+      // timestamp works as the next `to` (which is exclusive).
+      const nextBefore = docs.length >= limit ? new Date(docs[0]!.updated_at).toISOString() : undefined;
       return {
         from: monthKeyOf(from),
         to: monthKeyOf(to - 1),
         total: docs.length,
+        ...(nextBefore ? { next_before: nextBefore } : {}),
         months: [...months.entries()].map(([month, items]) => ({ month, count: items.length, items })),
       };
     },

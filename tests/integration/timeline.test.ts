@@ -97,3 +97,31 @@ test('timeline 拒绝倒序的区间', async () => {
   const res = await post('/v1/timeline', fixture.tokens.owner.token, { from: '2026-11', to: '2026-10' });
   assert.equal(res.statusCode, 400);
 });
+
+test('满页时返回 next_before，把它当 to 能接上更早的一页', async () => {
+  const first = await post('/v1/timeline', fixture.tokens.owner.token, {
+    from: '2026-10',
+    to: '2026-11',
+    limit: 2,
+    scene: 'qq:owner',
+  });
+  assert.equal(first.statusCode, 200, JSON.stringify(first.json()));
+  const firstBody = first.json() as TimelineBody & { next_before?: string };
+  assert.equal(firstBody.total, 2);
+  assert.ok(firstBody.next_before, 'a full page carries the next boundary');
+  const firstIds = firstBody.months.flatMap((month) => month.items.map((item) => item.id));
+
+  const second = await post('/v1/timeline', fixture.tokens.owner.token, {
+    from: '2026-10',
+    to: firstBody.next_before,
+    limit: 2,
+    scene: 'qq:owner',
+  });
+  assert.equal(second.statusCode, 200, JSON.stringify(second.json()));
+  const secondIds = (second.json() as TimelineBody).months.flatMap((month) => month.items.map((item) => item.id));
+  assert.equal(
+    secondIds.some((id) => firstIds.includes(id)),
+    false,
+    'the boundary is exclusive, so pages do not overlap',
+  );
+});
