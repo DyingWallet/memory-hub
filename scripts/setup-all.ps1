@@ -24,13 +24,13 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $node = $env:MEMD_NODE
 if (-not $node -or -not (Test-Path -LiteralPath $node)) {
-  $candidates = @(
-    'D:\Software\dsh\resources\runtime\primary-runtime\dependencies\node\bin\node.exe',
-    (Join-Path $env:LOCALAPPDATA 'Programs\nodejs\node.exe')
-  )
-  foreach ($candidate in $candidates) {
-    if (Test-Path -LiteralPath $candidate) { $node = $candidate; break }
-  }
+  # Order: MEMD_NODE -> workspace tools\node (portable) -> DSH bundled -> PATH
+  $portable = Join-Path $root '..\tools\node\node.exe'
+  if (Test-Path -LiteralPath $portable) { $node = (Resolve-Path -LiteralPath $portable).Path }
+}
+if (-not $node -or -not (Test-Path -LiteralPath $node)) {
+  $dshNode = 'D:\Software\dsh\resources\runtime\primary-runtime\dependencies\node\bin\node.exe'
+  if (Test-Path -LiteralPath $dshNode) { $node = $dshNode }
 }
 if (-not $node) {
   $fromPath = Get-Command node -ErrorAction SilentlyContinue
@@ -123,7 +123,8 @@ Write-Host ''
 $doctorExit = $LASTEXITCODE
 Write-Host ''
 if ($doctorExit -ne 0) {
-  # 刚装完还没重启时，doctor 会报「插件尚未加载」——这是预期，不是安装失败。
+  # Right after installing, doctor reports "plugin ... not loaded" until DSH is restarted.
+  # That is expected, not an install failure.
   Write-Host 'doctor reported missing items (see above).' -ForegroundColor Yellow
   Write-Host 'If the failures are only "plugin ... not loaded", restart DSH and re-run -Check:' -ForegroundColor Yellow
   Write-Host "  powershell -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Check" -ForegroundColor Yellow

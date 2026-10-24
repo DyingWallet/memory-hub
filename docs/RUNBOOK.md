@@ -12,7 +12,18 @@
 | 工作区 | `D:\deepseek_workspace\memory-hub` |
 | 数据 | `memory-hub\data\`（index.db / tokens.json / audit.jsonl） |
 | 记忆源 | `memories\`（`facts\*.jsonl` 是唯一真源；Markdown 文档在 `10-journal/` 等） |
-| 监听 | `127.0.0.1:8787` + ZeroTier `172.22.0.10:8787`；`loadConfig` 拒绝 `0.0.0.0` |
+| 监听 | **当前只绑 `127.0.0.1:8787`**（2026-10-24 起，多设备暂缓）；`loadConfig` 拒绝 `0.0.0.0` |
+| node 运行时 | 工作区便携版 `..\tools\node\node.exe`（`pnpm fetch:node`）；DSH 自带 node 仅作兜底 |
+
+> 为什么现在只绑回环：换成便携版 node 后，监听 `172.22.0.10` 会触发 Windows 防火墙的
+> 「是否允许 Node.js 运行时通信」弹窗（防火墙只对 DSH 那个 node 有放行规则），
+> 而加规则需要管理员。多设备要用 ZeroTier 时，把 `hosts` 改回 `["127.0.0.1","172.22.0.10"]`
+> 并**先**给 `tools\node\node.exe` 加一条入站放行规则：
+>
+> ```powershell
+> New-NetFirewallRule -DisplayName 'memd (portable node) TCP 8787' -Direction Inbound -Action Allow `
+>   -Protocol TCP -LocalPort 8787 -Program 'D:\deepseek_workspace\tools\node\node.exe' -Profile Domain,Private,Public
+> ```
 
 ## 2. 启停与健康
 

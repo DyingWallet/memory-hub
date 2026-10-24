@@ -15,13 +15,13 @@ $ErrorActionPreference = 'Continue'
 $root = Split-Path -Parent $PSScriptRoot
 $node = $env:MEMD_NODE
 if (-not $node -or -not (Test-Path -LiteralPath $node)) {
-  $candidates = @(
-    'D:\Software\dsh\resources\runtime\primary-runtime\dependencies\node\bin\node.exe',
-    (Join-Path $env:LOCALAPPDATA 'Programs\nodejs\node.exe')
-  )
-  foreach ($candidate in $candidates) {
-    if (Test-Path -LiteralPath $candidate) { $node = $candidate; break }
-  }
+  # Order: MEMD_NODE -> workspace tools\node (portable) -> DSH bundled -> PATH
+  $portable = Join-Path $root '..\tools\node\node.exe'
+  if (Test-Path -LiteralPath $portable) { $node = (Resolve-Path -LiteralPath $portable).Path }
+}
+if (-not $node -or -not (Test-Path -LiteralPath $node)) {
+  $dshNode = 'D:\Software\dsh\resources\runtime\primary-runtime\dependencies\node\bin\node.exe'
+  if (Test-Path -LiteralPath $dshNode) { $node = $dshNode }
 }
 if (-not $node) {
   $fromPath = Get-Command node -ErrorAction SilentlyContinue
@@ -44,7 +44,12 @@ try {
 
 # 2. doctor (plugins + mcp + token + memd + disclosure)
 $doctorJson = Join-Path $env:TEMP 'memory-hub-doctor.json'
-& $node (Join-Path $root 'scripts\doctor.mjs') --json > $doctorJson 2>&1
+# Decode native stdout as UTF-8, otherwise PS 5.1 uses the ANSI codepage (GBK)
+# and mangles the Chinese labels in doctor's JSON, breaking ConvertFrom-Json.
+$prevOutEnc = [Console]::OutputEncoding
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
+& $node (Join-Path $root 'scripts\doctor.mjs') --json 2>&1 | Out-File -FilePath $doctorJson -Encoding utf8
+try { [Console]::OutputEncoding = $prevOutEnc } catch { }
 $doctorExit = $LASTEXITCODE
 try {
   $doctor = Get-Content $doctorJson -Raw | ConvertFrom-Json

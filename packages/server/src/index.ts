@@ -1,5 +1,6 @@
-import { watch } from 'node:fs';
+import { mkdirSync, watch, writeFileSync } from 'node:fs';
 import { createServer, type RequestListener, type Server } from 'node:http';
+import { dirname, join } from 'node:path';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { purgeExpired } from './db.js';
@@ -7,6 +8,20 @@ import { reindexAll } from './indexer.js';
 
 const config = loadConfig();
 const { app, db, index } = await buildApp({ config });
+
+// 记下自己用的 node 运行时：doctor 靠它判断有没有进程还在用 DSH 自带的 node.exe
+// （那会锁住 DSH 安装目录，让升级改名失败 WinError 32）。
+try {
+  const runtimeFile = join(config.dataDir, 'runtime.json');
+  mkdirSync(dirname(runtimeFile), { recursive: true });
+  writeFileSync(
+    runtimeFile,
+    `${JSON.stringify({ service: 'memd', node: process.execPath, version: process.version, pid: process.pid, startedAt: new Date().toISOString() }, null, 2)}\n`,
+    'utf8',
+  );
+} catch {
+  // 只是自检用，写不了不影响服务
+}
 
 // Fastify's `listen()` accepts a single address, so each configured address gets
 // its own http.Server sharing Fastify's request handler. That keeps the service

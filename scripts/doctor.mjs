@@ -249,6 +249,34 @@ export async function runDoctor({ deep = true } = {}) {
     add('tasks.heartbeat', 'memd 看护心跳', false, '没有心跳文件（未跑过 install-autostart.ps1）', { critical: false });
   }
 
+  /* ── 谁在用 DSH 自带的 node（升级会锁安装目录）────────────── */
+  const dshNodePrefix = 'D:\\Software\\dsh\\';
+  const runtimeSources = [
+    { name: 'memd', file: join(root, 'data', 'runtime.json') },
+    { name: 'pet-llm', file: join(root, '..', 'dsh-pet-configurable-llm', 'state', 'runtime.json') },
+    { name: 'qq-bridge', file: join(root, '..', 'qq-bridge', 'state', 'runtime.json') },
+  ];
+  const usingDshNode = [];
+  const missingRuntime = [];
+  for (const source of runtimeSources) {
+    const recorded = readJson(source.file);
+    if (!recorded?.node) {
+      missingRuntime.push(source.name);
+      continue;
+    }
+    if (String(recorded.node).startsWith(dshNodePrefix)) usingDshNode.push(`${source.name}(pid ${recorded.pid})`);
+  }
+  add(
+    'node.dshLock',
+    'DSH 安装目录未被 node 占用',
+    usingDshNode.length === 0,
+    usingDshNode.length === 0
+      ? missingRuntime.length === 0
+        ? '没有服务在用 DSH 自带的 node.exe'
+        : `没有服务在用 DSH 自带的 node.exe（未记录：${missingRuntime.join(', ')}，重启后会有）`
+      : `仍在用 DSH 自带 node：${usingDshNode.join(', ')} → 升级前必须先停这些服务`,
+  );
+
   const criticalFailures = checks.filter((check) => check.critical && !check.ok);
   return { ready: criticalFailures.length === 0, checks };
 }

@@ -39,6 +39,12 @@ $legacyTasks = @('memd-autostart', 'memd-monitor', 'memd-backup')
 
 $node = $env:MEMD_NODE
 if (-not $node -or -not (Test-Path -LiteralPath $node)) {
+  # Prefer the workspace portable node: a task that keeps running the DSH bundled
+  # node.exe locks the DSH install dir and makes its updater fail.
+  $portable = Join-Path $root '..\tools\node\node.exe'
+  if (Test-Path -LiteralPath $portable) { $node = (Resolve-Path -LiteralPath $portable).Path }
+}
+if (-not $node -or -not (Test-Path -LiteralPath $node)) {
   $node = 'D:\Software\dsh\resources\runtime\primary-runtime\dependencies\node\bin\node.exe'
 }
 if (-not (Test-Path -LiteralPath $node)) {

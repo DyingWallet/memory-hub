@@ -17,17 +17,25 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $logFile = Join-Path $logDir 'memd.log'
 
 function Resolve-Node {
-  if ($env:MEMD_NODE -and (Test-Path $env:MEMD_NODE)) { return $env:MEMD_NODE }
-  $candidates = @(
-    'D:\Software\dsh\resources\runtime\primary-runtime\dependencies\node\bin\node.exe',
-    (Join-Path $env:LOCALAPPDATA 'Programs\nodejs\node.exe')
-  )
+  # Order: MEMD_NODE -> workspace tools\node (portable, preferred) -> DSH bundled -> PATH.
+  # All candidates must be >= 22.12 (node:sqlite). The DSH bundled one comes last,
+  # because running it locks the DSH install dir (SHARING_VIOLATION 32 on upgrade).
+  $candidates = @()
+  if ($env:MEMD_NODE) { $candidates += $env:MEMD_NODE }
+  if ($env:NODE_EXE) { $candidates += $env:NODE_EXE }
+  $candidates += (Join-Path $root '..\tools\node\node.exe')
+  $candidates += 'D:\Software\dsh\resources\runtime\primary-runtime\dependencies\node\bin\node.exe'
+  $fromPath = Get-Command node -ErrorAction SilentlyContinue
+  if ($fromPath) { $candidates += $fromPath.Source }
   foreach ($candidate in $candidates) {
-    if (Test-Path $candidate) { return $candidate }
+    if (-not $candidate -or -not (Test-Path -LiteralPath $candidate)) { continue }
+    $full = (Resolve-Path -LiteralPath $candidate).Path
+    $version = (& $full --version 2>$null)
+    if ($version -match '^v(\d+)\.(\d+)' -and ([int]$Matches[1] -gt 22 -or ([int]$Matches[1] -eq 22 -and [int]$Matches[2] -ge 12))) {
+      return $full
+    }
   }
-  $cmd = Get-Command node -ErrorAction SilentlyContinue
-  if ($cmd) { return $cmd.Source }
-  throw 'node.exe not found; set $env:MEMD_NODE'
+  throw 'node.exe >= 22.12 not found; set $env:MEMD_NODE or run pnpm fetch:node'
 }
 
 $node = Resolve-Node
