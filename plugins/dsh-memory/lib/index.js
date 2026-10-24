@@ -76,8 +76,9 @@ export function apply(ctx, config = {}) {
         if (signal?.aborted) return decision;
         const list = Array.isArray(messages) ? messages : [];
         if (list.length === 0 || isBridgeSession(list)) return decision;
-        // Pet sessions are reported by pet-brain with scene=pet (and the pet's
-        // own visibility rules); skip them here so a chat is not written twice.
+        // Pet sessions are reported by dsh-pet-configurable-llm with scene=pet
+        // (and the pet's own visibility rules); skip them here so a chat is not
+        // written twice.
         if (agent?.session?.header?.agentPreset === 'pet-chat') return decision;
         const sessionId = String(agent?.session?.header?.id ?? agent?.session?.id ?? 'session');
         // `.catch` is mandatory: a rejected promise here becomes an

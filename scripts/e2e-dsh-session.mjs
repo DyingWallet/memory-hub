@@ -84,7 +84,7 @@ async function main() {
   step(`[2/4] session=${sessionId}（preset ${PRESET}）`);
 
   if (PRESET === 'pet-chat') {
-    fail('pet-chat 会话会被 dsh-memory 插件主动跳过（由 pet-brain 自己上报），换一个 preset');
+    fail('pet-chat 会话会被 dsh-memory 插件主动跳过（由 dsh-pet-configurable-llm 自己上报），换一个 preset');
   }
 
   // 3. 发一条带随机标记的消息。不看模型回复——只验证用户消息有没有被上报。

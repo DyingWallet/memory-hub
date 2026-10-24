@@ -83,7 +83,7 @@ powershell -ExecutionPolicy Bypass -File scripts\stop.ps1
 - 幂等：`start.ps1` 先探 `/v1/health`，已在线就只做 health-check，所以和 `start-stack.ps1` 第 2.6 步撞上也无害。
 - 沙箱身份下 `Get-ScheduledTask` / `schtasks` 一律「拒绝访问」（低完整性进程，连 `New-ScheduledTaskSettingsSet` 都会拒），装/查任务请用普通 PowerShell 窗口。
 - `schtasks /TR` 有 **261 字符上限**：动作串更长时（隐藏启动器就接近上限）先用 `schtasks` 建出无限期重复的触发器，再用 `Set-ScheduledTask -Action` 换动作。
-- **pet-brain 没有登录任务**：它只服务 DSH 的 `pet-chat` preset，跟着 DSH 生命周期——`qq-bridge\start-stack.ps1` 第 2.7 步在 DSH 起来后拉起它，DSH 关闭/崩溃后它自己退出（每 20 秒探一次，连续 3 次不可达约 60 秒退出，见 `dsh-pet-configurable-llm/src/guard.mjs`）。调试时可 `PET_LLM_ORPHAN_GUARD=0` 关掉。
+- **dsh-pet-configurable-llm 没有登录任务**：它只服务 DSH 的 `pet-chat` preset，跟着 DSH 生命周期——`qq-bridge\start-stack.ps1` 第 2.7 步在 DSH 起来后拉起它，DSH 关闭/崩溃后它自己退出（每 20 秒探一次，连续 3 次不可达约 60 秒退出，见 `dsh-pet-configurable-llm/src/guard.mjs`）。调试时可 `PET_LLM_ORPHAN_GUARD=0` 关掉。
 
 ## 3. 令牌
 
@@ -103,7 +103,7 @@ node packages\admin\dist\cli.js token issue --name qq-group-<id> --surface qq:gr
 - 列表 / 吊销：`token list`、`token revoke <id>`；设置页也能吊销。
 - 记录在 `data\tokens.json`，按 mtime 热重载，吊销**下一个请求**生效。
 - `work:read` 仍被当作 `sensitive:read` 的别名接受；新 token 请用 `sensitive:read`。
-- 桌面 root token 在 `%USERPROFILE%\.dsh\memory-token`；QQ 场景 token 在 `qq-bridge\state\memory-*.token`；桌宠在 `pet-brain\state\memory.token`。
+- 桌面 root token 在 `%USERPROFILE%\.dsh\memory-token`；QQ 场景 token 在 `qq-bridge\state\memory-*.token`；桌宠在 `dsh-pet-configurable-llm\state\memory.token`。
 
 ## 4. API 速查（`/v1`）
 
@@ -301,15 +301,15 @@ POST /memory-hub/tokens/revoke -> memd /v1/tokens/revoke  （需 Authorization�
 
 关掉它：环境变量 `MEMD_BOOT_CHECK=0`。`runDoctor({ deep:false })` 可跳过披露探针（只查文件）。
 
-### 5.2 桌宠（pet-brain）
+### 5.2 桌宠（dsh-pet-configurable-llm）
 
-- 令牌：`pet-brain\state\memory.token`（surface `pet`，scopes `main/qq:owner/pet`，**无 `sensitive:read`**；scene `pet`）。
+- 令牌：`dsh-pet-configurable-llm\state\memory.token`（surface `pet`，scopes `main/qq:owner/pet`，**无 `sensitive:read`**；scene `pet`）。
 - 每轮：`POST /v1/recall`（scene=pet）→ 拼进 prompt；`POST /v1/ingest` 上报（50/批、失败静默）。
 - 可见性：owner 的 `main/qq:owner` + shared；**看不到**敏感、`qq:group:*`、`qq:private:*`。
-- `pet-brain/xi` 由 profile 的 `llm-pi-ai` 提供方指向 `127.0.0.1:8790`。
+- `pet-brain/xi` 由 profile 的 `llm-pi-ai` 提供方指向 `127.0.0.1:8790`。**`pet-brain` 是 provider ID，不跟项目改名**——它是对外契约，改了要同时改 profile 的 `llm-pi-ai` 和 dsh-pet 的 `chatModel`。
 - 生命周期跟着 DSH（v2 方案 B）：`start-stack.ps1` 第 2.7 步拉起（并把 `DSH_WEB_URL` 传给子进程，省掉首轮端口发现），DSH 关掉后孤儿保护 3 x 20 秒（约 60 秒）自退。**不要**再给 pet 注册登录任务。
 - 它自己的看护是 `dsh-pet-configurable-llm/scripts/install-revive-task.ps1` 注册的 `pet-revive`（每 1 分钟）：DSH 在、8790 不在就拉起（DSH 重启超过 60 秒后 pet 会自退，这是补回来的那一手）。日志 `dsh-pet-configurable-llm/logs/revive.log`。
-- 失败不回落：pet-brain 内部失败时返回 200 + 降级文案（`src/degraded.mjs`），否则 dsh-pet 会改用普通对话模型回答，看起来还是桌宠但不是那条 DSH 会话。
+- 失败不回落：dsh-pet-configurable-llm 内部失败时返回 200 + 降级文案（`src/degraded.mjs`），否则 dsh-pet 会改用普通对话模型回答，看起来还是桌宠但不是那条 DSH 会话。
 - 手工起停：`powershell -ExecutionPolicy Bypass -File scripts\start.ps1`（前台）；确认在跑：`curl http://127.0.0.1:8790/health`。
 - 气泡层级：启动时对网页 `lib/client.js` 与桌面 `runtime/electron-helper/sprite.js` 各打一次补丁（幂等，`.bak-petbrain`）；桌面 helper 要重启 DSH 才重新加载。
 

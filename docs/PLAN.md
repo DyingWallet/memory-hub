@@ -16,7 +16,7 @@
 | P0 核心 | 协议 / 索引 / 检索 / 鉴权 / 审计 / 管理 CLI / SDK | ✅ v1 已上线 |
 | P1 接入 | DSH MCP（9 工具）、QQ 桥接（注入/镜像/读工具/入库）、DSH 全会话上报插件、只读设置页 | ✅ 实测通过 |
 | P2 隐私 | 标签可配置、owner 临时披露、QQ 隐藏 root 工具、secret 不可读 | ✅ 基本闭环，剩镜像与审计保留 |
-| P3 桌宠 | dsh-pet 0.3.8 + pet-brain 接入（recall/ingest、pet 场景、免工作/财务） | ✅ 已安装并实测（桌面形态） |
+| P3 桌宠 | dsh-pet 0.3.8 + dsh-pet-configurable-llm 接入（recall/ingest、pet 场景、免工作/财务） | ✅ 已安装并实测（桌面形态） |
 | P4 设置页 | 可编辑隐私/TTL/回顾频率、token 管理 | 🔶 只读状态页已完成 |
 | P5 质量与运维 | 回顾定时、合并去重、保留策略、备份、监控 | ⬜ |
 | P6 扩展 | 语义检索（✅ 可选开关）、图片/文档、多设备/VPS、加密、**memd 独立进程自启与看护（v2）** | 🔶 |
@@ -49,7 +49,7 @@
 ### P3 桌宠接入（已完成）
 
 4. ✅ **pet 场景与令牌**：`pet` token（scopes `main/qq:owner/pet`，无 `sensitive:read`，scenes 含 pet）；活库实测敏感/私聊/群内容 0 命中。
-5. ✅ **pet-brain 记忆客户端**：`src/memory.mjs`，`/v1/recall`（scene=pet）拼进 prompt、`/v1/ingest` 上报用户与回复（50/批、失败静默）。
+5. ✅ **dsh-pet-configurable-llm 记忆客户端**：`src/memory.mjs`，`/v1/recall`（scene=pet）拼进 prompt、`/v1/ingest` 上报用户与回复（50/批、失败静默）。
 6. ✅ **避免双写**：`dsh-memory` 插件识别 `agentPreset === 'pet-chat'` 时跳过。
 7. ✅ **pet 视图边界**：新增 `tests/privacy/pet.test.ts`（工作/群/私聊不可见、owner 可见、pet 短期可被 owner 审计）。
 8. ✅ **联调 + 本体安装**：`dsh-pet` 0.3.8 已装（`dsh plugin add`），`pet-brain/xi` 路由已注册；`/dsh-pet-7340/config` 显示 `chatModel=pet-brain/xi`；`/chat` 实测回复正常、工资问题不含 1280；audit `recall|pet` + `ingest|pet` 持续写入，pet 短期已 13 条。
@@ -87,7 +87,7 @@
    （登录 / 看护 / 监控 / 备份），2026-10-24 下午合并成一个：一个触发器、一份日志。
    附 `-Check`（看状态 + 心跳）与 `-Remove`；`scripts/uninstall-autostart.ps1` 反向删除，
    安装时还会顺手清掉旧的 `memd-autostart` / `memd-monitor` / `memd-backup`。
-2. ✅ **桌宠后端不注册自启**：pet-brain 只服务 DSH 的 `pet-chat` preset，生命周期跟 DSH——
+2. ✅ **桌宠后端不注册自启**：dsh-pet-configurable-llm 只服务 DSH 的 `pet-chat` preset，生命周期跟 DSH——
    `qq-bridge/start-stack.ps1` 第 2.7 步在 DSH 之后拉起，`dsh-pet-configurable-llm/src/guard.mjs`
    每 20 秒探一次 DSH，连续 3 次（约 60 秒）不可达即自退，不留占着 8790 的孤儿。
    不用 DSH 宿主插件：插件的未捕获异常会触发 DSH fail-loud 退出整个 app。
@@ -124,7 +124,7 @@
 - **v1.1**：P2 收尾 + P3 桌宠（dsh-pet 本体 + 记忆接入 + 气泡自愈）。✅
 - **v1.2**：P4 设置页（TTL/回顾/隐私三段式/token 吊销/同源代理）。✅
 - **v1.3**：P5 质量与运维（回顾定时、合并去重、归档备份、监控、测试补强）。✅
-- **v2.0**：memd/pet-brain 独立进程自启与看护 + 语义检索 / 多设备。
+- **v2.0**：memd / 桌宠 LLM 服务独立进程自启与看护 + 语义检索 / 多设备。
 
 ## 验收口径（每个版本都跑）
 

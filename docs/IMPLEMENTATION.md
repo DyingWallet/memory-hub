@@ -566,7 +566,7 @@ New-NetFirewallRule -DisplayName "dsh-memory 8787" -Direction Inbound `
 
 1. `curl /v1/health` → 200。
 2. 主会话问「你叫什么」→ 小助手。
-3. 主会话问「上次桌宠」→ 返回 pet-brain 相关片段。
+3. 主会话问「上次桌宠」→ 返回 dsh-pet-configurable-llm 相关片段。
 4. QQ 群问「你叫什么」→ 小助手。
 5. QQ 群问「股票/工作」→ 没有；不编。
 6. QQ 私聊 A 的内容，私聊 B 搜不到；群也搜不到。

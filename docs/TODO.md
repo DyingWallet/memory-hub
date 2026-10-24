@@ -14,9 +14,9 @@
 - 隐私：**audience + 一个敏感位**（`normal/personal/sensitive/secret`；敏感需 `sensitive:read` 且钉在 `sensitiveAudiences`）；owner 临时披露（`from_owner`）；secret 不可读写。旧标签已迁移成 `privacy=sensitive` + `tags`（2026-10-24）。
 - QQ：逐场景 token、注入/镜像、`qq_memory_search/get/recent`、999 窗口、root 工具从预设隐藏、镜像 update/remove/clear（`/v1/forget` + tombstone）。
 - DSH：MCP 9 工具、全会话短期上报插件、设置页（TTL/回顾/隐私三段式/token 吊销）、`/memory-hub/*` 同源代理。
-- 桌宠：dsh-pet 0.3.8 + pet-brain 记忆接入（scene=pet、无 `sensitive:read`）、气泡优先级双栈自愈补丁。
+- 桌宠：dsh-pet 0.3.8 + dsh-pet-configurable-llm 记忆接入（scene=pet、无 `sensitive:read`）、气泡优先级双栈自愈补丁。
 - 设置页可编辑：`GET /v1/config-state` + `POST /v1/config`（root、白名单、备份、热应用）。
-- 测试：`pnpm test` 106 项；pet-brain 18 项；QQ 预设契约测试通过。
+- 测试：`pnpm test` 106 项；dsh-pet-configurable-llm 18 项；QQ 预设契约测试通过。
 
 ## P4.5 隐私简化（已完成，2026-10-24）
 
@@ -49,8 +49,8 @@
 ## v2（架构与扩展）
 
 10. ✅ **memd 独立进程自启/看护**：`install-autostart.ps1` 只注册一个任务 `memd-watchdog`（每 1 分钟），跑 `scripts/supervisor.mjs`——探活+起 memd、metrics.csv 超 60 分钟采样、过了 04:00 且今天没备份就跑备份；`-Check` / `-Remove` 与 `uninstall-autostart.ps1` 配套，安装时清掉旧的 `memd-autostart`/`memd-monitor`/`memd-backup`；RUNBOOK §2.5。不挂 DSH 子进程。
-11. ✅ **pet-brain 自启**：不注册登录任务，改跟 DSH 生命周期——`start-stack.ps1` 第 2.7 步在 DSH 之后拉起（传 `DSH_WEB_URL`），`src/guard.mjs` 每 20 秒探一次，连续 3 次不可达（约 60 秒）自退；另有 `pet-revive`（每 1 分钟）在「DSH 在、8790 不在」时拉起它，堵掉 DSH 重启后没人补的窗口。pet 测试 29 项。
-12. ✅ **「桌宠绝不冒充」**（原 `externalBrain` 补丁，改成不碰 dsh-pet）：pet-brain 内部失败时返回 200 + 降级文案（`src/degraded.mjs`），dsh-pet 看到「成功」就不会回落到普通对话模型；进程不在的那一半由 `pet-revive` 每分钟补齐。`memory.json` 不参与生成（`chatMemoryRounds: 0`），确认无影响后不再处理。
+11. ✅ **dsh-pet-configurable-llm 自启**：不注册登录任务，改跟 DSH 生命周期——`start-stack.ps1` 第 2.7 步在 DSH 之后拉起（传 `DSH_WEB_URL`），`src/guard.mjs` 每 20 秒探一次，连续 3 次不可达（约 60 秒）自退；另有 `pet-revive`（每 1 分钟）在「DSH 在、8790 不在」时拉起它，堵掉 DSH 重启后没人补的窗口。pet 测试 29 项。
+12. ✅ **「桌宠绝不冒充」**（原 `externalBrain` 补丁，改成不碰 dsh-pet）：dsh-pet-configurable-llm 内部失败时返回 200 + 降级文案（`src/degraded.mjs`），dsh-pet 看到「成功」就不会回落到普通对话模型；进程不在的那一半由 `pet-revive` 每分钟补齐。`memory.json` 不参与生成（`chatMemoryRounds: 0`），确认无影响后不再处理。
 13. ✅ **语义检索：本地 embedding + sqlite-vec（可选，默认关）**
     - ✅ 选型：`sqlite-vec`（npm 0.1.9，`sqlite-vec-windows-x64` 里有 `vec0.dll`；`node:sqlite` 的 `allowExtension` + `loadExtension` 可直接加载）；LEANN 仍是 50 万 chunk 以上的备选。
     - ✅ 模型：`bge-small-zh-v1.5` int8 ONNX（512 维，24 MB），`onnxruntime-node`；`pnpm fetch:model` 从 ModelScope 下载到 `models/`（已 gitignore）。

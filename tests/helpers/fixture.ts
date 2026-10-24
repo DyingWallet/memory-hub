@@ -165,7 +165,7 @@ export async function createFixture(configOverrides: Partial<ServerConfig> = {})
       scenes: [`qq:private:${PRIVATE_B}`],
     }),
     pet: built.tokens.issue({
-      name: 'pet-brain',
+      name: 'dsh-pet',
       surface: 'pet',
       scopes: ['main', 'qq:owner', 'pet'],
       scenes: ['pet', 'main', 'qq:owner'],
