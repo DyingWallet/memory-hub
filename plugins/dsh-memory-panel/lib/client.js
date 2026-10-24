@@ -179,18 +179,15 @@ window.__ModuleLoader__.load({
 
       useEffect(() => {
         const authToken = committedToken;
-        if (!authToken) {
-          setConfig(null);
-          return undefined;
-        }
         let alive = true;
         setConfigError('');
+        // 没填令牌也可以：宿主半侧会用 ~/.dsh/memory-token 兜底。
         fetch(PATH_CONFIG_STATE, {
           cache: 'no-store',
-          headers: { authorization: 'Bearer ' + authToken },
+          ...(authToken ? { headers: { authorization: 'Bearer ' + authToken } } : {}),
         })
           .then(async (response) => {
-            if (response.status === 401) throw new Error('令牌无效（HTTP 401）——检查是否有尾随空格/换行');
+            if (response.status === 401) throw new Error('令牌无效（HTTP 401）——留空则使用宿主注入的 root 令牌');
             if (response.status === 403) throw new Error('令牌不是 root（HTTP 403）');
             if (!response.ok) throw new Error('HTTP ' + response.status);
             return response.json();
@@ -211,13 +208,12 @@ window.__ModuleLoader__.load({
 
       useEffect(() => {
         const authToken = committedToken;
-        if (!authToken) {
-          setTokens(null);
-          return undefined;
-        }
         let alive = true;
         setTokenError('');
-        fetch(PATH_TOKENS, { cache: 'no-store', headers: { authorization: 'Bearer ' + authToken } })
+        fetch(PATH_TOKENS, {
+          cache: 'no-store',
+          ...(authToken ? { headers: { authorization: 'Bearer ' + authToken } } : {}),
+        })
           .then(async (response) => {
             if (response.status === 401 || response.status === 403) throw new Error('HTTP ' + response.status);
             if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -243,7 +239,10 @@ window.__ModuleLoader__.load({
         try {
           const response = await fetch(PATH_REVOKE, {
             method: 'POST',
-            headers: { authorization: 'Bearer ' + token.trim(), 'content-type': 'application/json' },
+            headers: {
+              'content-type': 'application/json',
+              ...(token.trim() ? { authorization: 'Bearer ' + token.trim() } : {}),
+            },
             body: JSON.stringify({ id }),
           });
           const body = await response.json().catch(() => null);
@@ -274,7 +273,10 @@ window.__ModuleLoader__.load({
         try {
           const response = await fetch(PATH_CONFIG, {
             method: 'POST',
-            headers: { authorization: 'Bearer ' + token.trim(), 'content-type': 'application/json' },
+            headers: {
+              'content-type': 'application/json',
+              ...(token.trim() ? { authorization: 'Bearer ' + token.trim() } : {}),
+            },
             body: JSON.stringify({
               shortTerm: { ...config.shortTerm },
               privacy: {
@@ -318,23 +320,22 @@ window.__ModuleLoader__.load({
         h(
           Field,
           {
-            label: 'root 令牌',
+            label: 'root 令牌（可留空）',
             hint:
-              '文件 %USERPROFILE%\\.dsh\\memory-token；已输入 ' +
-              token.trim().length +
-              ' 字符（自动去掉首尾空白）',
+              '留空时由宿主半侧自动注入 %USERPROFILE%\\.dsh\\memory-token；' +
+              (token.trim() ? `当前手填了 ${token.trim().length} 字符（覆盖宿主令牌）` : '当前未手填'),
           },
           h('input', {
             type: 'password',
             value: token,
-            placeholder: '~/.dsh/memory-token',
+            placeholder: '留空 = 宿主注入',
             style: { width: 260, padding: '2px 6px' },
             onChange: (event) => saveToken(event.target.value),
           }),
         ),
         configError ? h('p', { style: { color: '#d94f3d' } }, configError) : null,
         !config
-          ? h('p', { style: { opacity: 0.6, fontSize: 12 } }, '填入 root 令牌后可读取/修改配置。')
+          ? h('p', { style: { opacity: 0.6, fontSize: 12 } }, '读取配置中…（若一直失败，检查 memd 与宿主令牌）')
           : h(
               'div',
               null,
@@ -476,7 +477,7 @@ window.__ModuleLoader__.load({
         h('h3', { style: { margin: '16px 0 4px' } }, '令牌'),
         tokenError ? h('p', { style: { color: '#d94f3d' } }, tokenError) : null,
         !tokens
-          ? h('p', { style: { opacity: 0.6, fontSize: 12 } }, '填入 root 令牌后可查看。')
+          ? h('p', { style: { opacity: 0.6, fontSize: 12 } }, '读取令牌列表中…（令牌走宿主注入，无需手填）')
           : null,
         tokens && tokens.length > 0
           ? h(

@@ -3,13 +3,24 @@
  *
  * The page runs inside DSH's renderer. Chromium 152 blocks direct loopback
  * fetches from an opaque-origin frame (Local Network Access), so the page talks
- * to these same-origin routes and this host plugin proxies to memd. Only three
+ * to these same-origin routes and this host plugin proxies to memd. Only five
  * fixed endpoints are exposed; the browser never gets a generic proxy.
+ *
+ * Zero-config: when the page sends no Authorization header, the host injects the
+ * desktop root token from `~/.dsh/memory-token` (override with MEMD_TOKEN_FILE).
+ * That is the same secret the page used to ask the user to paste, and the page
+ * already runs in the trusted renderer, so this only removes a manual step. The
+ * panel still accepts an explicit token and then forwards that instead.
  */
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+
 export const name = 'dsh-memory-panel';
 export const inject = ['webServer'];
 
 const MEMD = 'http://127.0.0.1:8787';
+const TOKEN_FILE = process.env.MEMD_TOKEN_FILE ?? join(homedir(), '.dsh', 'memory-token');
 const ROUTES = new Map([
   ['/memory-hub/health', { method: 'GET', target: '/v1/health' }],
   ['/memory-hub/config-state', { method: 'GET', target: '/v1/config-state' }],
@@ -46,6 +57,16 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+/** 宿主侧读 root 令牌；页面没带 Authorization 时用它兜底。 */
+function hostAuthorization() {
+  try {
+    const token = readFileSync(TOKEN_FILE, 'utf8').trim();
+    return token.length > 0 ? `Bearer ${token}` : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function apply(ctx) {
   for (const [path, route] of ROUTES) {
     ctx.effect(() =>
@@ -70,7 +91,9 @@ export function apply(ctx) {
           }
           try {
             const headers = {};
-            if (typeof req.headers.authorization === 'string') headers.authorization = req.headers.authorization;
+            const authorization =
+              typeof req.headers.authorization === 'string' ? req.headers.authorization : hostAuthorization();
+            if (authorization) headers.authorization = authorization;
             if (req.method === 'POST') headers['content-type'] = 'application/json';
             const body = req.method === 'POST' ? await readBody(req) : undefined;
             const upstream = await fetch(MEMD + route.target, {

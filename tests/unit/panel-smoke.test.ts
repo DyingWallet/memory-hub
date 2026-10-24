@@ -143,6 +143,18 @@ test('panel bundle registers a settings section and uses the proxy paths', () =>
   assert.match(source, /\}, \[committedToken, reloadKey\]\);/);
 });
 
+/**
+ * 零配置：页面不带 Authorization 时，宿主半侧用 ~/.dsh/memory-token 兜底，
+ * 这样装完插件刷新页面就能用，不必手贴 root 令牌。
+ */
+test('panel host injects the root token when the page sends none', () => {
+  const host = readFileSync(new URL('../../../plugins/dsh-memory-panel/lib/index.js', import.meta.url), 'utf8');
+  assert.match(host, /MEMD_TOKEN_FILE/);
+  assert.match(host, /hostAuthorization/);
+  assert.match(host, /req\.headers\.authorization === 'string' \? req\.headers\.authorization : hostAuthorization\(\)/);
+  assert.match(host, /readFileSync\(TOKEN_FILE, 'utf8'\)/);
+});
+
 test('panel groups each hint with its own section', () => {
   // useState 顺序：health, token, config, configError, saveState, tokens, ...
   const tree = textOf(renderPanel([{ loading: true }, 'token-value', CONFIG_STATE]));

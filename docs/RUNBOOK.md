@@ -196,11 +196,29 @@ pnpm archive:facts --keep-months 3 # 临时覆盖保留月数
 
 ## 5. DSH 接入
 
+**一条命令装完**（幂等，需普通 PowerShell 窗口——`~/.dsh` 对沙箱只读）：
+
 ```powershell
-node scripts\setup-dsh-mcp.mjs --check
-node scripts\setup-dsh-plugin.mjs --check
-node scripts\setup-dsh-panel.mjs --check
+powershell -ExecutionPolicy Bypass -File scripts\setup-all.ps1                 # 构建 + MCP + 令牌 + 两个插件
+powershell -ExecutionPolicy Bypass -File scripts\setup-all.ps1 -WithAutostart  # 顺带注册看护任务
+powershell -ExecutionPolicy Bypass -File scripts\setup-all.ps1 -Semantic       # 顺带下模型 + 开启语义 + 回填
+powershell -ExecutionPolicy Bypass -File scripts\setup-all.ps1 -Check          # 只自检（= node scripts\doctor.mjs）
+powershell -ExecutionPolicy Bypass -File scripts\setup-all.ps1 -Uninstall      # 反向卸载
 ```
+
+做完只需**重启一次 DSH**（MCP server 与插件的加载时机）。脚本不会自己重启 DSH——那会把你正在用的会话一起杀掉。
+
+单独自检：
+
+```powershell
+node scripts\doctor.mjs          # 表格；核心项全绿才 exit 0
+node scripts\doctor.mjs --json   # CI / 脚本消费
+```
+
+doctor 检查项：构建产物、两个插件（dep/bundle/linked）、MCP 注册块、root 令牌、memd 健康、
+语义状态（提示项）、模型目录（提示项）、看护心跳（提示项）。
+
+**令牌是幂等的**：`setup-dsh-mcp.mjs --with-token` 发现 `~/.dsh/memory-token` 里的令牌仍然有效就复用，不会每次部署都换一个（换令牌会让面板/桥接里已配好的副本集体失效）。
 
 ### 5.1 全会话短期上报（`plugins/dsh-memory`）
 
@@ -218,7 +236,9 @@ GET  /memory-hub/tokens        -> memd /v1/tokens         （需 Authorization�
 POST /memory-hub/tokens/revoke -> memd /v1/tokens/revoke  （需 Authorization）
 ```
 
-- root 令牌填 `%USERPROFILE%\.dsh\memory-token`（68 字符），存 localStorage；
+- **令牌零配置**：页面不带 `Authorization` 时，host 半侧自动注入 `%USERPROFILE%\.dsh\memory-token`
+  （可用 `MEMD_TOKEN_FILE` 覆盖）。想手动指定某个令牌时，在页面里填就会被转发、覆盖宿主令牌；
+  输入框已改成 300 ms 防抖（以前每敲一个字符发两个请求）。
 - 可改短期参数、隐私三段式、月度归档，以及**语义检索开关**（勾选并保存即热生效）；
 - 语义检索那一行的状态会跟着 `config-state.semantic` 走：
   - 关：`只走 FTS（子串/关键词）`；

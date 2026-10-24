@@ -92,17 +92,25 @@ if (has('remove')) {
 if (has('with-token')) {
   const config = loadConfig();
   const store = new TokenStore(config.tokensFile);
-  const issued = store.issue({
-    name: `dsh-${profile}`,
-    surface: 'main',
-    scopes: ['*', 'work:read'],
-    scenes: ['main'],
-  });
-  mkdirSync(dirname(tokenFile), { recursive: true });
-  writeFileSync(tokenFile, `${issued.token}\n`, { encoding: 'utf8', mode: 0o600 });
-  console.log(`issued token ${issued.record.id} -> ${tokenFile}`);
-  console.log(`tighten ACLs on that file if the directory is shared:`);
-  console.log(`  icacls "${tokenFile}" /inheritance:r /grant:r "%USERNAME%:R"`);
+  // 幂等：令牌文件已存在且仍有效就复用，不再签发新的（免得每次部署都换令牌，
+  // 让面板/桥接里已经配好的副本集体失效）。
+  const existingToken = existsSync(tokenFile) ? readFileSync(tokenFile, 'utf8').trim() : '';
+  const existingRecord = existingToken ? store.verify(existingToken) : null;
+  if (existingRecord) {
+    console.log(`reusing existing token ${existingRecord.id} -> ${tokenFile}`);
+  } else {
+    const issued = store.issue({
+      name: `dsh-${profile}`,
+      surface: 'main',
+      scopes: ['*', 'work:read'],
+      scenes: ['main'],
+    });
+    mkdirSync(dirname(tokenFile), { recursive: true });
+    writeFileSync(tokenFile, `${issued.token}\n`, { encoding: 'utf8', mode: 0o600 });
+    console.log(`issued token ${issued.record.id} -> ${tokenFile}`);
+    console.log(`tighten ACLs on that file if the directory is shared:`);
+    console.log(`  icacls "${tokenFile}" /inheritance:r /grant:r "%USERNAME%:R"`);
+  }
 
   // Make sure the index exists so the first search is not empty.
   const db = openDb(config.indexFile);
