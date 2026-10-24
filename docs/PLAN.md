@@ -78,14 +78,25 @@
 
 ## v2：memd 独立进程自启与看护
 
-已定方案（2026-10-24 决定，**放到 v2 实现，不挂 DSH 子进程**）：
+已定方案（2026-10-24 决定，**不挂 DSH 子进程**），**已实现**：
 
-1. `scripts/install-autostart.ps1`：注册两个计划任务（当前用户、无需管理员）——
-   - `memd`：`AtLogOn` 跑 `start.ps1 -NoWait`；
+1. ✅ `scripts/install-autostart.ps1`：注册两个计划任务（当前用户、无需管理员）——
+   - `memd-autostart`：`AtLogOn` + 30 秒延迟，跑 `start.ps1 -NoWait`；
    - `memd-watchdog`：每 5 分钟跑一次 `start.ps1 -NoWait`，已健康则立即退出（幂等补起）。
-2. `scripts/uninstall-autostart.ps1`：删除任务。
-3. 为什么不挂 DSH 子进程：DSH 每次重启换端口且重启频繁，子进程会随之死掉（今天已发生两次），还会把 DSH 的 fail-loud 崩溃耦合进记忆服务；QQ 桥接、桌宠、未来的 VPS 副本都不应依赖“DSH 桌面版开着”。
-4. 验收：重启 DSH 后 memd 仍在；`Get-Process` 只有一个 memd；`stop.ps1` 后看护任务 5 分钟内补起；`setup-dsh-* --check` 全绿。
+   - 附 `-Check`（看状态）与 `-Remove`；`scripts/uninstall-autostart.ps1` 反向删除。
+2. ✅ **桌宠后端不注册自启**：pet-brain 只服务 DSH 的 `pet-chat` preset，生命周期跟 DSH——
+   `qq-bridge/start-stack.ps1` 第 2.7 步在 DSH 之后拉起，`dsh-pet-configurable-llm/src/guard.mjs`
+   每 30 秒探一次 DSH，连续 3 次（约 90 秒）不可达即自退，不留占着 8790 的孤儿。
+   不用 DSH 宿主插件：插件的未捕获异常会触发 DSH fail-loud 退出整个 app。
+3. 为什么不挂 DSH 子进程：DSH 每次重启换端口且重启频繁，子进程会随之死掉（2026-10-24 已发生两次），还会把 DSH 的 fail-loud 崩溃耦合进记忆服务；QQ 桥接、桌宠、未来的 VPS 副本都不应依赖“DSH 桌面版开着”。
+4. 验收（2026-10-24 整机重启实测）：
+   - ✅ 登录任务先起 memd：`memd.pid` 15:22:11、监听 15:22:17；`qq-stack` 15:22:29 才开始且打的是
+     `memd already running on 8787`；`-Check` 显示 `memd-autostart Ready last=15:22:07 result=0`；
+   - ✅ 看护任务在跑且无限期重复：`memd-watchdog Ready last=15:23:01 result=0 next=15:28:00 every=PT5M duration=''`；
+   - ✅ memd 不依赖 DSH：重启后 DSH 换到 5354，memd 照常在 8787 服务；
+   - ⬜ `stop.ps1` 后看护任务 5 分钟内补起（还没做真停测试）；
+   - ⬜ DSH 关闭后 90 秒内 pet 退出（单元测试 + probe 实测已过，真实链路待观察一次）；
+   - ⬜ `setup-dsh-* --check` 全绿。
 
 ## v2 语义检索（计划，暂不实现）
 

@@ -39,6 +39,31 @@ node packages\admin\dist\cli.js health
 node packages\admin\dist\cli.js reindex --force
 ```
 
+## 2.5 自启与看护（v2）
+
+memd 是独立进程，不挂 DSH 子进程（DSH 每次重启换端口、重启频繁，子进程会跟着死）。
+
+```powershell
+# 注册两个计划任务（当前用户、无需管理员；必须在**非沙箱** PowerShell 里跑）
+powershell -ExecutionPolicy Bypass -File scripts\install-autostart.ps1
+
+# 看状态（先看这里再排查）
+powershell -ExecutionPolicy Bypass -File scripts\install-autostart.ps1 -Check
+
+# 删除（先删任务再 stop，否则看护任务 5 分钟内又把它拉起来）
+powershell -ExecutionPolicy Bypass -File scripts\uninstall-autostart.ps1
+powershell -ExecutionPolicy Bypass -File scripts\stop.ps1
+```
+
+| 任务 | 触发 | 动作 |
+|---|---|---|
+| `memd-autostart` | 登录后 30 秒 | `scripts\start.ps1 -NoWait` |
+| `memd-watchdog` | 每 5 分钟 | 同上（已健康则 `exit 0`） |
+
+- 两者幂等：`start.ps1` 先探 `/v1/health`，已在线就只做 health-check，所以和 `start-stack.ps1` 第 2.6 步撞上也无害。
+- 沙箱身份下 `Get-ScheduledTask` / `schtasks` 一律「拒绝访问」（低完整性进程，连 `New-ScheduledTaskSettingsSet` 都会拒），装/查任务请用普通 PowerShell 窗口。
+- **pet-brain 没有登录任务**：它只服务 DSH 的 `pet-chat` preset，跟着 DSH 生命周期——`qq-bridge\start-stack.ps1` 第 2.7 步在 DSH 起来后拉起它，DSH 关闭/崩溃后它自己退出（每 30 秒探一次，连续 3 次不可达约 90 秒退出，见 `dsh-pet-configurable-llm/src/guard.mjs`）。调试时可 `PET_BRAIN_ORPHAN_GUARD=0` 关掉。
+
 ## 3. 令牌
 
 签发（明文只显示一次）：
@@ -193,6 +218,8 @@ POST /memory-hub/tokens/revoke -> memd /v1/tokens/revoke  （需 Authorization�
 - 每轮：`POST /v1/recall`（scene=pet）→ 拼进 prompt；`POST /v1/ingest` 上报（50/批、失败静默）。
 - 可见性：owner 的 `main/qq:owner` + shared；**看不到**敏感、`qq:group:*`、`qq:private:*`。
 - `pet-brain/xi` 由 profile 的 `llm-pi-ai` 提供方指向 `127.0.0.1:8790`。
+- 生命周期跟着 DSH（v2 方案 B）：`start-stack.ps1` 第 2.7 步拉起（并把 `DSH_WEB_URL` 传给子进程，省掉首轮端口发现），DSH 关掉后孤儿保护 3 x 30 秒自退。**不要**再给 pet 注册登录任务。
+- 手工起停：`powershell -ExecutionPolicy Bypass -File scripts\start.ps1`（前台）；确认在跑：`curl http://127.0.0.1:8790/health`。
 - 气泡层级：启动时对网页 `lib/client.js` 与桌面 `runtime/electron-helper/sprite.js` 各打一次补丁（幂等，`.bak-petbrain`）；桌面 helper 要重启 DSH 才重新加载。
 
 ## 6. QQ 桥接
