@@ -322,6 +322,18 @@ mtime，超过 60 分钟没更新就采样一次。间隔可用 `MEMD_SUPERVISOR
 本地 embedding + `sqlite-vec` + 与 FTS 的混合排序。**关着的时候 memd 不加载模型、不建向量表，
 行为和 v1 的纯 FTS 完全一致。**
 
+安装体积（都不进仓库）：
+
+| 东西 | 体积 | 谁装 |
+|---|---|---|
+| 模型权重 `models/bge-small-zh-v1.5/` | 23 MB | `pnpm fetch:model`（只在要开语义时下） |
+| `onnxruntime-node` | 287 MB（含全平台二进制，Windows 实际用 ~50 MB） | `pnpm install`（optionalDependencies） |
+| `sqlite-vec` + `sqlite-vec-windows-x64` | 0.3 MB | `pnpm install` |
+
+选择「开箱即用」：`pnpm install` 就把运行时装好，代价是即使不开语义也会占这 287 MB。
+要更轻的话可以把 `onnxruntime-node` 从 `optionalDependencies` 挪走、开功能时 `pnpm add`
+（2026-10-24 决定：暂时保持开箱即用）。
+
 ```powershell
 # 1) 下载模型（约 24 MB，落在 models/bge-small-zh-v1.5/，已被 .gitignore 忽略）
 pnpm fetch:model
