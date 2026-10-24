@@ -62,6 +62,8 @@ export interface ServerConfig {
   archive: ArchiveConfig;
   /** Daily file backup of memories + tokens + config. */
   backup: BackupConfig;
+  /** Optional semantic search (local embedding + sqlite-vec hybrid ranking). */
+  semantic: SemanticConfig;
   /** Absolute path of the config.json this instance was loaded from. */
   configFile: string;
 }
@@ -95,6 +97,33 @@ export interface BackupConfig {
   dir: string;
   /** How many daily snapshots to keep. */
   keepDays: number;
+}
+
+/**
+ * 语义检索（可选，默认关）。关着的时候 memd 完全不加载模型、不建向量表，
+ * 行为和 v1 的纯 FTS 完全一致。
+ */
+export interface SemanticConfig {
+  /** 总开关。关 = 不加载 onnxruntime、不写向量、recall 走纯 FTS。 */
+  enabled: boolean;
+  /** 混合分值里 BM25 的权重；1 - alpha 给余弦。0.5 = 各半。 */
+  alpha: number;
+  /** ONNX 模型与词表所在目录（相对 memory-hub/）。 */
+  modelDir: string;
+  modelFile: string;
+  vocabFile: string;
+  /** 向量维度（bge-small-zh = 512）。与已有向量表不一致时自动重建。 */
+  dim: number;
+  /** 截断长度（token）。实测 >256 会明显抬高内存与 p95。 */
+  maxLen: number;
+  /** 一次推理的批大小。实测 >8 会把激活张量放大到 GB 级。 */
+  batchSize: number;
+  /** 稳态推理线程数。实测 1 线程足够（短查询 0.5 ms），多开只会抬高总 CPU。 */
+  threads: number;
+  /** 一次性回填用的线程数（脚本里可再覆盖）。 */
+  backfillThreads: number;
+  /** 每次检索从向量表取多少个候选（再与 FTS 结果融合）。 */
+  maxCandidates: number;
 }
 
 export const DEFAULT_INSTRUCTIONS =
@@ -141,6 +170,19 @@ const DEFAULTS: Omit<ServerConfig, 'dataDir' | 'memoriesDir' | 'indexFile' | 'to
   },
   archive: { enabled: false, keepMonths: 12 },
   backup: { enabled: true, dir: resolve(PACKAGE_ROOT, '..', 'backups', 'memory-hub'), keepDays: 14 },
+  semantic: {
+    enabled: false,
+    alpha: 0.5,
+    modelDir: 'models/bge-small-zh-v1.5',
+    modelFile: 'onnx/model_quantized.onnx',
+    vocabFile: 'vocab.txt',
+    dim: 512,
+    maxLen: 256,
+    batchSize: 8,
+    threads: 1,
+    backfillThreads: 4,
+    maxCandidates: 200,
+  },
 };
 
 type PartialConfig = Partial<ServerConfig> & { configFile?: string };
@@ -195,6 +237,10 @@ export function loadConfig(overrides: PartialConfig = {}): ServerConfig {
   merged.shortTerm = normalizeShortTerm(merged.shortTerm, fileConfig.shortTerm);
   merged.archive = normalizeArchive(merged.archive, fileConfig.archive);
   merged.backup = normalizeBackup(merged.backup, fileConfig.backup);
+  merged.semantic = normalizeSemantic(merged.semantic, fileConfig.semantic);
+  if (!isAbsolute(merged.semantic.modelDir)) merged.semantic.modelDir = resolve(PACKAGE_ROOT, merged.semantic.modelDir);
+  if (process.env.MEMD_SEMANTIC === '1' || process.env.MEMD_SEMANTIC === 'true') merged.semantic.enabled = true;
+  if (process.env.MEMD_SEMANTIC === '0' || process.env.MEMD_SEMANTIC === 'false') merged.semantic.enabled = false;
   if (!isAbsolute(merged.backup.dir)) merged.backup.dir = resolve(PACKAGE_ROOT, merged.backup.dir);
   merged.configFile = rootConfigPath;
 
@@ -238,6 +284,36 @@ function normalizeBackup(value: Partial<BackupConfig> | undefined, fromFile: Par
     enabled: base.enabled !== false,
     dir,
     keepDays: Math.min(365, Math.max(1, keep)),
+  };
+}
+
+/**
+ * 语义检索配置：全部字段都夹紧到实测安全区间（线程 1–8、批 1–16、maxLen 32–512），
+ * 避免手改 config.json 写进一个会把内存打爆的组合。
+ */
+export function normalizeSemantic(
+  value: Partial<SemanticConfig> | undefined,
+  fromFile: Partial<SemanticConfig> | undefined,
+): SemanticConfig {
+  const base: Partial<SemanticConfig> = { ...DEFAULTS.semantic, ...(value ?? {}), ...(fromFile ?? {}) };
+  const num = (input: unknown, fallback: number, min: number, max: number): number => {
+    const parsed = typeof input === 'number' && Number.isFinite(input) ? input : fallback;
+    return Math.min(max, Math.max(min, parsed));
+  };
+  const text = (input: unknown, fallback: string): string =>
+    typeof input === 'string' && input.trim().length > 0 ? input.trim() : fallback;
+  return {
+    enabled: base.enabled === true,
+    alpha: num(base.alpha, DEFAULTS.semantic.alpha, 0, 1),
+    modelDir: text(base.modelDir, DEFAULTS.semantic.modelDir),
+    modelFile: text(base.modelFile, DEFAULTS.semantic.modelFile),
+    vocabFile: text(base.vocabFile, DEFAULTS.semantic.vocabFile),
+    dim: Math.trunc(num(base.dim, DEFAULTS.semantic.dim, 64, 2048)),
+    maxLen: Math.trunc(num(base.maxLen, DEFAULTS.semantic.maxLen, 32, 512)),
+    batchSize: Math.trunc(num(base.batchSize, DEFAULTS.semantic.batchSize, 1, 16)),
+    threads: Math.trunc(num(base.threads, DEFAULTS.semantic.threads, 1, 8)),
+    backfillThreads: Math.trunc(num(base.backfillThreads, DEFAULTS.semantic.backfillThreads, 1, 16)),
+    maxCandidates: Math.trunc(num(base.maxCandidates, DEFAULTS.semantic.maxCandidates, 20, 2000)),
   };
 }
 

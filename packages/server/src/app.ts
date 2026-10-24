@@ -7,6 +7,7 @@ import { ApiError } from './errors.js';
 import { reindexAll, type ReindexResult } from './indexer.js';
 import { registerRoutes } from './routes.js';
 import { startReviewScheduler } from './review.js';
+import { SemanticManager } from './semantic.js';
 import { TokenStore } from './tokens.js';
 
 export interface BuildAppOptions {
@@ -25,6 +26,8 @@ export interface BuiltApp {
   tokens: TokenStore;
   audit: AuditLog;
   index: ReindexResult | null;
+  /** Always present; inert (FTS-only) until enabled. */
+  semantic: SemanticManager;
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
@@ -44,12 +47,23 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     }
   }
 
+  // 语义检索是可选的：关着就完全跳过（不加载 onnxruntime、不建向量表），
+  // 模型缺失 / 没装依赖也只是一条 warn。运行中可以通过 /v1/config 切换。
+  const semantic = new SemanticManager({
+    db,
+    config: config.semantic,
+    logger: {
+      info: (message: string) => console.log(`[memd] ${message}`),
+      warn: (message: string) => console.warn(`[memd] ${message}`),
+    },
+  });
+  if (config.semantic.enabled) await semantic.start();
+
   const app = Fastify({
     logger: options.logger ?? { level: buildLogLevel(config.logLevel) },
     bodyLimit: 512 * 1024,
     disableRequestLogging: true,
   });
-
   // CORS preflight for the settings panel's authenticated config calls.
   app.options('/*', async (_request, reply) => {
     reply.header('access-control-allow-methods', 'GET,POST,OPTIONS');
@@ -115,7 +129,19 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     reply.status(404).send(body);
   });
 
-  registerRoutes(app, { config, db, tokens, audit, startedAt: Date.now() });
+  registerRoutes(app, { config, db, tokens, audit, startedAt: Date.now(), semantic });
+
+  // 新写入的 chunk 由这个小循环补向量：每 5 秒最多 32 条（32 × ~5 ms ≈ 160 ms 的低优先级 CPU），
+  // 大回填交给 scripts/embed.mjs（多线程、跑完即退）。
+  let semanticSync: NodeJS.Timeout | null = null;
+  semanticSync = setInterval(() => {
+    if (!semantic.ready) return;
+    void semantic.sync(32).catch((error: unknown) => app.log.warn({ err: error }, 'semantic sync failed'));
+  }, 5000);
+  semanticSync.unref();
+  if (semantic.ready) {
+    void semantic.sync(64).catch((error: unknown) => app.log.warn({ err: error }, 'semantic sync failed'));
+  }
 
   // Daily review nudge: mark due scenes even when no client is awake; the next
   // recall/review sees the pending flag. Timer is unref'd and stopped on close.
@@ -126,7 +152,12 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     app.addHook('onClose', async () => stopReview());
   }
 
-  return { app, db, tokens, audit, index };
+  app.addHook('onClose', async () => {
+    if (semanticSync) clearInterval(semanticSync);
+    await semantic?.close();
+  });
+
+  return { app, db, tokens, audit, index, semantic };
 }
 
 export { loadConfig };

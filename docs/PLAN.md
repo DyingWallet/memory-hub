@@ -19,7 +19,7 @@
 | P3 桌宠 | dsh-pet 0.3.8 + pet-brain 接入（recall/ingest、pet 场景、免工作/财务） | ✅ 已安装并实测（桌面形态） |
 | P4 设置页 | 可编辑隐私/TTL/回顾频率、token 管理 | 🔶 只读状态页已完成 |
 | P5 质量与运维 | 回顾定时、合并去重、保留策略、备份、监控 | ⬜ |
-| P6 扩展 | 语义检索、图片/文档、多设备/VPS、加密、**memd 独立进程自启与看护（v2）** | ⬜ |
+| P6 扩展 | 语义检索（✅ 可选开关）、图片/文档、多设备/VPS、加密、**memd 独立进程自启与看护（v2）** | 🔶 |
 
 ## 已完成（可演示）
 
@@ -71,7 +71,8 @@
 
 ### P6 扩展
 
-18. **语义检索（v2 计划，暂不实现）**：本地 embedding + `sqlite-vec` + 混合排序；细节见 `TODO.md` §13（回填、内存/延迟、降级、验收）。图片/文档接口仍列 v2。
+18. ✅ **语义检索（已实现，可选开关）**：本地 embedding（bge-small-zh int8）+ `sqlite-vec` + 混合排序，
+    `semantic.enabled` 默认关、可热切换；细节见 `TODO.md` §13 与 RUNBOOK §10。图片/文档接口仍列 v2。
 19. 多设备/VPS 联邦（ZeroTier 内网、只读副本或双向同步）。
 20. 静态加密与密钥轮换；`secret` 的写入通道（现在一律拒写）。
 21. 其他 surface（未来新客户端复用 adapter 模式；桌宠已列 P3）。
@@ -103,16 +104,19 @@
 > 30 秒 x 3 → **20 秒 x 3（60 秒）**；随后又把四个任务合并成**一个** `memd-watchdog`（跑
 > `supervisor.mjs`），并把动作链换成 `wscript + run-hidden.vbs`（直接起控制台程序会每分钟闪一次黑框）。
 
-## v2 语义检索（计划，暂不实现）
+## v2 语义检索（已实现，可选开关）
 
-- **选型已定：`sqlite-vec`**；LEANN 已评估，仅作为 50 万 chunk / 存储瓶颈时的备选（决策见 `memories/40-decisions/2026-10-24-1500-semantic-search-sqlite-vec.md`）。
-- 目标：泛问/语义问法命中；FTS 保留为主路径，向量做混合排序。
-- 技术：本地 embedding（`bge-small-zh` / `bge-m3`，ONNX 或 Ollama 常驻）+ `sqlite-vec`；`score = α·BM25 + (1-α)·cosine`，α 初定 0.5。
-- 数据：约 545 chunk 全量回填；512 维 float32 ≈ 2 KB/chunk；新增/重建索引同步写向量。
-- 降级：模型或扩展不可用时静默退回 FTS，不阻塞对话。
-- 成本：开发 2–4 天；常驻内存 200–500 MB；查询 +10–30 ms；Windows 下需先验证 sqlite-vec 加载。
-- 验收：`verify-recall.mjs` 语义查询提升、FTS 基线不下降、模型缺失自动降级、索引重建可复现。
-- 前置：v2 的 memd/模型进程自启与看护。
+- ✅ **选型：`sqlite-vec`**；LEANN 已评估，仅作为 50 万 chunk / 存储瓶颈时的备选（决策见 `memories/40-decisions/2026-10-24-1500-semantic-search-sqlite-vec.md`）。
+- ✅ 模型：`bge-small-zh-v1.5` int8（ONNX 24 MB，512 维）+ `onnxruntime-node`；`pnpm fetch:model` 从 ModelScope 拉取到 `models/`（gitignore）。
+- ✅ 开关：`config.semantic.enabled`（默认 **关**）。关着不加载模型、不建向量表；运行中可经 `POST /v1/config {"semantic":{"enabled":true}}` 即时切换。
+- ✅ 混合排序：`score = α·norm(bm25) + (1-α)·cos`，α 默认 0.5；单边命中的项另一项记 0。
+- ✅ 数据：向量表 `chunk_vecs`（`vec0`，float[512]）；`pnpm embed` 全量回填，memd 每 5 秒增量补 32 条，forget/purge 留下的孤儿向量自动清理。
+- ✅ 降级：模型缺失 / 依赖未装 / `sqlite-vec` 加载失败 / 推理报错 → 静默退回纯 FTS，`semantic.reason` 记录原因。
+- ✅ 实测（Ryzen 7 9700X / 32 GB，CPU 1 线程）：短查询 embedding 0.5 ms + KNN 0.4 ms；763 条回填 ~6 秒；
+  常驻 150–250 MB；空闲 CPU 0%；**不占 GPU**。见 `memories/50-knowledge/2026-10-24-embedding-benchmark-bge-small-zh.md`。
+- ✅ 测试：`tests/unit/semantic.test.ts`（分词 / 距离换算 / 归一化 / 混合排序 / 配置夹紧 / sqlite-vec 往返）。
+- ⬜ 设置页面板开关（目前经 `/v1/config` 与 config.json）。
+- ⬜ `verify-recall.mjs` 增加语义用例对比。
 
 ## 里程碑
 

@@ -18,6 +18,8 @@
     "archive:facts": "node scripts/archive-facts.mjs",
     "backup": "node scripts/backup.mjs",
     "monitor": "node scripts/monitor.mjs",
+    "embed": "node scripts/embed.mjs",
+    "fetch:model": "node scripts/fetch-model.mjs",
     "prestart": "node node_modules/typescript/bin/tsc -b",
     "pretest": "node node_modules/typescript/bin/tsc -b && node node_modules/typescript/bin/tsc -p tsconfig.tests.json && node packages/adapter-qq/scripts/postbuild.mjs",
     "test": "node --test --test-isolation=none \"tests/dist/**/*.test.js\"",
@@ -34,5 +36,14 @@
     "@memsvc/server": "workspace:*",
     "@types/node": "^24.10.1",
     "typescript": "^5.9.3"
+  },
+  "optionalDependencies": {
+    "onnxruntime-node": "^1.30.0",
+    "sqlite-vec": "^0.1.9"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "onnxruntime-node"
+    ]
   }
 }

@@ -41,6 +41,12 @@ export interface SearchParams {
   ownerDisclosure?: boolean;
   /** Sensitivity policy resolved for this request. */
   restriction?: Restriction;
+  /**
+   * Natural-language form of the query for embedding. Recall builds `query` from
+   * extracted keywords (good for FTS, poor for a sentence encoder), so it can
+   * pass the original message text here.
+   */
+  semanticQuery?: string;
 }
 
 export interface SearchOutcome {

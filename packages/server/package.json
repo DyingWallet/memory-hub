@@ -24,6 +24,18 @@
       "types": "./dist/db.d.ts",
       "import": "./dist/db.js"
     },
+    "./embedding": {
+      "types": "./dist/embedding.d.ts",
+      "import": "./dist/embedding.js"
+    },
+    "./search": {
+      "types": "./dist/search.d.ts",
+      "import": "./dist/search.js"
+    },
+    "./semantic": {
+      "types": "./dist/semantic.d.ts",
+      "import": "./dist/semantic.js"
+    },
     "./tokens": {
       "types": "./dist/tokens.d.ts",
       "import": "./dist/tokens.js"

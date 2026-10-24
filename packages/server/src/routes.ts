@@ -61,6 +61,7 @@ import { getChunkOrDoc, recentDocs, reviewCandidates, searchChunks, type SearchH
 import { lastReviewAt, markReviewSeen, reminderSince, shouldReview } from './review.js';
 import { visibilityClause } from './visibility.js';
 import { dedupeKey, isNearDuplicate, normalizeForDedupe } from './dedupe.js';
+import type { SemanticManager } from './semantic.js';
 import type { TokenStore } from './tokens.js';
 
 export interface RouteDeps {
@@ -69,6 +70,8 @@ export interface RouteDeps {
   tokens: TokenStore;
   audit: AuditLog;
   startedAt: number;
+  /** 语义检索（可选）。`ready === false` 时所有调用都返回 null，检索退回纯 FTS。 */
+  semantic: SemanticManager;
 }
 
 const ERROR_SCHEMA = TErrorBody;
@@ -87,7 +90,19 @@ function responseSchema(operationId: string): Record<number, unknown> {
 }
 
 export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
-  const { config, db, tokens, audit, startedAt } = deps;
+  const { config, db, tokens, audit, startedAt, semantic } = deps;
+
+  /**
+   * 检索入口：语义可用时走混合排序，否则/失败时退回纯 FTS。
+   * 语义关闭或不可用是**正常状态**，不记错、不影响可用性。
+   */
+  const runSearch = async (params: Parameters<typeof searchChunks>[1], k: number) => {
+    if (semantic.ready) {
+      const hybrid = await semantic.search(params, k);
+      if (hybrid) return hybrid;
+    }
+    return searchChunks(db, params);
+  };
 
   const finish = (route: string, auth: AuthContext, started: number, ids: string[], query?: string, denied = 0): void => {
     audit.append({
@@ -136,7 +151,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         protocol: 'v1',
         version: config.version,
         tools: ['memory_bootstrap', 'memory_search', 'memory_get', 'memory_recent', 'memory_recall', 'memory_write', 'memory_call'],
-        features: { images: false, documents: false, semantic: false, offline: false, short_term: true },
+        features: { images: false, documents: false, semantic: semantic.ready, offline: false, short_term: true },
         limits: {
           search_default_k: config.searchDefaultK,
           search_max_k: config.searchMaxK,
@@ -180,6 +195,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
           ownerAudiences: [...config.privacy.ownerAudiences],
         },
         archive: { ...config.archive },
+        semantic: semantic.status,
       };
     },
   );
@@ -218,6 +234,9 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       if (patch.archive) {
         next.archive = { ...(currentRaw.archive as object ?? {}), ...patch.archive };
       }
+      if (patch.semantic) {
+        next.semantic = { ...(currentRaw.semantic as object ?? {}), ...patch.semantic };
+      }
 
       const backup = `${config.configFile}.bak-${Date.now()}`;
       if (existsSync(config.configFile)) writeFileSync(backup, readFileSync(config.configFile));
@@ -237,7 +256,13 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         ...Object.keys(patch.shortTerm ?? {}).map((key) => `shortTerm.${key}`),
         ...Object.keys(patch.privacy ?? {}).map((key) => `privacy.${key}`),
         ...Object.keys(patch.archive ?? {}).map((key) => `archive.${key}`),
+        ...Object.keys(patch.semantic ?? {}).map((key) => `semantic.${key}`),
       ];
+      // 语义开关即时生效：开 = 建索引并先补一批向量，关 = 释放模型与向量表连接。
+      if (patch.semantic && typeof patch.semantic.enabled === 'boolean') {
+        const status = await semantic.setEnabled(patch.semantic.enabled);
+        request.log.info({ semantic: status }, 'semantic toggled');
+      }
       return { ok: true, applied };
     },
   );
@@ -358,7 +383,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       const auth = authenticate(request.headers.authorization, tokens, body.scene);
       const k = clamp(body.k ?? config.searchDefaultK, 1, config.searchMaxK);
       const restriction = restrictionFor(auth.view.scopes, auth.scene, config.privacy);
-      const outcome = searchChunks(db, {
+      const outcome = await runSearch({
         query: body.query,
         k,
         maxChars: clamp(body.max_chars ?? config.searchDefaultChars, 40, 6000),
@@ -367,7 +392,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         restriction,
         ...(body.kinds ? { kinds: body.kinds } : {}),
         ...(body.path_prefix ? { pathPrefix: body.path_prefix } : {}),
-      });
+      }, k);
       finish('search', auth, started, outcome.hits.map((hit) => hit.id), body.query);
       return {
         query: body.query,
@@ -517,6 +542,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       }
       const searchParams = {
         query: keywords.join(' '),
+        // 语义那边用原话更准：关键词串适合 FTS，句向量更适合完整句子。
+        semanticQuery: messages.map((message) => message.text).join('\n'),
         k,
         maxChars: clamp(body.max_chars ?? 300, 40, 1000),
         token: auth.view,
@@ -529,14 +556,14 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       const ownerSaid = body.messages.some((message) => message.from_owner === true);
       let results: MemoryResult[];
       if (ownerSaid && !hasRootScope(auth.view.scopes)) {
-        const base = searchChunks(db, searchParams);
-        const wide = searchChunks(db, { ...searchParams, ownerDisclosure: true });
+        const base = await runSearch(searchParams, k);
+        const wide = await runSearch({ ...searchParams, ownerDisclosure: true }, k);
         const baseIds = new Set(base.hits.map((hit) => hit.id));
         results = wide.hits.map((hit) =>
           toMemoryResult(hit, baseIds.has(hit.id) ? undefined : 'owner_initiated'),
         );
       } else {
-        results = searchChunks(db, searchParams).hits.map((hit) => toMemoryResult(hit));
+        results = (await runSearch(searchParams, k)).hits.map((hit) => toMemoryResult(hit));
       }
       touchShortTerm(
         db,

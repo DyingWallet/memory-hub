@@ -316,3 +316,44 @@ node scripts\monitor.mjs --loop 900   # 每 15 分钟采样（前台常驻）
 
 自动采样由看护任务负责（不需要单独注册）：`supervisor.mjs` 每分钟检查 `data\metrics.csv` 的
 mtime，超过 60 分钟没更新就采样一次。间隔可用 `MEMD_SUPERVISOR_MONITOR_MINUTES` 覆盖。
+
+## 10. 语义检索（可选，默认关）
+
+本地 embedding + `sqlite-vec` + 与 FTS 的混合排序。**关着的时候 memd 不加载模型、不建向量表，
+行为和 v1 的纯 FTS 完全一致。**
+
+```powershell
+# 1) 下载模型（约 24 MB，落在 models/bge-small-zh-v1.5/，已被 .gitignore 忽略）
+pnpm fetch:model
+
+# 2) 打开开关（config.json；也可以走设置页/接口，见下）
+#    "semantic": { "enabled": true }
+
+# 3) 一次性回填（默认用 backfillThreads=4；跑完即退，模型不常驻）
+pnpm embed
+
+# 只看状态（不回填）
+pnpm embed -- --stats
+```
+
+运行中开关（root token；立即生效，开 = 建索引 + 先补 256 条向量）：
+
+```powershell
+$token = Get-Content "$env:USERPROFILE\.dsh\memory-token" -Raw
+Invoke-RestMethod http://127.0.0.1:8787/v1/config -Method Post `
+  -Headers @{ authorization = "Bearer $($token.Trim())"; 'content-type' = 'application/json' } `
+  -Body '{"semantic":{"enabled":true}}'
+
+# 状态（enabled/ready/vectors/dim/model/alpha）
+Invoke-RestMethod http://127.0.0.1:8787/v1/config-state -Headers @{ authorization = "Bearer $($token.Trim())" }
+```
+
+- **增量**：新写入的 chunk 由 memd 每 5 秒补一批向量（最多 32 条）；删除（forget/purge）留下的孤儿向量
+  在下一次同步里清掉。
+- **降级**：模型缺失 / `onnxruntime-node` 没装 / `sqlite-vec` 加载失败 / 推理报错 —— 一律静默退回纯 FTS，
+  检索不会报错；`/v1/config-state` 的 `semantic.reason` 会写原因。
+- **资源**（本机实测，Ryzen 7 9700X / 32 GB）：稳态 1 线程，短查询 embedding 0.5 ms、KNN 0.4 ms，
+  常驻 150–250 MB，空闲 CPU 0%，**不占 GPU**；回填 763 条约 6 秒。
+- **别调大**：`batchSize > 8` 或 `maxLen > 256` 会把激活张量放大到 GB 级（实测 RSS 1.7 GB）；
+  `threads > 1` 对单条查询没有收益，只抬高总 CPU。回填可以 `pnpm embed -- --threads 4`。
+- 换模型：改 `semantic.{modelDir,modelFile,dim}` → 启动时维度不一致会自动重建向量表 → 再 `pnpm embed`。

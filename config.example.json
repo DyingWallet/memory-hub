@@ -41,5 +41,18 @@
     "enabled": true,
     "dir": "../backups/memory-hub",
     "keepDays": 14
+  },
+  "semantic": {
+    "enabled": false,
+    "alpha": 0.5,
+    "modelDir": "models/bge-small-zh-v1.5",
+    "modelFile": "onnx/model_quantized.onnx",
+    "vocabFile": "vocab.txt",
+    "dim": 512,
+    "maxLen": 256,
+    "batchSize": 8,
+    "threads": 1,
+    "backfillThreads": 4,
+    "maxCandidates": 200
   }
 }

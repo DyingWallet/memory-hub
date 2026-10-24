@@ -560,6 +560,15 @@ export const TConfigUpdateRequest = Type.Object(
         { additionalProperties: false },
       ),
     ),
+    semantic: Type.Optional(
+      Type.Object(
+        {
+          /** 语义检索总开关；运行中切换会即时生效（开 = 建索引并补一批向量）。 */
+          enabled: Type.Optional(Type.Boolean()),
+        },
+        { additionalProperties: false },
+      ),
+    ),
   },
   { additionalProperties: false, minProperties: 1 },
 );
@@ -594,6 +603,18 @@ export const TConfigResponse = Type.Object(
     ),
     archive: Type.Object(
       { enabled: Type.Boolean(), keepMonths: Type.Integer() },
+      { additionalProperties: false },
+    ),
+    semantic: Type.Object(
+      {
+        enabled: Type.Boolean(),
+        ready: Type.Boolean(),
+        reason: Type.Union([Type.String(), Type.Null()]),
+        vectors: Type.Integer(),
+        dim: Type.Integer(),
+        model: Type.String(),
+        alpha: Type.Number(),
+      },
       { additionalProperties: false },
     ),
   },

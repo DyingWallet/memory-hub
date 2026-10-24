@@ -42,15 +42,16 @@
 10. ✅ **memd 独立进程自启/看护**：`install-autostart.ps1` 只注册一个任务 `memd-watchdog`（每 1 分钟），跑 `scripts/supervisor.mjs`——探活+起 memd、metrics.csv 超 60 分钟采样、过了 04:00 且今天没备份就跑备份；`-Check` / `-Remove` 与 `uninstall-autostart.ps1` 配套，安装时清掉旧的 `memd-autostart`/`memd-monitor`/`memd-backup`；RUNBOOK §2.5。不挂 DSH 子进程。
 11. ✅ **pet-brain 自启**：不注册登录任务，改跟 DSH 生命周期——`start-stack.ps1` 第 2.7 步在 DSH 之后拉起（传 `DSH_WEB_URL`），`src/guard.mjs` 每 20 秒探一次，连续 3 次不可达（约 60 秒）自退；另有 `pet-revive`（每 1 分钟）在「DSH 在、8790 不在」时拉起它，堵掉 DSH 重启后没人补的窗口。pet 测试 29 项。
 12. ✅ **「桌宠绝不冒充」**（原 `externalBrain` 补丁，改成不碰 dsh-pet）：pet-brain 内部失败时返回 200 + 降级文案（`src/degraded.mjs`），dsh-pet 看到「成功」就不会回落到普通对话模型；进程不在的那一半由 `pet-revive` 每分钟补齐。`memory.json` 不参与生成（`chatMemoryRounds: 0`），确认无影响后不再处理。
-13. ⬜ **语义检索：本地 embedding + sqlite-vec（v2，暂不实现）**
-    - ✅ 选型：`sqlite-vec`；LEANN 已评估，仅作为 50 万 chunk 以上的备选（见 `memories/40-decisions/2026-10-24-1500-semantic-search-sqlite-vec.md`）。
-    - 目标：泛问/语义问法（“有意思的事”“那次说的那个”）能命中；FTS 仍是主路径，向量只做混合排序。
-    - 方案：本地 embedding（`bge-small-zh` 或 `bge-m3`，ONNX/llama.cpp/Ollama 常驻），`sqlite-vec` 存 chunk 向量；`score = α·BM25 + (1-α)·cosine`，α 初定 0.5。
-    - 数据：现有约 545 chunk 全量回填；512 维 float32 ≈ 2 KB/chunk，1 万 chunk ≈ 20 MB；新增/重建索引时同步写向量。
-    - 接口：`/v1/recall` 与 `/v1/search` 请求不变；内部检索层加向量通道；模型不可用时**静默退回 FTS**，绝不阻塞对话。
-    - 成本：开发 2–4 天；常驻内存 200–500 MB；查询 +10–30 ms；Windows 下 sqlite-vec 扩展加载需先验证。
-    - 验收：`verify-recall.mjs` 的语义查询有提升；FTS 基线不下降；模型缺失时自动降级；索引重建可复现。
-    - 前置：v2 的 memd/模型进程自启与看护；否则模型挂了检索会退化。
+13. ✅ **语义检索：本地 embedding + sqlite-vec（可选，默认关）**
+    - ✅ 选型：`sqlite-vec`（npm 0.1.9，`sqlite-vec-windows-x64` 里有 `vec0.dll`；`node:sqlite` 的 `allowExtension` + `loadExtension` 可直接加载）；LEANN 仍是 50 万 chunk 以上的备选。
+    - ✅ 模型：`bge-small-zh-v1.5` int8 ONNX（512 维，24 MB），`onnxruntime-node`；`pnpm fetch:model` 从 ModelScope 下载到 `models/`（已 gitignore）。
+    - ✅ 开关：`config.semantic.enabled`（默认关）+ `POST /v1/config {"semantic":{"enabled":true}}` 热切换；关着不加载模型、不建表、行为与纯 FTS 一致。
+    - ✅ 排序：`score = α·norm(bm25) + (1-α)·cos`，α=0.5；语义候选先取 `maxCandidates` 条再与 FTS 融合，`weak` 只在两边都没结果时为真。
+    - ✅ 数据：`chunk_vecs`（`vec0`，float[512]）；`pnpm embed` 全量回填（默认 4 线程），memd 每 5 秒补 32 条增量，forget/purge 的孤儿向量自动清。
+    - ✅ 降级：模型/依赖/扩展/推理任一失败 → 静默退回 FTS，原因写 `semantic.reason`。
+    - ✅ 实测：短查询 embedding 0.5 ms、KNN 0.4 ms、回填 763 条 ~6 s、常驻 150–250 MB、空闲 CPU 0%、不占 GPU；`batchSize>8` 或 `maxLen>256` 会把 RSS 拉到 GB 级，已夹紧。
+    - ✅ 测试 136 项（+8：分词/距离/归一化/混合排序/配置夹紧/sqlite-vec 往返）。
+    - ⬜ 设置页面板开关；`verify-recall.mjs` 的语义用例对比。
 14. ⬜ **图片/文档接口**：需求已有，v1 未做。
 15. ⬜ **多设备/VPS 联邦**：ZeroTier 内网只读副本或双向同步。
 16. ⬜ **静态加密与密钥轮换**；`secret` 的写入通道（现在一律拒写）。

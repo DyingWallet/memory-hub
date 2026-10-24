@@ -75,7 +75,9 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
 
 export function openDb(indexFile: string): Db {
   if (indexFile !== ':memory:') mkdirSync(dirname(indexFile), { recursive: true });
-  const db = new DatabaseSync(indexFile);
+  // allowExtension：语义检索要 load sqlite-vec（可选功能）。加载是显式的，
+  // 关掉语义检索时不会有任何扩展被加载。
+  const db = new DatabaseSync(indexFile, { allowExtension: true });
   db.exec(SCHEMA);
   migrateColumns(db);
 
