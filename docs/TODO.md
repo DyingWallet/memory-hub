@@ -33,15 +33,15 @@
 4. ✅ **回顾定时任务**：memd 启动 + 每 10 分钟检查到期场景，写 `review:pending:<scene>`（SQLite meta，重启不丢）；`recall` 带 `should_review/reminder_since/last_reviewed_at`；`/v1/review` 清提醒并记 `review:last`，`status_only` 只读。测试 112 项。
 5. ✅ **合并/去重**：写入时同 `scene+kind+规范化文本+audience+privacy` 复用 id（`duplicate:true`）；回顾转长期时按 CJK bigram/词 Jaccard ≥ 0.8 折叠，返回 `merged:[{from,into}]`，短的写 tombstone。测试 112 项。
 6. ✅ **保留与归档（可选，默认关闭）**：`config.archive.enabled=false` / `keepMonths=12`，设置页可开关；开启后 `scripts/archive-facts.mjs` 把更老月份压成 `facts/archive/*.jsonl.gz`（回读校验后删原文件）；indexer 透明读取 gz，tombstone 写活动分片；`--force` 可临时跑一次。测试 117 项。
-7. ✅ **备份自动化**：`pnpm backup` 每天一份 `<dir>/YYYY-MM-DD/`（memories + tokens.json + config.json + manifest），同日覆盖、`keepDays` 清理；`scripts/install-backup-task.ps1` 注册每日计划任务（默认 04:00），uninstall 反向删除；RUNBOOK 写恢复演练。测试 119 项。
-8. ✅ **监控**：`pnpm monitor` 采样 `/v1/health` 到 `data/metrics.csv`（成功/失败、延迟、docs/facts/chunks、uptime）；支持 `--loop` 与每小时计划任务脚本；`verify-recall.mjs` 仍作手动回归。测试 120 项。
+7. ✅ **备份自动化**：`pnpm backup` 每天一份 `<dir>/YYYY-MM-DD/`（memories + tokens.json + config.json + manifest），同日覆盖、`keepDays` 清理；由看护任务 `supervisor.mjs` 按「过了 04:00 且今天没快照」触发（失败后 1 小时内只重试一次）；RUNBOOK 写恢复演练。测试 119 项。
+8. ✅ **监控**：`pnpm monitor` 采样 `/v1/health` 到 `data/metrics.csv`（成功/失败、延迟、docs/facts/chunks、uptime）；支持 `--loop`，自动采样由 `supervisor.mjs` 按「metrics.csv 超 60 分钟没更新」触发；`verify-recall.mjs` 仍作手动回归。测试 120 项。
 9. 🔶 **测试补强**：adapter-qq 客户端 4 项（场景映射/召回提示/镜像幂等/禁用）+ 设置页 bundle 冒烟 + `verify-recall.mjs` 实库检索通过；**真实 DSH 会话 e2e** 仍靠手动清单（起会话、看 ingest 落库、看 review 提示）。测试 125 项。
 
 ## v2（架构与扩展）
 
-10. ✅ **memd 独立进程自启/看护**：`install-autostart.ps1` 注册两个任务——`memd-autostart`（AtLogOn + 30 秒延迟）+ `memd-watchdog`（每 1 分钟，已健康则 exit 0），均跑 `start.ps1 -NoWait`；`-Check` / `-Remove` 与 `uninstall-autostart.ps1` 配套；RUNBOOK §2.5。不挂 DSH 子进程。
-11. ✅ **pet-brain 自启**：不注册登录任务，改跟 DSH 生命周期——`start-stack.ps1` 第 2.7 步在 DSH 之后拉起（传 `DSH_WEB_URL`），`src/guard.mjs` 每 20 秒探一次，连续 3 次不可达（约 60 秒）自退。pet 测试 24 项（+6 孤儿保护）。
-12. ⬜ **dsh-pet `externalBrain` 补丁**（可选）：严格只走 pet-brain、失败不回落普通模型；文件参照 `pet-brain/patches/dsh-pet-external-brain.md`。
+10. ✅ **memd 独立进程自启/看护**：`install-autostart.ps1` 只注册一个任务 `memd-watchdog`（每 1 分钟），跑 `scripts/supervisor.mjs`——探活+起 memd、metrics.csv 超 60 分钟采样、过了 04:00 且今天没备份就跑备份；`-Check` / `-Remove` 与 `uninstall-autostart.ps1` 配套，安装时清掉旧的 `memd-autostart`/`memd-monitor`/`memd-backup`；RUNBOOK §2.5。不挂 DSH 子进程。
+11. ✅ **pet-brain 自启**：不注册登录任务，改跟 DSH 生命周期——`start-stack.ps1` 第 2.7 步在 DSH 之后拉起（传 `DSH_WEB_URL`），`src/guard.mjs` 每 20 秒探一次，连续 3 次不可达（约 60 秒）自退；另有 `pet-revive`（每 1 分钟）在「DSH 在、8790 不在」时拉起它，堵掉 DSH 重启后没人补的窗口。pet 测试 29 项。
+12. ✅ **「桌宠绝不冒充」**（原 `externalBrain` 补丁，改成不碰 dsh-pet）：pet-brain 内部失败时返回 200 + 降级文案（`src/degraded.mjs`），dsh-pet 看到「成功」就不会回落到普通对话模型；进程不在的那一半由 `pet-revive` 每分钟补齐。`memory.json` 不参与生成（`chatMemoryRounds: 0`），确认无影响后不再处理。
 13. ⬜ **语义检索：本地 embedding + sqlite-vec（v2，暂不实现）**
     - ✅ 选型：`sqlite-vec`；LEANN 已评估，仅作为 50 万 chunk 以上的备选（见 `memories/40-decisions/2026-10-24-1500-semantic-search-sqlite-vec.md`）。
     - 目标：泛问/语义问法（“有意思的事”“那次说的那个”）能命中；FTS 仍是主路径，向量只做混合排序。

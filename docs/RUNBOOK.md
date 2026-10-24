@@ -42,9 +42,10 @@ node packages\admin\dist\cli.js reindex --force
 ## 2.5 自启与看护（v2）
 
 memd 是独立进程，不挂 DSH 子进程（DSH 每次重启换端口、重启频繁，子进程会跟着死）。
+整个 memory-hub 只注册**一个**计划任务，每分钟跑一次 `scripts\supervisor.mjs`：
 
 ```powershell
-# 注册两个计划任务（当前用户、无需管理员；必须在**非沙箱** PowerShell 里跑）
+# 注册（当前用户、无需管理员；必须在**非沙箱** PowerShell 里跑）
 powershell -ExecutionPolicy Bypass -File scripts\install-autostart.ps1
 
 # 看状态（先看这里再排查）
@@ -57,14 +58,20 @@ powershell -ExecutionPolicy Bypass -File scripts\stop.ps1
 
 | 任务 | 触发 | 动作 |
 |---|---|---|
-| `memd-autostart` | 登录后 30 秒 | `wscript run-hidden.vbs` → `task-start.ps1` → `start.ps1 -NoWait` |
-| `memd-watchdog` | 每 1 分钟 | 同上（memd 已健康则只刷新心跳，`exit 0`） |
+| `memd-watchdog` | 每 1 分钟 | `wscript run-hidden.vbs` → `node scripts\supervisor.mjs` |
 
-- **动作链为什么这么长**：任务计划直接跑 `powershell.exe`（哪怕带 `-WindowStyle Hidden`）每次都会闪一下黑框——控制台窗口在 PowerShell 解析参数之前就由系统建好。1 分钟一次之后很显眼，所以统一改成 `wscript.exe + scripts\run-hidden.vbs`（window style 0，窗口不创建），中间再垫一层 `task-start.ps1` 把输出落盘（隐藏运行没有控制台，否则出错完全没线索）。`memd-monitor` / `memd-backup` 同样走这条链。
-- **看护是否真的在跑**：`logs\task-last-tick.txt` 每次触发被覆盖（含 `start.ps1` 的输出摘要）；真正拉起 memd 时才追加 `logs\task-start.log`。`-Check` 会打印最后心跳。
-- 两者幂等：`start.ps1` 先探 `/v1/health`，已在线就只做 health-check，所以和 `start-stack.ps1` 第 2.6 步撞上也无害。
+`supervisor.mjs` 每分钟做三件事，顺序固定：
+
+1. **探活** `/v1/health`，不在就用 `scripts\start.ps1 -NoWait` 拉起来（最常见的情况什么都不做）；
+2. `data\metrics.csv` 超过 60 分钟没更新 → 跑一次 `scripts\monitor.mjs`；
+3. 今天的备份目录不存在且已过 04:00 → 跑一次 `scripts\backup.mjs`（失败后同一小时内只重试一次，记在 `logs\supervisor-state.json`）。
+
+- **为什么合成一个**：原来是四个任务（登录、看护、监控、备份），触发器各写一份，改一个忘三个；现在只有一个触发器、一份日志。
+- **动作链**：任务计划直接跑控制台程序必闪黑框（窗口在程序启动前就创建），所以走 `wscript.exe + scripts\run-hidden.vbs`（window style 0）。`supervisor.mjs` 自己写日志，不需要中间垫 powershell。
+- **看护是否真的在跑**：`logs\task-last-tick.txt` 每次触发覆盖（含本次动作摘要，如 `memd=up` / `memd=restarted`）；有动作时才追加 `logs\supervisor.log`。`-Check` 会打印最后心跳与最后事件。
+- 幂等：`start.ps1` 先探 `/v1/health`，已在线就只做 health-check，所以和 `start-stack.ps1` 第 2.6 步撞上也无害。
 - 沙箱身份下 `Get-ScheduledTask` / `schtasks` 一律「拒绝访问」（低完整性进程，连 `New-ScheduledTaskSettingsSet` 都会拒），装/查任务请用普通 PowerShell 窗口。
-- `schtasks /TR` 有 **261 字符上限**：动作串更长时（隐藏启动器就超了）先用 `schtasks` 建出无限期重复的触发器，再用 `Set-ScheduledTask -Action` 换动作。
+- `schtasks /TR` 有 **261 字符上限**：动作串更长时（隐藏启动器就接近上限）先用 `schtasks` 建出无限期重复的触发器，再用 `Set-ScheduledTask -Action` 换动作。
 - **pet-brain 没有登录任务**：它只服务 DSH 的 `pet-chat` preset，跟着 DSH 生命周期——`qq-bridge\start-stack.ps1` 第 2.7 步在 DSH 起来后拉起它，DSH 关闭/崩溃后它自己退出（每 20 秒探一次，连续 3 次不可达约 60 秒退出，见 `dsh-pet-configurable-llm/src/guard.mjs`）。调试时可 `PET_BRAIN_ORPHAN_GUARD=0` 关掉。
 
 ## 3. 令牌
@@ -222,6 +229,8 @@ POST /memory-hub/tokens/revoke -> memd /v1/tokens/revoke  （需 Authorization�
 - 可见性：owner 的 `main/qq:owner` + shared；**看不到**敏感、`qq:group:*`、`qq:private:*`。
 - `pet-brain/xi` 由 profile 的 `llm-pi-ai` 提供方指向 `127.0.0.1:8790`。
 - 生命周期跟着 DSH（v2 方案 B）：`start-stack.ps1` 第 2.7 步拉起（并把 `DSH_WEB_URL` 传给子进程，省掉首轮端口发现），DSH 关掉后孤儿保护 3 x 20 秒（约 60 秒）自退。**不要**再给 pet 注册登录任务。
+- 它自己的看护是 `dsh-pet-configurable-llm/scripts/install-revive-task.ps1` 注册的 `pet-revive`（每 1 分钟）：DSH 在、8790 不在就拉起（DSH 重启超过 60 秒后 pet 会自退，这是补回来的那一手）。日志 `dsh-pet-configurable-llm/logs/revive.log`。
+- 失败不回落：pet-brain 内部失败时返回 200 + 降级文案（`src/degraded.mjs`），否则 dsh-pet 会改用普通对话模型回答，看起来还是桌宠但不是那条 DSH 会话。
 - 手工起停：`powershell -ExecutionPolicy Bypass -File scripts\start.ps1`（前台）；确认在跑：`curl http://127.0.0.1:8790/health`。
 - 气泡层级：启动时对网页 `lib/client.js` 与桌面 `runtime/electron-helper/sprite.js` 各打一次补丁（幂等，`.bak-petbrain`）；桌面 helper 要重启 DSH 才重新加载。
 
@@ -269,13 +278,9 @@ node scripts\backup.mjs --force   # 无视 enabled 临时跑一次
 - 清理：早于 `keepDays` 的快照整目录删除；
 - 本机默认目录 `D:\deepseek_workspace\backups\memory-hub`，实测 47 个文件 / 约 0.5 MB。
 
-每日定时（可选，不需要管理员）：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install-backup-task.ps1        # 每天 04:00
-powershell -ExecutionPolicy Bypass -File scripts\install-backup-task.ps1 -At 03:30
-powershell -ExecutionPolicy Bypass -File scripts\uninstall-backup-task.ps1
-```
+每日定时由看护任务负责（不需要单独注册）：`scripts\supervisor.mjs` 每分钟检查一次，过了
+`04:00` 且今天的快照目录不存在就跑一次 `backup.mjs`；失败后同一小时内只重试一次。
+要改时刻或关掉备份，改 `config.json` 的 `backup.enabled` / 在 supervisor 里改 `MEMD_SUPERVISOR_BACKUP_AT`。
 
 恢复演练：
 
@@ -309,10 +314,5 @@ node scripts\monitor.mjs --loop 900   # 每 15 分钟采样（前台常驻）
 - 文件在 `data\metrics.csv`，一行约 80 字节，每小时采样一年约 0.7 MB；
 - 手工看趋势：按天取 `docs/facts/chunks` 最后一行的差值；`latency_ms` 持续 > 200ms 时先查索引大小和磁盘。
 
-每小时自动采样（可选，不需管理员）：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install-monitor-task.ps1              # 每小时
-powershell -ExecutionPolicy Bypass -File scripts\install-monitor-task.ps1 -EveryMinutes 30
-powershell -ExecutionPolicy Bypass -File scripts\uninstall-monitor-task.ps1
-```
+自动采样由看护任务负责（不需要单独注册）：`supervisor.mjs` 每分钟检查 `data\metrics.csv` 的
+mtime，超过 60 分钟没更新就采样一次。间隔可用 `MEMD_SUPERVISOR_MONITOR_MINUTES` 覆盖。

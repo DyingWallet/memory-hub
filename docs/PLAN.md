@@ -65,8 +65,8 @@
 12. ✅ **回顾定时任务**：memd 每 10 分钟检查，到期写 `review:pending:<scene>`；`recall` 带 `should_review/reminder_since`；`/v1/review` 清提醒并记 `review:last`（`status_only` 只读）。
 13. ✅ **合并/去重**：写入时同 `scene+kind+文本+audience+privacy` 复用 id；回顾转长期时按相似度折叠（CJK bigram + 词 Jaccard ≥ 0.8），`merged:[{from,into}]`，短的 tombstone。
 14. ✅ **保留与归档（默认关闭）**：`config.archive.enabled` + `keepMonths`，设置页可开关；开启后 `pnpm archive:facts` 月末归档 gz（校验后删原文件），indexer 读 gz，`--force` 临时执行。
-15. ✅ **备份自动化**：`scripts/backup.mjs` 每日快照（memories + tokens + config + manifest，keepDays 清理，同日覆盖）；`install-backup-task.ps1` 计划任务；RUNBOOK 含恢复演练。
-16. ✅ **监控**：`scripts/monitor.mjs` 采样 health 到 `data/metrics.csv`（延迟/计数/失败原因），`--loop` 或 `install-monitor-task.ps1` 定时；`verify-recall.mjs` 手动回归。
+15. ✅ **备份自动化**：`scripts/backup.mjs` 每日快照（memories + tokens + config + manifest，keepDays 清理，同日覆盖）；由看护任务 `supervisor.mjs` 按「过了 04:00 且今天没快照」触发；RUNBOOK 含恢复演练。
+16. ✅ **监控**：`scripts/monitor.mjs` 采样 health 到 `data/metrics.csv`（延迟/计数/失败原因），`--loop` 或由 `supervisor.mjs` 每小时触发；`verify-recall.mjs` 手动回归。
 17. 🔶 **测试补强**：adapter-qq 客户端测试 + 设置页 bundle 冒烟 + `verify-recall` 已做（128 项）；真实 DSH 会话 e2e 仍手动。
 
 ### P6 扩展
@@ -80,27 +80,28 @@
 
 已定方案（2026-10-24 决定，**不挂 DSH 子进程**），**已实现**：
 
-1. ✅ `scripts/install-autostart.ps1`：注册两个计划任务（当前用户、无需管理员）——
-   - `memd-autostart`：`AtLogOn` + 30 秒延迟，跑 `start.ps1 -NoWait`；
-   - `memd-watchdog`：每 1 分钟跑一次 `start.ps1 -NoWait`，已健康则立即退出（幂等补起）。
-   - 附 `-Check`（看状态）与 `-Remove`；`scripts/uninstall-autostart.ps1` 反向删除。
+1. ✅ `scripts/install-autostart.ps1`：注册**一个**计划任务（当前用户、无需管理员）——
+   `memd-watchdog`：每分钟跑一次 `scripts/supervisor.mjs`，它依次做「探活 + 起 memd」
+   「metrics.csv 超 60 分钟就采样」「今天没备份且过了 04:00 就备份」。原来拆成四个任务
+   （登录 / 看护 / 监控 / 备份），2026-10-24 下午合并成一个：一个触发器、一份日志。
+   附 `-Check`（看状态 + 心跳）与 `-Remove`；`scripts/uninstall-autostart.ps1` 反向删除，
+   安装时还会顺手清掉旧的 `memd-autostart` / `memd-monitor` / `memd-backup`。
 2. ✅ **桌宠后端不注册自启**：pet-brain 只服务 DSH 的 `pet-chat` preset，生命周期跟 DSH——
    `qq-bridge/start-stack.ps1` 第 2.7 步在 DSH 之后拉起，`dsh-pet-configurable-llm/src/guard.mjs`
    每 20 秒探一次 DSH，连续 3 次（约 60 秒）不可达即自退，不留占着 8790 的孤儿。
    不用 DSH 宿主插件：插件的未捕获异常会触发 DSH fail-loud 退出整个 app。
 3. 为什么不挂 DSH 子进程：DSH 每次重启换端口且重启频繁，子进程会随之死掉（2026-10-24 已发生两次），还会把 DSH 的 fail-loud 崩溃耦合进记忆服务；QQ 桥接、桌宠、未来的 VPS 副本都不应依赖“DSH 桌面版开着”。
-4. 验收（2026-10-24 整机重启实测）：
-   - ✅ 登录任务先起 memd：`memd.pid` 15:22:11、监听 15:22:17；`qq-stack` 15:22:29 才开始且打的是
-     `memd already running on 8787`；`-Check` 显示 `memd-autostart Ready last=15:22:07 result=0`；
-   - ✅ 看护任务在跑且无限期重复：`memd-watchdog Ready result=0 every=PT5M duration=''`（初版 5 分钟）；
-   - ✅ 停掉后看护补起：15:28:02 停、15:28:22 回来（20 秒），`logs/watchdog-test.log` 有采样；
-   - ✅ memd 不依赖 DSH：重启后 DSH 换到 5354，memd 照常在 8787 服务；
+4. 验收（2026-10-24 实测）：
+   - ✅ 合并成单任务后只剩 `memd-watchdog`：`every=PT1M duration=''`、`result=0`；
+   - ✅ 停掉 memd → 53.4 秒被拉起（`supervisor.log`：`memd down on 8787 -> starting` →
+     `memd healthy again on 8787`，心跳 `memd=restarted`）；
+   - ✅ memd 不依赖 DSH：整机重启后 DSH 换到 5354，memd 照常在 8787 服务（合并前的登录任务实测）；
    - ⬜ DSH 关闭后 60 秒内 pet 退出（单元测试 + probe 实测已过，真实链路待观察一次）；
    - ⬜ `setup-dsh-* --check` 全绿。
 
-> 2026-10-24 追改：按用户要求把最坏恢复时间压到 1 分钟以内——看护任务 5 分钟 → **1 分钟**
-> （`-WatchdogMinutes 1` 为默认，需重跑 `install-autostart.ps1` 才换节拍），pet 孤儿保护
-> 30 秒 x 3 → **20 秒 x 3（60 秒）**（`lifecycle.probeMs` 默认 20000）。
+> 2026-10-24 追改：按用户要求把最坏恢复时间压到 1 分钟以内——看护 5 分钟 → **1 分钟**，pet 孤儿保护
+> 30 秒 x 3 → **20 秒 x 3（60 秒）**；随后又把四个任务合并成**一个** `memd-watchdog`（跑
+> `supervisor.mjs`），并把动作链换成 `wscript + run-hidden.vbs`（直接起控制台程序会每分钟闪一次黑框）。
 
 ## v2 语义检索（计划，暂不实现）
 
