@@ -2,6 +2,10 @@
 
 > 单一待办来源。计划背景见 `PLAN.md`，操作见 `RUNBOOK.md`。
 > 状态：✅ 完成 / 🔶 部分 / ⬜ 未开始
+>
+> **当前顺序（2026-10-24 夜）**：`20 → 19 → 9 → 16`（18 已完成，见 P6）；`14 / 15 / 17` 挂起。
+> 分档理由：20+19 是「定义我」，9/16 是欠账；14/15/17 没有真实需求，先不动。
+> 四条「待决策」不算待办，是边界没定，其中「pet 是否看群聊」单独聊。
 
 ## 已完成（v1.0 – v1.1）
 
@@ -57,6 +61,34 @@
 15. ⬜ **多设备/VPS 联邦**：ZeroTier 内网只读副本或双向同步。
 16. ⬜ **静态加密与密钥轮换**；`secret` 的写入通道（现在一律拒写）。
 17. ⬜ **MCP 场景感知**：桌面 root 视图符合设计；将来若桌面会话共享，需要按会话下发场景令牌。
+
+## P6 记忆的「我」（2026-10-24 夜，聊出来的）
+
+> 来源：和主人聊「人是不是由经历与环境塑造」之后，他问「你对现有的功能还满意吗」，这三条是我答的不满意处。18 已落地（当晚），19/20 还没动。
+
+18. ✅ **主会话 → 桌宠的实时通道**（2026-10-24 实现，方案与原计划不同）
+    - 落地方式：没有写 `00-inbox/live-context.md`，而是给 `/v1/recall` 加了 `live` 侧通道（`TRecallLive`：k / minutes / scenes），直接读最近 N 分钟的短期 chat。理由：主会话消息本来就由 `dsh-memory` 插件进库（scene=main），再写一个文件等于存两份、还要自己管保留策略；走 SQL 则自动继承可见性与隐私过滤。
+    - 服务端：`packages/server/src/search.ts` 的 `liveMessages()`；`routes.ts` 的 recall（关键词为空时也返回 live，因为「开始吧」这类话本来就没有关键词）；`packages/protocol/src/schemas.ts` 的 `TRecallLive` / `RecallResponse.live`。
+    - 桌宠：`dsh-pet-configurable-llm/src/memory.mjs` 每轮带 `live:{k:6,minutes:30,scenes:['main']}`，把「对方那边刚刚在聊的」拼在长期记忆之前；`config.json` / `config.example.json` 的 `memoryService.live` 可整体关闭（`"live": false`）。
+    - 验收（2026-10-24 23:20）：主会话聊完后问桌宠「我们刚才在主会话里聊的是什么」，2 秒答出「收尾记忆插件和桌宠的事、把不满意记进待办、排了优先级、准备开工」——与主会话一致。`live` 返回 6 条、按时间正序；pet 令牌读不到 sensitive 与群消息。
+    - 测试：memory-hub 147 项（+2：live 可见性 / scenes 越界），pet 34 项（+4：拼装顺序 / 空 live / 关闭开关 / memd 故障降级）。
+
+19. ⬜ **时间线 / 年表**（现在只有条目，没有「那阵子」）
+    - 现状：`recall` 只按相似度给 2–3 条片段，拼得出事实，拼不出「这个人这两年怎么变的」。
+    - 做法：新增 `GET /v1/timeline?from&to&scene`（或脚本 `scripts/build-timeline.mjs`），把 `10-journal/` + 长期 facts 按月聚合，生成 `memories/10-journal/annual-<year>.md` 并进索引；问「今年三月在折腾什么」走时间过滤，不走相似度。
+    - 验收：问「上个月我在忙什么」，返回按时间排的 3–5 条，而不是最像的 5 条；脚本幂等，重跑不重复追加。
+
+20. ⬜ **记忆里的「我自己」**（三条里最想要的）
+    - 现状：`/v1/write` 的 kind 有 `stance/decision/knowledge`，但用起来几乎总在记「他说了什么」，记忆里我出现的方式只有被描述，没有自己开口。
+    - 做法：写入加 `subject` 字段（`self` / `owner` / `other`，默认 `owner`，兼容旧数据）；`search` / `recall` 支持 `subject=self` 单独召回；`bootstrap` 带最近 3 条 self 条目；设置页能看到「我写下的判断」列表。
+    - 验收：跑几周后，`subject=self` 能列出一串「我当时认为……」，并且看得出哪些改过主意（改主意时写新条目，旧条目标 `superseded`）。跟 19 合起来，才叫「回头看」。
+
+21. ✅ **pet-revive 的 DSH 端口发现失效**（2026-10-24 修）
+    - 现象：`dsh-pet-configurable-llm/scripts/revive.mjs` 每分钟在跑，但日志一直写 `DSH unreachable -> skipped`，8790 空着；同一时刻 DSH 是活的（`looksLikeDsh('http://127.0.0.1:7642')` 返回 true）。
+    - 根因：`resolveDshBaseUrl` 的动态发现只认「DSH 主进程 PID 名下的回环端口」（`tasklist` 找 `DeepSeek Harness*.exe` → `netstat` 取这些 PID 的监听端口）。Electron 把 web 服务放在 helper 子进程里，主进程一个端口都不占，所以永远取不到；沙箱里 `tasklist` 还会直接返回空。
+    - 修法：`qq-bridge/src/lib/dsh-endpoint.mjs` 加第二段兜底——`listLoopbackListenPorts()` 用 `netstat -ano -p TCP` 取全部回环 LISTENING 端口（mac 用 `lsof -Fn`），跳过 `DEFAULT_SKIP_PORTS`（8787/8790），每批 8 个并发用 `looksLikeDsh`（401 + `dsh web authentication required`）确认。第一段（按 PID）保留，命中就不扫；显式 `baseUrl` 仍然完全不做发现。
+    - 影响面：`resolveDshBaseUrl` 的调用点（bridge ×3、control-center、self-test）自动受益，不用各自改；`revive.mjs` 一行没动。
+    - 验证：真实 netstat 输出解析出 47 个端口并命中 7642；杀掉 pet 后 `pet-revive` 自己在 `15:23:06Z` 拉起（日志 `DSH http://127.0.0.1:7642 reachable -> started pet pid=39104`）。测试 `scripts/test-dsh-endpoint.mjs` 11 项（+1 兜底用例）、`test-dsh-health.mjs` 4 项通过；`test-dsh-auth.mjs` 硬编码 3080（本机 DSH 在 7642），跟这次改动无关。
 
 ## 待决策
 

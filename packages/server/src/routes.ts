@@ -59,7 +59,7 @@ import { loadConfig, type ServerConfig } from './config.js';
 import { getMeta, readStats, setMeta, type Db } from './db.js';
 import { errors } from './errors.js';
 import { appendFact, forgetFact, loadAudienceCard, loadIdentity, type FactRecord } from './indexer.js';
-import { getChunkOrDoc, recentDocs, reviewCandidates, searchChunks, type SearchHit } from './search.js';
+import { getChunkOrDoc, liveMessages, recentDocs, reviewCandidates, searchChunks, type SearchHit } from './search.js';
 import { lastReviewAt, markReviewSeen, reminderSince, shouldReview } from './review.js';
 import { visibilityClause } from './visibility.js';
 import { dedupeKey, isNearDuplicate, normalizeForDedupe } from './dedupe.js';
@@ -553,6 +553,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       max_chars?: number;
       scope?: 'scene' | 'groups';
       since_hours?: number;
+      live?: { k?: number; minutes?: number; scenes?: string[] };
     };
     Reply: RecallResponse;
   }>(
@@ -570,6 +571,31 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       const messages = body.messages.slice(-2);
       const keywords = extractKeywords(messages.map((message) => message.text).join('\n'), 6);
       const k = clamp(body.k ?? 3, 1, 5);
+
+      // "Live" side channel: the newest short-term chat, so a surface that
+      // was not part of the conversation (the pet) can tell what the main
+      // session is in the middle of. Same visibility SQL, same privacy.
+      const live = body.live
+        ? liveMessages(
+            db,
+            auth.view,
+            auth.scene,
+            restrictionFor(auth.view.scopes, auth.scene, config.privacy),
+            {
+              minutes: clamp(body.live.minutes ?? 30, 1, 24 * 60),
+              k: clamp(body.live.k ?? 6, 1, 12),
+              scenes: body.live.scenes,
+            },
+          )
+        : undefined;
+      const liveResults: MemoryResult[] | undefined = live?.map((row) => ({
+        id: row.id,
+        title: titleFrom(row.text),
+        kind: 'chat' as MemoryKind,
+        render: { type: 'text' as const, text: row.text },
+        updated_at: new Date(row.updated_at).toISOString(),
+        stage: 'short' as const,
+      }));
 
       // Owner-only recency fallback for vague questions ("今天群聊了什么").
       // FTS cannot match meta questions, so return the actual recent messages
@@ -622,7 +648,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
 
       if (keywords.length === 0) {
         finish('recall', auth, started, []);
-        return { keywords: [], results: [] };
+        return { keywords: [], results: [], ...(liveResults ? { live: liveResults } : {}) };
       }
       const searchParams = {
         query: keywords.join(' '),
@@ -666,6 +692,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       return {
         keywords,
         results,
+        ...(liveResults ? { live: liveResults } : {}),
         review: {
           should_review: shouldReviewNow,
           ...(reminder ? { reminder_since: reminder } : {}),

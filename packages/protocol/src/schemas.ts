@@ -334,12 +334,31 @@ export const TRecallMessage = Type.Object(
 );
 export type RecallMessage = Static<typeof TRecallMessage>;
 
+/**
+ * "What is happening right now": the newest short-term chat, returned next to
+ * the recall hits. The pet uses it to know what the main session is in the
+ * middle of — recall alone can only find things that resemble the question.
+ */
+export const TRecallLive = Type.Object(
+  {
+    k: Type.Optional(Type.Integer({ minimum: 1, maximum: 12 })),
+    /** Only messages newer than this are returned (default 30). */
+    minutes: Type.Optional(Type.Integer({ minimum: 1, maximum: 24 * 60 })),
+    /** Restrict to these scenes (e.g. `["main"]`); omitted = every visible scene. */
+    scenes: Type.Optional(Type.Array(Type.String({ maxLength: 120 }), { maxItems: 8 })),
+  },
+  { additionalProperties: false },
+);
+export type RecallLive = Static<typeof TRecallLive>;
+
 export const TRecallRequest = Type.Object(
   {
     messages: Type.Array(TRecallMessage, { maxItems: 8 }),
     k: Type.Optional(Type.Integer({ minimum: 1, maximum: 5 })),
     scene: Type.Optional(Type.String({ maxLength: 120 })),
     max_chars: Type.Optional(Type.Integer({ minimum: 40, maximum: 1000 })),
+    /** Ask for the newest chat messages as well (see `TRecallLive`). */
+    live: Type.Optional(TRecallLive),
     /** Owner-only: `groups` returns recent group messages instead of FTS hits. */
     scope: Type.Optional(Type.Union([Type.Literal('scene'), Type.Literal('groups')])),
     /** Time window for `scope=groups` (hours, default 24). */
@@ -353,6 +372,8 @@ export const TRecallResponse = Type.Object(
   {
     keywords: Type.Array(Type.String()),
     results: Type.Array(TMemoryResult),
+    /** Newest chat from other scenes (only when the request asked for `live`). */
+    live: Type.Optional(Type.Array(TMemoryResult)),
     /** Daily review state for this scene. */
     review: Type.Optional(
       Type.Object(

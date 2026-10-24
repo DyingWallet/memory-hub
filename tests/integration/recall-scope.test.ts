@@ -52,3 +52,52 @@ test('scope=groups is owner-only', async () => {
   });
   assert.equal(recall.statusCode, 403);
 });
+
+test('live returns the main session chat to the pet, without sensitive rows', async () => {
+  await post('/v1/ingest', fixture.tokens.main.token, {
+    scene: 'main',
+    messages: [
+      { message_id: 'live-1', role: 'user', text: '我们在聊人是不是被经历塑造的' },
+      { message_id: 'live-2', role: 'user', text: '把不满意的地方写到待办文档里' },
+    ],
+  });
+  // A sensitive short-term row that must stay out of the pet's view.
+  await post('/v1/write', fixture.tokens.main.token, {
+    scene: 'main',
+    kind: 'note',
+    text: '工资到账 1280 元，别记错。',
+    privacy: 'sensitive',
+    stage: 'short',
+  });
+
+  const recall = await post('/v1/recall', fixture.tokens.pet.token, {
+    messages: [{ role: 'user', text: '在吗' }],
+    scene: 'pet',
+    live: { k: 6, minutes: 30, scenes: ['main'] },
+  });
+  assert.equal(recall.statusCode, 200, JSON.stringify(recall.json()));
+  const live = (recall.json().live ?? []) as { render: { text: string }; stage: string }[];
+  const texts = live.map((item) => item.render.text).join('\n');
+  assert.ok(texts.includes('经历塑造'), JSON.stringify(live));
+  assert.ok(texts.includes('待办文档'), JSON.stringify(texts));
+  assert.equal(texts.includes('1280'), false, 'sensitive rows must not leak into live');
+  assert.ok(live.length > 0 && live.every((item) => item.stage === 'short'));
+});
+
+test('live without scenes stays inside the token scopes', async () => {
+  await post('/v1/ingest', fixture.tokens.group.token, {
+    scene: 'qq:group:10001',
+    messages: [{ message_id: 'live-grp-1', role: 'user', text: '群里在聊龙猫和饲养箱' }],
+  });
+
+  const recall = await post('/v1/recall', fixture.tokens.pet.token, {
+    messages: [{ role: 'user', text: '在吗' }],
+    scene: 'pet',
+    live: {},
+  });
+  assert.equal(recall.statusCode, 200, JSON.stringify(recall.json()));
+  const texts = ((recall.json().live ?? []) as { render: { text: string } }[])
+    .map((item) => item.render.text)
+    .join('\n');
+  assert.equal(texts.includes('龙猫'), false, 'group chat must not leak to the pet');
+});

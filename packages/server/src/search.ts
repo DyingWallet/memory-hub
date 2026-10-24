@@ -279,6 +279,72 @@ export function tokensForText(text: string): string {
   return tokenize(text).join(' ');
 }
 
+export interface LiveMessage {
+  id: string;
+  text: string;
+  updated_at: number;
+  scene: string | null;
+}
+
+/**
+ * "What is happening right now": the newest short-term chat messages, newest
+ * first in SQL and reversed so the caller sees them in conversational order.
+ *
+ * Visibility is the same SQL filter as everything else — a pet token sees the
+ * owner's main chat (it carries the `main` scope) but never `sensitive` rows,
+ * and a group token never sees main at all.
+ */
+export function liveMessages(
+  db: Db,
+  token: TokenView,
+  scene: string,
+  restriction: Restriction | undefined,
+  options: { minutes: number; k: number; scenes?: readonly string[] },
+): LiveMessage[] {
+  const visibility = visibilityClause(token, scene, 'c', restriction ? { restriction } : {});
+  const since = Date.now() - options.minutes * 60_000;
+  const clauses = [visibility.where, "c.stage = 'short'", "c.kind = 'chat'", 'c.updated_at >= ?'];
+  const values: (string | number)[] = [...visibility.params, since];
+
+  const scenes = (options.scenes ?? []).map((item) => item.trim()).filter(Boolean);
+  if (scenes.length > 0) {
+    clauses.push(`c.scene IN (${scenes.map(() => '?').join(', ')})`);
+    values.push(...scenes);
+  }
+  // One row per message: a long message may be split into several chunks.
+  values.push(Math.max(options.k * 4, 16));
+
+  const rows = db
+    .prepare(
+      `SELECT c.doc_id, c.text, c.updated_at, c.scene
+       FROM chunks c
+       WHERE ${clauses.join(' AND ')}
+       ORDER BY c.updated_at DESC, c.rowid DESC
+       LIMIT ?`,
+    )
+    .all(...values) as unknown as {
+    doc_id: string;
+    text: string;
+    updated_at: number;
+    scene: string | null;
+  }[];
+
+  const seen = new Set<string>();
+  const out: LiveMessage[] = [];
+  for (const row of rows) {
+    if (seen.has(row.doc_id)) continue;
+    seen.add(row.doc_id);
+    out.push({
+      id: row.doc_id,
+      text: row.text,
+      updated_at: row.updated_at,
+      scene: row.scene ?? null,
+    });
+    if (out.length >= options.k) break;
+  }
+  return out.reverse();
+}
+
 export interface ReviewCandidate {
   id: string;
   title: string;
