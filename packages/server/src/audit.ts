@@ -10,6 +10,10 @@ export interface AuditEntry {
   ids?: string[];
   denied?: number;
   ms?: number;
+  /** Cross-scene disclosure: which group's messages were handed over. */
+  group?: string;
+  /** Cross-scene disclosure: hashed requester QQ (never the raw number). */
+  requester_hash?: string;
 }
 
 /**

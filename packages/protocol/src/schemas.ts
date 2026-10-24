@@ -263,6 +263,34 @@ export const TSearchResponse = Type.Object(
 );
 export type SearchResponse = Static<typeof TSearchResponse>;
 
+/* ------------------------------------------------------------------ */
+/* disclosure（跨场景披露：群友在私聊里问“刚才群里说了什么”）        */
+/* ------------------------------------------------------------------ */
+
+export const TDiscloseRequest = Type.Object(
+  {
+    /** 提问者的 QQ 号（桥接已经用群成员表校验过，这里是留痕用）。 */
+    requester: Type.String({ minLength: 1, maxLength: 32 }),
+    /** 群号或 `qq:group:<id>`。 */
+    group: Type.String({ minLength: 1, maxLength: 32 }),
+    since_hours: Type.Optional(Type.Number({ minimum: 1, maximum: 168 })),
+    k: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
+  },
+  { additionalProperties: false },
+);
+export type DiscloseRequest = Static<typeof TDiscloseRequest>;
+
+export const TDiscloseResponse = Type.Object(
+  {
+    group: Type.String(),
+    since_hours: Type.Number(),
+    count: Type.Integer(),
+    results: Type.Array(TMemoryResult),
+  },
+  { additionalProperties: false },
+);
+export type DiscloseResponse = Static<typeof TDiscloseResponse>;
+
 export const TGetRequest = Type.Object(
   {
     id: Type.String({ minLength: 1, maxLength: 200 }),

@@ -12,6 +12,8 @@ import {
   TConfigResponse,
   TConfigUpdateRequest,
   TConfigUpdateResponse,
+  TDiscloseRequest,
+  TDiscloseResponse,
   TAudienceRequest,
   TAudienceResponse,
   TErrorBody,
@@ -163,6 +165,17 @@ export const ROUTE_SPECS: readonly RouteSpec[] = [
     auth: true,
     request: TRecallRequest,
     response: TRecallResponse,
+  },
+  {
+    operationId: 'disclose',
+    method: 'POST',
+    path: '/v1/disclose',
+    summary:
+      'Cross-scene disclosure: recent messages of ONE group, for a requester the bridge verified as a member (needs the disclose:group scope).',
+    auth: true,
+    request: TDiscloseRequest,
+    response: TDiscloseResponse,
+    errors: [400, 403],
   },
   {
     operationId: 'write',

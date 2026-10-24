@@ -213,7 +213,8 @@
         "required": [
           "shortTerm",
           "privacy",
-          "archive"
+          "archive",
+          "semantic"
         ],
         "properties": {
           "shortTerm": {
@@ -287,6 +288,49 @@
               },
               "keepMonths": {
                 "type": "integer"
+              }
+            }
+          },
+          "semantic": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "enabled",
+              "ready",
+              "reason",
+              "vectors",
+              "dim",
+              "model",
+              "alpha"
+            ],
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "ready": {
+                "type": "boolean"
+              },
+              "reason": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "vectors": {
+                "type": "integer"
+              },
+              "dim": {
+                "type": "integer"
+              },
+              "model": {
+                "type": "string"
+              },
+              "alpha": {
+                "type": "number"
               }
             }
           }
@@ -368,6 +412,15 @@
                 "minimum": 0,
                 "maximum": 120,
                 "type": "integer"
+              }
+            }
+          },
+          "semantic": {
+            "additionalProperties": false,
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
               }
             }
           }
@@ -1566,6 +1619,195 @@
               },
               "last_reviewed_at": {
                 "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "discloseRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "requester",
+          "group"
+        ],
+        "properties": {
+          "requester": {
+            "minLength": 1,
+            "maxLength": 32,
+            "type": "string"
+          },
+          "group": {
+            "minLength": 1,
+            "maxLength": 32,
+            "type": "string"
+          },
+          "since_hours": {
+            "minimum": 1,
+            "maximum": 168,
+            "type": "number"
+          },
+          "k": {
+            "minimum": 1,
+            "maximum": 20,
+            "type": "integer"
+          }
+        }
+      },
+      "discloseResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "group",
+          "since_hours",
+          "count",
+          "results"
+        ],
+        "properties": {
+          "group": {
+            "type": "string"
+          },
+          "since_hours": {
+            "type": "number"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "title",
+                "kind",
+                "render"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "note",
+                      "type": "string"
+                    },
+                    {
+                      "const": "event",
+                      "type": "string"
+                    },
+                    {
+                      "const": "stance",
+                      "type": "string"
+                    },
+                    {
+                      "const": "promise",
+                      "type": "string"
+                    },
+                    {
+                      "const": "person",
+                      "type": "string"
+                    },
+                    {
+                      "const": "identity",
+                      "type": "string"
+                    },
+                    {
+                      "const": "chat",
+                      "type": "string"
+                    },
+                    {
+                      "const": "qq-topic",
+                      "type": "string"
+                    },
+                    {
+                      "const": "qq-impression",
+                      "type": "string"
+                    },
+                    {
+                      "const": "journal",
+                      "type": "string"
+                    },
+                    {
+                      "const": "decision",
+                      "type": "string"
+                    },
+                    {
+                      "const": "knowledge",
+                      "type": "string"
+                    },
+                    {
+                      "const": "audience",
+                      "type": "string"
+                    },
+                    {
+                      "const": "project",
+                      "type": "string"
+                    },
+                    {
+                      "const": "profile",
+                      "type": "string"
+                    },
+                    {
+                      "const": "preference",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "render": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "text"
+                  ],
+                  "properties": {
+                    "type": {
+                      "const": "text",
+                      "type": "string"
+                    },
+                    "text": {
+                      "maxLength": 20000,
+                      "type": "string"
+                    }
+                  }
+                },
+                "path": {
+                  "type": "string"
+                },
+                "heading": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                },
+                "score": {
+                  "type": "number"
+                },
+                "stage": {
+                  "anyOf": [
+                    {
+                      "const": "short",
+                      "type": "string"
+                    },
+                    {
+                      "const": "long",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "expires_at": {
+                  "type": "string"
+                },
+                "disclosure": {
+                  "const": "owner_initiated",
+                  "type": "string"
+                }
               }
             }
           }
@@ -2949,6 +3191,82 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/recallRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/disclose": {
+      "post": {
+        "operationId": "disclose",
+        "summary": "Cross-scene disclosure: recent messages of ONE group, for a requester the bridge verified as a member (needs the disclose:group scope).",
+        "tags": [
+          "memory"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/discloseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/discloseRequest"
               }
             }
           }

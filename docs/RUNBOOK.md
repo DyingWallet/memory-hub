@@ -103,6 +103,7 @@ node packages\admin\dist\cli.js token issue --name qq-group-<id> --surface qq:gr
 | `POST /v1/get` | 按 id 取一条 |
 | `POST /v1/recent` | 最近文档 |
 | `POST /v1/recall` | 会话召回（短期+长期+audience 卡） |
+| `POST /v1/disclose` | 跨场景披露：只给**一个群**的 chat/note（`disclose:group` 令牌；成员校验在桥接侧） |
 | `POST /v1/ingest` | 普通聊天入短期记忆 |
 | `POST /v1/review` | 待回顾的短期记忆（`status_only` 只报状态和计数） |
 | `POST /v1/persist` | 回顾后转长期 |
@@ -249,6 +250,31 @@ Copy-Item data\qq-tokens\*.token qq-bridge\state\ -Force
 
 - 桥接只把「轻量记忆」（activeTopic/pendingThought/memberImpression）镜像到 memd；长期召回直接调 `/v1/recall`，memd 挂了桥接照常回复。
 - 镜像：append → write；update → forget 旧 + write 新；remove/clear → forget；幂等键 `scene|category|target|text`。
+
+### 6.1 跨场景披露（群友私聊问「刚才群里聊了什么」）
+
+方案 B：**成员校验在桥接，取内容在 memd**。
+
+```text
+群友私聊 → 桥接识别意图 → 确定是哪个群 → 查持久化成员表（state/group-members.json）
+        → 通过后才调 memd POST /v1/disclose（令牌 disclose:group）
+        → memd 只返回该群的 chat/note、normal/personal → 拼进 prompt
+```
+
+- **令牌**：`node scripts\issue-qq-tokens.mjs` 现在会多签一个 `qq-disclose`（scopes 只有 `disclose:group`，
+  scenes `qq:bridge`），明文在 `data\qq-tokens\memory-disclose.token`；复制到 `qq-bridge\state\`。
+  **重新签发会让所有 `state\memory-*.token` 失效**，必须整批覆盖（`Copy-Item data\qq-tokens\*.token qq-bridge\state\ -Force`）。
+- **成员表**（`qq-bridge/src/group-members.js`）：落盘在 `state/group-members.json`，只在
+  `group_increase` / `group_decrease` 事件时增减；超过 24 小时或没有基线时重拉一次；
+  拿不到成员表 → **拒绝披露**（fail-closed，不拿旧缓存放行）。重连后漏掉的事件由
+  `reconcileGroupMembers` 对账。
+- **多群**：提问者只在机器人所在的一个群里 → 直接披露；在多个群里且没点名 → 不猜，
+  让模型先问清楚是哪个群（prompt 里给出候选群号）。
+- **范围**：只给该群 `chat`/`note`、`privacy IN (normal, personal)`；敏感、secret、私聊、其它群永不包含。
+- **限流与留痕**：同一提问者 60 秒冷却；memd 审计写一行 `route=disclose`，带 `group` 与
+  `requester_hash`（QQ 号只留哈希，不落明文）。
+- **关掉**：桥接 `config.json` 的 `memory.disclosure: false`。
+- 纯逻辑测试：`node scripts\test-group-disclosure.mjs`（18 项，不依赖 QQ）。
 - 999 条窗口只属于 QQ；`dsh-memory` 插件不限条数。
 - owner 自己提起的记忆会带 `from_owner` 做临时披露；不放开 `qq:private:*`，不绕过敏感位。
 

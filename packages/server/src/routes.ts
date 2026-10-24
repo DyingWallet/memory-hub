@@ -32,6 +32,8 @@ import {
   type ConfigSchemaResponse,
   type ConfigUpdateRequest,
   type ConfigUpdateResponse,
+  type DiscloseRequest,
+  type DiscloseResponse,
   type ForgetRequest,
   type ForgetResponse,
   type GetResponse,
@@ -104,7 +106,15 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return searchChunks(db, params);
   };
 
-  const finish = (route: string, auth: AuthContext, started: number, ids: string[], query?: string, denied = 0): void => {
+  const finish = (
+    route: string,
+    auth: AuthContext,
+    started: number,
+    ids: string[],
+    query?: string,
+    denied = 0,
+    extras: { group?: string; requester_hash?: string } = {},
+  ): void => {
     audit.append({
       ts: new Date().toISOString(),
       token: auth.record.id,
@@ -114,8 +124,82 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       ids,
       denied,
       ms: Math.round(performance.now() - started),
+      ...(extras.group ? { group: extras.group } : {}),
+      ...(extras.requester_hash ? { requester_hash: extras.requester_hash } : {}),
     });
   };
+
+  /**
+   * 跨场景披露：群友在私聊里问「刚才群里聊了什么」。
+   * 成员校验在桥接侧做（它才有 QQ 成员表），这里只认 `disclose:group` scope，
+   * 并再收一次口径：只给这一个群的 chat/note、只给 normal/personal、绝不含敏感与 secret。
+   */
+  app.post<{ Body: DiscloseRequest; Reply: DiscloseResponse }>(
+    routeByOperationId('disclose').path,
+    {
+      schema: {
+        body: routeByOperationId('disclose').request,
+        response: responseSchema('disclose'),
+      },
+    },
+    async (request) => {
+      const started = performance.now();
+      const body = request.body;
+      const auth = authenticate(request.headers.authorization, tokens);
+      if (!auth.view.scopes.includes('disclose:group')) {
+        throw errors.forbidden('disclose:group scope required');
+      }
+      const groupId = String(body.group).replace(/^qq:group:/, '').trim();
+      if (!/^\d{4,20}$/.test(groupId)) throw errors.invalid('group must be a QQ group id');
+      const requester = String(body.requester).trim();
+      if (!/^\d{4,20}$/.test(requester)) throw errors.invalid('requester must be a QQ number');
+      const sinceHours = clamp(body.since_hours ?? 24, 1, 24 * 7);
+      const k = clamp(body.k ?? 8, 1, 20);
+      const since = Date.now() - sinceHours * 3_600_000;
+
+      const rows = db
+        .prepare(
+          `SELECT c.id, c.path, c.title, c.heading, c.text, c.kind, c.updated_at, c.stage, c.expires_at
+             FROM chunks c
+            WHERE c.scene = ?
+              AND c.kind IN ('chat', 'note')
+              AND c.privacy IN ('normal', 'personal')
+              AND (c.expires_at IS NULL OR c.expires_at > ?)
+              AND c.updated_at >= ?
+            ORDER BY c.updated_at DESC
+            LIMIT ?`,
+        )
+        .all(`qq:group:${groupId}`, Date.now(), since, k) as {
+        id: string;
+        path: string;
+        title: string;
+        heading: string | null;
+        text: string;
+        kind: string;
+        updated_at: number;
+        stage: string;
+        expires_at: number | null;
+      }[];
+
+      const results: MemoryResult[] = rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        kind: row.kind as MemoryKind,
+        render: { type: 'text' as const, text: row.text },
+        path: row.path,
+        ...(row.heading ? { heading: row.heading } : {}),
+        updated_at: new Date(row.updated_at).toISOString(),
+        stage: row.stage as 'short' | 'long',
+        ...(row.expires_at ? { expires_at: new Date(row.expires_at).toISOString() } : {}),
+      }));
+
+      finish('disclose', auth, started, results.map((result) => result.id), undefined, 0, {
+        group: `qq:group:${groupId}`,
+        requester_hash: sha256Hex(requester).slice(0, 16),
+      });
+      return { group: `qq:group:${groupId}`, since_hours: sinceHours, count: results.length, results };
+    },
+  );
 
   /* ---------------------------------------------------------------- */
   /* health (no auth)                                                 */

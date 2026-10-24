@@ -19,6 +19,7 @@ export interface Fixture {
     privateA: IssuedToken;
     privateB: IssuedToken;
     pet: IssuedToken;
+    disclose: IssuedToken;
   };
 }
 
@@ -168,6 +169,13 @@ export async function createFixture(configOverrides: Partial<ServerConfig> = {})
       surface: 'pet',
       scopes: ['main', 'qq:owner', 'pet'],
       scenes: ['pet', 'main', 'qq:owner'],
+    }),
+    /** 跨场景披露专用令牌（桥接用；只有 disclose:group）。 */
+    disclose: built.tokens.issue({
+      name: 'qq-disclose',
+      surface: 'qq:bridge',
+      scopes: ['disclose:group'],
+      scenes: ['*'],
     }),
   };
 

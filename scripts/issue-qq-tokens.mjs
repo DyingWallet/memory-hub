@@ -60,6 +60,9 @@ for (const group of groups) {
   issueFresh(`qq-group-${group}`, `qq:group:${group}`, [`qq:group:${group}`], `memory-group-${group}.token`);
 }
 issueFresh('qq-owner', 'qq:owner', ['*', 'work:read'], 'memory-owner.token');
+// 跨场景披露专用：桥接先用 QQ 成员表校验提问者，再用这个令牌读该群的最近消息。
+// 只有 disclose:group，没有敏感、没有通配 scope。
+issueFresh('qq-disclose', 'qq:bridge', ['disclose:group'], 'memory-disclose.token');
 for (const qq of privates) {
   issueFresh(`qq-private-${qq}`, `qq:private:${qq}`, [`qq:private:${qq}`], `memory-private-${qq}.token`);
 }
