@@ -257,6 +257,29 @@ POST /memory-hub/tokens/revoke -> memd /v1/tokens/revoke  （需 Authorization�
 - 令牌区可吊销（签发仍走 CLI）；
 - 改 host 半侧（`lib/index.js`）必须**重启 DSH**；只改 `client.js` 刷新页面即可。
 
+### 5.1.2 部署自检（`scripts/doctor.mjs`）
+
+`node scripts\doctor.mjs`（或 `setup-all.ps1 -Check`）一口气检查：
+
+| 分组 | 检查项 | 是否核心 |
+|---|---|---|
+| 构建 | memd / MCP 产物 | 是 |
+| 插件 | `dsh-memory`、`dsh-memory-panel` 的 dep/bundle/linked | 是 |
+| 加载 | 两个插件的加载标记（见 §5 的「重启后自动验证」） | 是 |
+| MCP | `cordis.patch.yml` 里的注册块 | 是 |
+| 令牌 | `~/.dsh/memory-token` | 是 |
+| memd | `/v1/health` | 是 |
+| 披露 | 披露令牌 / `POST /v1/disclose` / 群成员表 / 最近一次披露 | 令牌与接口是，其余提示 |
+| 语义 | `config-state.semantic` 状态 | 否 |
+| 模型 | `models/…/model_quantized.onnx` | 否 |
+| 看护 | `logs/task-last-tick.txt` 心跳 | 否 |
+
+桥接不存在时整个披露分组跳过。`--json` 输出 `{ ready, checks[] }`。
+
+注意：披露接口那一项会真的发一次 `POST /v1/disclose`（`requester=10000`，只取 5 条），
+所以**每跑一次 doctor，审计里会多一条 `route=disclose` 记录**。这是刻意的：它证明的是
+「令牌 + 接口 + 数据」整条链路可用，而不是只看文件在不在。
+
 ### 5.2 桌宠（pet-brain）
 
 - 令牌：`pet-brain\state\memory.token`（surface `pet`，scopes `main/qq:owner/pet`，**无 `sensitive:read`**；scene `pet`）。

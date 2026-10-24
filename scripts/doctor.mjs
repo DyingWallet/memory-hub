@@ -131,6 +131,91 @@ for (const plugin of ['dsh-memory', 'dsh-memory-panel']) {
   );
 }
 
+/* ── 跨场景披露（QQ 桥接；没装桥接就跳过） ─────────────────── */
+const bridgeDir = resolve(root, '..', 'qq-bridge');
+if (existsSync(join(bridgeDir, 'src', 'bridge.js'))) {
+  const discloseTokenFile = join(bridgeDir, 'state', 'memory-disclose.token');
+  let discloseToken = '';
+  try {
+    discloseToken = readFileSync(discloseTokenFile, 'utf8').trim();
+  } catch {
+    discloseToken = '';
+  }
+  add(
+    'disclose.token',
+    '披露令牌',
+    discloseToken.length >= 16,
+    discloseToken
+      ? `${discloseTokenFile}（${discloseToken.length} 字符）`
+      : `${discloseTokenFile} 缺失（跑 issue-qq-tokens.mjs 后复制到桥接 state/）`,
+  );
+
+  if (discloseToken) {
+    let groupId = '';
+    try {
+      const bridgeConfig = JSON.parse(readFileSync(join(bridgeDir, 'config.json'), 'utf8'));
+      groupId = String((bridgeConfig?.allow?.groups ?? [])[0] ?? '');
+      if (bridgeConfig?.memory?.disclosure === false) {
+        add('disclose.enabled', '披露开关', true, 'config.json 里 memory.disclosure=false（主动关闭）', { critical: false });
+      }
+    } catch {
+      groupId = '';
+    }
+    if (groupId) {
+      try {
+        const response = await fetch(`${endpoint}/v1/disclose`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${discloseToken}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ requester: '10000', group: `qq:group:${groupId}`, since_hours: 24, k: 5 }),
+          signal: AbortSignal.timeout(4000),
+        });
+        if (response.ok) {
+          const body = await response.json();
+          add('disclose.api', '披露接口', true, `/v1/disclose 群 ${groupId} 返回 ${body.count} 条`);
+        } else {
+          add('disclose.api', '披露接口', false, `/v1/disclose HTTP ${response.status}`);
+        }
+      } catch (error) {
+        add('disclose.api', '披露接口', false, `${endpoint} 不可达：${error?.message ?? error}`);
+      }
+    } else {
+      add('disclose.api', '披露接口', false, '桥接 config.json 里没有 allow.groups');
+    }
+  }
+
+  const membersFile = join(bridgeDir, 'state', 'group-members.json');
+  try {
+    const members = JSON.parse(readFileSync(membersFile, 'utf8'));
+    const groups = Object.entries(members?.groups ?? {});
+    const newest = groups.reduce((max, [, value]) => Math.max(max, Number(value?.updatedAt ?? 0)), 0);
+    const ageHours = newest > 0 ? (Date.now() - newest) / 3600000 : Infinity;
+    add(
+      'disclose.members',
+      '群成员表',
+      groups.length > 0 && ageHours < 48,
+      groups.length > 0
+        ? `${groups.map(([gid, value]) => `${gid}:${value.ids?.length ?? 0}人`).join(' ')}；${ageHours.toFixed(1)} 小时前更新`
+        : '还没有成员表（等群消息/事件或每日对账建立）',
+      { critical: false },
+    );
+  } catch {
+    add('disclose.members', '群成员表', false, '还没有成员表（等群消息/事件或每日对账建立）', { critical: false });
+  }
+
+  try {
+    const last = JSON.parse(readFileSync(join(bridgeDir, 'state', 'disclose-last.json'), 'utf8'));
+    add(
+      'disclose.last',
+      '最近一次披露',
+      true,
+      `${last.at} ${last.group ?? ''}（提问者 …${last.requester_suffix ?? ''}）`,
+      { critical: false },
+    );
+  } catch {
+    add('disclose.last', '最近一次披露', false, '还没发生过（真实触发一次后会记录在这里）', { critical: false });
+  }
+}
+
 /* ── 模型目录（语义的前置） ───────────────────────────────── */
 const modelFile = join(root, 'models', 'bge-small-zh-v1.5', 'onnx', 'model_quantized.onnx');
 if (existsSync(modelFile)) {
