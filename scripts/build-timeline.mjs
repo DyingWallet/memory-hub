@@ -76,10 +76,24 @@ for (const line of readFactLines(config.factsDir)) {
   });
 }
 
+/** 日记按约定放在 `10-journal/YYYY-MM/`，所以这里要递归。 */
+function listJournalFiles(dir) {
+  const out = [];
+  const walk = (current) => {
+    if (!existsSync(current)) return;
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const full = join(current, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.md') && !entry.name.startsWith('annual-')) out.push(full);
+    }
+  };
+  walk(dir);
+  return out;
+}
+
 if (existsSync(journalDir)) {
-  for (const name of readdirSync(journalDir)) {
-    if (!name.endsWith('.md') || name.startsWith('annual-')) continue;
-    const raw = readFileSync(join(journalDir, name), 'utf8');
+  for (const name of listJournalFiles(journalDir)) {
+    const raw = readFileSync(name, 'utf8');
     const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(raw);
     if (!front) continue;
     const dateMatch = /^date:\s*(.+)$/m.exec(front[1]);
