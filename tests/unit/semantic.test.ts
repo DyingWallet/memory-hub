@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { buildVocabulary, tokenizeText } from '@memsvc/server/embedding';
-import { distanceToCosine, mergeHybrid, normalizeScores } from '@memsvc/server/semantic';
+import { SemanticIndex, distanceToCosine, mergeHybrid, normalizeScores } from '@memsvc/server/semantic';
 import type { SearchHit } from '@memsvc/server/search';
 import { normalizeSemantic } from '@memsvc/server/config';
+import { openDb } from '@memsvc/server/db';
 
 function hit(id: string, score: number, updatedAt = 0): SearchHit {
   return {
@@ -92,6 +93,20 @@ test('normalizeSemantic 把越界配置夹回安全区间', () => {
   assert.equal(config.backfillThreads, 1);
   assert.equal(config.maxCandidates, 2000);
   assert.equal(normalizeSemantic(undefined, {}).enabled, false, '默认关闭');
+});
+
+test('模型不在时优雅不可用：不抛错、给出原因（检索退回 FTS）', async () => {
+  const db = openDb(':memory:');
+  try {
+    const config = normalizeSemantic(undefined, { enabled: true, modelDir: 'models/definitely-not-here' });
+    const opened = await SemanticIndex.create({ db, config });
+    assert.equal(opened.index, null, 'no index when the model is missing');
+    assert.equal(opened.status.enabled, true);
+    assert.equal(opened.status.ready, false);
+    assert.match(opened.status.reason ?? '', /model missing/);
+  } finally {
+    db.close();
+  }
 });
 
 test('sqlite-vec：向量表可以写、可以查（扩展缺失时跳过）', async (t) => {
