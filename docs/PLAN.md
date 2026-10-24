@@ -67,11 +67,11 @@
 14. ✅ **保留与归档（默认关闭）**：`config.archive.enabled` + `keepMonths`，设置页可开关；开启后 `pnpm archive:facts` 月末归档 gz（校验后删原文件），indexer 读 gz，`--force` 临时执行。
 15. ✅ **备份自动化**：`scripts/backup.mjs` 每日快照（memories + tokens + config + manifest，keepDays 清理，同日覆盖）；`install-backup-task.ps1` 计划任务；RUNBOOK 含恢复演练。
 16. ✅ **监控**：`scripts/monitor.mjs` 采样 health 到 `data/metrics.csv`（延迟/计数/失败原因），`--loop` 或 `install-monitor-task.ps1` 定时；`verify-recall.mjs` 手动回归。
-17. 🔶 **测试补强**：adapter-qq 客户端测试 + 设置页 bundle 冒烟 + `verify-recall` 已做（125 项）；真实 DSH 会话 e2e 仍手动。
+17. 🔶 **测试补强**：adapter-qq 客户端测试 + 设置页 bundle 冒烟 + `verify-recall` 已做（128 项）；真实 DSH 会话 e2e 仍手动。
 
 ### P6 扩展
 
-18. 语义检索（embedding + 混合排序）；图片/文档接口（需求 § 已有但 v1 不做）。
+18. **语义检索（v2 计划，暂不实现）**：本地 embedding + `sqlite-vec` + 混合排序；细节见 `TODO.md` §13（回填、内存/延迟、降级、验收）。图片/文档接口仍列 v2。
 19. 多设备/VPS 联邦（ZeroTier 内网、只读副本或双向同步）。
 20. 静态加密与密钥轮换；`secret` 的写入通道（现在一律拒写）。
 21. 其他 surface（未来新客户端复用 adapter 模式；桌宠已列 P3）。
@@ -87,13 +87,23 @@
 3. 为什么不挂 DSH 子进程：DSH 每次重启换端口且重启频繁，子进程会随之死掉（今天已发生两次），还会把 DSH 的 fail-loud 崩溃耦合进记忆服务；QQ 桥接、桌宠、未来的 VPS 副本都不应依赖“DSH 桌面版开着”。
 4. 验收：重启 DSH 后 memd 仍在；`Get-Process` 只有一个 memd；`stop.ps1` 后看护任务 5 分钟内补起；`setup-dsh-* --check` 全绿。
 
+## v2 语义检索（计划，暂不实现）
+
+- 目标：泛问/语义问法命中；FTS 保留为主路径，向量做混合排序。
+- 技术：本地 embedding（`bge-small-zh` / `bge-m3`，ONNX 或 Ollama 常驻）+ `sqlite-vec`；`score = α·BM25 + (1-α)·cosine`，α 初定 0.5。
+- 数据：约 545 chunk 全量回填；512 维 float32 ≈ 2 KB/chunk；新增/重建索引同步写向量。
+- 降级：模型或扩展不可用时静默退回 FTS，不阻塞对话。
+- 成本：开发 2–4 天；常驻内存 200–500 MB；查询 +10–30 ms；Windows 下需先验证 sqlite-vec 加载。
+- 验收：`verify-recall.mjs` 语义查询提升、FTS 基线不下降、模型缺失自动降级、索引重建可复现。
+- 前置：v2 的 memd/模型进程自启与看护。
+
 ## 里程碑
 
 - **v1.0**：核心 + DSH + QQ + 短期/回顾 + 只读设置页。✅
 - **v1.1**：P2 收尾 + P3 桌宠（dsh-pet 本体 + 记忆接入 + 气泡自愈）。✅
-- **v1.2**：P4 可编辑设置页（TTL/回顾/自动分类 + 同源代理）。✅ 表单完成，剩隐私标签与 token 管理。
-- **v1.3**：P5 质量与运维（回顾定时、合并去重、归档备份、监控）。
-- **v2.0**：memd/pet-brain 独立进程自启与看护 + P6 语义检索 / 多设备。
+- **v1.2**：P4 设置页（TTL/回顾/隐私三段式/token 吊销/同源代理）。✅
+- **v1.3**：P5 质量与运维（回顾定时、合并去重、归档备份、监控、测试补强）。✅
+- **v2.0**：memd/pet-brain 独立进程自启与看护 + 语义检索 / 多设备。
 
 ## 验收口径（每个版本都跑）
 

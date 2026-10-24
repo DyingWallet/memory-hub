@@ -69,6 +69,26 @@ test('mirror writes and forgets use the same idempotency key', async () => {
   assert.equal(forget.body.idempotency_key, 'k1');
 });
 
+test('recall can ask for the owner group scope and write digests', async () => {
+  const calls: Captured[] = [];
+  const client = createQQMemoryClient({ endpoint: 'http://127.0.0.1:8787', tokenFile, fetchImpl: fakeFetch(calls) });
+  await client.recallBlock('private:10000', '10000', [{ role: 'user', text: '今天群聊了什么' }], {
+    scope: 'groups',
+    sinceHours: 48,
+  });
+  const recall = calls.find((item) => item.path === '/v1/recall');
+  assert.ok(recall);
+  assert.equal(recall.body.scope, 'groups');
+  assert.equal(recall.body.since_hours, 48);
+
+  calls.length = 0;
+  await client.writeFact({ kind: 'note', text: '[群摘要] …', scene: 'qq:group:1', tags: ['digest'], idempotencyKey: 'd1' });
+  const write = calls.find((item) => item.path === '/v1/write');
+  assert.ok(write);
+  assert.deepEqual(write.body.tags, ['digest']);
+  assert.equal(write.body.idempotency_key, 'd1');
+});
+
 test('a disabled client never calls fetch', async () => {
   const calls: Captured[] = [];
   const client = createQQMemoryClient({ endpoint: 'http://127.0.0.1:8787', tokenFile, enabled: false, fetchImpl: fakeFetch(calls) });

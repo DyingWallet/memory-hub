@@ -42,7 +42,14 @@
 10. ⬜ **memd 独立进程自启/看护**：登录任务 `AtLogOn` + 每 5 分钟 health 看护（`install-autostart.ps1` / `uninstall-autostart.ps1`）。不挂 DSH 子进程。
 11. ⬜ **pet-brain 自启**：与 memd 一起纳入；否则 DSH 重启后桌宠会失去 LLM 接入。
 12. ⬜ **dsh-pet `externalBrain` 补丁**（可选）：严格只走 pet-brain、失败不回落普通模型；文件参照 `pet-brain/patches/dsh-pet-external-brain.md`。
-13. ⬜ **语义检索**：embedding + 混合排序（FTS + 向量）。
+13. ⬜ **语义检索：本地 embedding + sqlite-vec（v2，暂不实现）**
+    - 目标：泛问/语义问法（“有意思的事”“那次说的那个”）能命中；FTS 仍是主路径，向量只做混合排序。
+    - 方案：本地 embedding（`bge-small-zh` 或 `bge-m3`，ONNX/llama.cpp/Ollama 常驻），`sqlite-vec` 存 chunk 向量；`score = α·BM25 + (1-α)·cosine`，α 初定 0.5。
+    - 数据：现有约 545 chunk 全量回填；512 维 float32 ≈ 2 KB/chunk，1 万 chunk ≈ 20 MB；新增/重建索引时同步写向量。
+    - 接口：`/v1/recall` 与 `/v1/search` 请求不变；内部检索层加向量通道；模型不可用时**静默退回 FTS**，绝不阻塞对话。
+    - 成本：开发 2–4 天；常驻内存 200–500 MB；查询 +10–30 ms；Windows 下 sqlite-vec 扩展加载需先验证。
+    - 验收：`verify-recall.mjs` 的语义查询有提升；FTS 基线不下降；模型缺失时自动降级；索引重建可复现。
+    - 前置：v2 的 memd/模型进程自启与看护；否则模型挂了检索会退化。
 14. ⬜ **图片/文档接口**：需求已有，v1 未做。
 15. ⬜ **多设备/VPS 联邦**：ZeroTier 内网只读副本或双向同步。
 16. ⬜ **静态加密与密钥轮换**；`secret` 的写入通道（现在一律拒写）。
@@ -58,7 +65,7 @@
 ## 验收口径（每次都跑）
 
 ```powershell
-pnpm test                              # 100 项
+pnpm test                              # 128 项
 node scripts\verify-recall.mjs         # 真实语料检索
 node scripts\setup-dsh-mcp.mjs --check
 node scripts\setup-dsh-plugin.mjs --check

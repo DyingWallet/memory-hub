@@ -312,6 +312,10 @@ export const TRecallRequest = Type.Object(
     k: Type.Optional(Type.Integer({ minimum: 1, maximum: 5 })),
     scene: Type.Optional(Type.String({ maxLength: 120 })),
     max_chars: Type.Optional(Type.Integer({ minimum: 40, maximum: 1000 })),
+    /** Owner-only: `groups` returns recent group messages instead of FTS hits. */
+    scope: Type.Optional(Type.Union([Type.Literal('scene'), Type.Literal('groups')])),
+    /** Time window for `scope=groups` (hours, default 24). */
+    since_hours: Type.Optional(Type.Integer({ minimum: 1, maximum: 24 * 30 })),
   },
   { additionalProperties: false },
 );

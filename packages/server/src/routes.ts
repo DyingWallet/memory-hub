@@ -59,6 +59,7 @@ import { errors } from './errors.js';
 import { appendFact, forgetFact, loadAudienceCard, loadIdentity, type FactRecord } from './indexer.js';
 import { getChunkOrDoc, recentDocs, reviewCandidates, searchChunks, type SearchHit } from './search.js';
 import { lastReviewAt, markReviewSeen, reminderSince, shouldReview } from './review.js';
+import { visibilityClause } from './visibility.js';
 import { dedupeKey, isNearDuplicate, normalizeForDedupe } from './dedupe.js';
 import type { TokenStore } from './tokens.js';
 
@@ -441,6 +442,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       k?: number;
       scene?: string;
       max_chars?: number;
+      scope?: 'scene' | 'groups';
+      since_hours?: number;
     };
     Reply: RecallResponse;
   }>(
@@ -458,6 +461,56 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       const messages = body.messages.slice(-2);
       const keywords = extractKeywords(messages.map((message) => message.text).join('\n'), 6);
       const k = clamp(body.k ?? 3, 1, 5);
+
+      // Owner-only recency fallback for vague questions ("今天群聊了什么").
+      // FTS cannot match meta questions, so return the actual recent messages
+      // instead; the model does the summarizing.
+      if (body.scope === 'groups') {
+        if (!hasRootScope(auth.view.scopes)) {
+          throw errors.forbidden('scope=groups is owner-only');
+        }
+        const sinceHours = clamp(body.since_hours ?? 24, 1, 24 * 30);
+        const since = Date.now() - sinceHours * 3_600_000;
+        const visibility = visibilityClause(auth.view, auth.scene, 'c', {
+          restriction: restrictionFor(auth.view.scopes, auth.scene, config.privacy),
+        });
+        const rows = db
+          .prepare(
+            `SELECT c.id, c.path, c.title, c.heading, c.text, c.kind, c.updated_at, c.stage, c.expires_at
+               FROM chunks c
+              WHERE ${visibility.where}
+                AND c.scene LIKE 'qq:group:%'
+                AND c.kind IN ('chat', 'note')
+                AND c.updated_at >= ?
+              ORDER BY c.updated_at DESC
+              LIMIT ?`,
+          )
+          .all(...visibility.params, since, k * 6) as {
+          id: string;
+          path: string;
+          title: string;
+          heading: string | null;
+          text: string;
+          kind: string;
+          updated_at: number;
+          stage: string;
+          expires_at: number | null;
+        }[];
+        const results: MemoryResult[] = rows.map((row) => ({
+          id: row.id,
+          title: row.title,
+          kind: row.kind as MemoryKind,
+          render: { type: 'text' as const, text: row.text },
+          path: row.path,
+          ...(row.heading ? { heading: row.heading } : {}),
+          updated_at: new Date(row.updated_at).toISOString(),
+          stage: row.stage as 'short' | 'long',
+          ...(row.expires_at ? { expires_at: new Date(row.expires_at).toISOString() } : {}),
+        }));
+        finish('recall', auth, started, results.map((result) => result.id));
+        return { keywords: ['scope:groups'], results };
+      }
+
       if (keywords.length === 0) {
         finish('recall', auth, started, []);
         return { keywords: [], results: [] };

@@ -49,12 +49,26 @@ export interface MirrorEntry {
 
 export interface QQMemoryClient {
   sceneForConvKey(convKey: string, ownerQQ: string | number): string;
-  recallBlock(convKey: string, ownerQQ: string | number, messages: ChatMessage[]): Promise<string | null>;
+  recallBlock(
+    convKey: string,
+    ownerQQ: string | number,
+    messages: ChatMessage[],
+    options?: { scope?: 'scene' | 'groups'; sinceHours?: number },
+  ): Promise<string | null>;
   ingest(messages: ChatMessage[]): Promise<boolean>;
   search(query: string, scene: string, k?: number): Promise<MemoryItem[]>;
   get(id: string, scene: string): Promise<MemoryItem | null>;
   recent(scene: string, k?: number): Promise<MemoryItem[]>;
   mirrorWrite(entry: MirrorEntry): Promise<boolean>;
+  writeFact(entry: {
+    kind: string;
+    text: string;
+    scene: string;
+    tags?: string[];
+    privacy?: 'normal' | 'personal' | 'sensitive';
+    audience?: string[];
+    idempotencyKey?: string;
+  }): Promise<boolean>;
   forget(options: { id?: string; idempotencyKey?: string }): Promise<boolean>;
 }
 
@@ -115,7 +129,7 @@ export function createQQMemoryClient(options: QQMemoryOptions): QQMemoryClient {
   return {
     sceneForConvKey: sceneFor,
 
-    async recallBlock(convKey, ownerQQ, messages) {
+    async recallBlock(convKey, ownerQQ, messages, recallOptions) {
       if (options.enabled === false) return null;
       try {
         const scene = sceneFor(convKey, ownerQQ);
@@ -130,7 +144,14 @@ export function createQQMemoryClient(options: QQMemoryOptions): QQMemoryClient {
         if (recentMessages.length === 0) return null;
 
         const [payload, identityLine] = await Promise.all([
-          call('/v1/recall', { messages: recentMessages, k: recallK, scene, max_chars: Math.min(300, maxChars) }),
+          call('/v1/recall', {
+            messages: recentMessages,
+            k: recallK,
+            scene,
+            max_chars: Math.min(300, maxChars),
+            ...(recallOptions?.scope ? { scope: recallOptions.scope } : {}),
+            ...(recallOptions?.sinceHours ? { since_hours: recallOptions.sinceHours } : {}),
+          }),
           identity().catch(() => ''),
         ]);
 
@@ -218,6 +239,25 @@ export function createQQMemoryClient(options: QQMemoryOptions): QQMemoryClient {
         return normalizeResults(payload?.results);
       } catch {
         return [];
+      }
+    },
+
+    async writeFact(entry) {
+      if (options.enabled === false) return false;
+      try {
+        await call('/v1/write', {
+          kind: entry.kind,
+          text: entry.text,
+          scene: entry.scene,
+          audience: entry.audience ?? [entry.scene],
+          privacy: entry.privacy ?? 'normal',
+          source: 'qq',
+          ...(entry.tags ? { tags: entry.tags } : {}),
+          ...(entry.idempotencyKey ? { idempotency_key: entry.idempotencyKey } : {}),
+        });
+        return true;
+      } catch {
+        return false;
       }
     },
 

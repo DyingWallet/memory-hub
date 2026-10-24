@@ -881,6 +881,16 @@ components:
           minimum: 40
           maximum: 1000
           type: integer
+        scope:
+          anyOf:
+            - const: scene
+              type: string
+            - const: groups
+              type: string
+        since_hours:
+          minimum: 1
+          maximum: 720
+          type: integer
     recallResponse:
       additionalProperties: false
       type: object

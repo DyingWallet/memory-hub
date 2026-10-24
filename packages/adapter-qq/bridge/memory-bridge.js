@@ -121,9 +121,10 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
     enabled,
 
     /** `【长期记忆】/【相关记忆】` block, or '' when unavailable. Never throws. */
-    async recallBlock(key, messages) {
+    async recallBlock(key, messages, options = {}) {
       if (!enabled) return '';
-      const cached = recallCache.get(key);
+      const cacheKey = options.scope ? `${key}:${options.scope}:${options.sinceHours ?? ''}` : key;
+      const cached = recallCache.get(cacheKey);
       if (cached && Date.now() - cached.at < RECALL_CACHE_MS) return cached.text;
       const usable = (Array.isArray(messages) ? messages : [])
         .filter((message) => typeof message?.text === 'string' && message.text.trim().length > 0)
@@ -133,13 +134,25 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
         const scene = sceneOf(key, cfg?.ownerQQ);
         const api = await getClient(scene);
         if (!api) return '';
-        const block = (await api.recallBlock(key, cfg?.ownerQQ, usable)) ?? '';
-        recallCache.set(key, { text: block, at: Date.now() });
+        const block = (await api.recallBlock(key, cfg?.ownerQQ, usable, options)) ?? '';
+        recallCache.set(cacheKey, { text: block, at: Date.now() });
         if (recallCache.size > 50) recallCache.clear();
         return block;
       } catch (error) {
         log.warn?.(`[memory] recall failed: ${error?.message ?? error}`);
         return '';
+      }
+    },
+
+    /** Write a long-term fact (used for rolling scene digests). Never throws. */
+    async writeFact(key, record) {
+      if (!enabled) return false;
+      try {
+        const scene = sceneOf(key, cfg?.ownerQQ);
+        const api = await getClient(scene);
+        return api ? await api.writeFact({ ...record, scene }) : false;
+      } catch {
+        return false;
       }
     },
 
