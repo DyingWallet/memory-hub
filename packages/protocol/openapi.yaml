@@ -473,6 +473,8 @@ components:
                     type: string
               updated_at:
                 type: string
+              text:
+                type: string
         self:
           type: array
           items:
@@ -522,6 +524,8 @@ components:
                   - const: preference
                     type: string
               updated_at:
+                type: string
+              text:
                 type: string
         counts:
           additionalProperties: false
@@ -700,6 +704,8 @@ components:
                     type: string
                   - const: other
                     type: string
+              superseded:
+                type: boolean
               expires_at:
                 type: string
               disclosure:
@@ -815,6 +821,8 @@ components:
                       type: string
                     - const: other
                       type: string
+                superseded:
+                  type: boolean
                 expires_at:
                   type: string
                 disclosure:
@@ -959,6 +967,8 @@ components:
                     type: string
                   - const: other
                     type: string
+              superseded:
+                type: boolean
               expires_at:
                 type: string
               disclosure:
@@ -1130,6 +1140,8 @@ components:
                     type: string
                   - const: other
                     type: string
+              superseded:
+                type: boolean
               expires_at:
                 type: string
               disclosure:
@@ -1219,6 +1231,8 @@ components:
                     type: string
                   - const: other
                     type: string
+              superseded:
+                type: boolean
               expires_at:
                 type: string
               disclosure:
@@ -1529,6 +1543,8 @@ components:
                     type: string
                   - const: other
                     type: string
+              superseded:
+                type: boolean
               expires_at:
                 type: string
               disclosure:
@@ -1858,6 +1874,8 @@ components:
                     type: string
                   - const: other
                     type: string
+              superseded:
+                type: boolean
               expires_at:
                 type: string
               disclosure:

@@ -3,8 +3,8 @@
  *
  * The page runs inside DSH's renderer. Chromium 152 blocks direct loopback
  * fetches from an opaque-origin frame (Local Network Access), so the page talks
- * to these same-origin routes and this host plugin proxies to memd. Only five
- * fixed endpoints are exposed; the browser never gets a generic proxy.
+ * to these same-origin routes and this host plugin proxies to memd. Only the
+ * fixed endpoints in ROUTES are exposed; the browser never gets a generic proxy.
  *
  * Zero-config: when the page sends no Authorization header, the host injects the
  * desktop root token from `~/.dsh/memory-token` (override with MEMD_TOKEN_FILE).
@@ -28,6 +28,7 @@ const ROUTES = new Map([
   ['/memory-hub/config', { method: 'POST', target: '/v1/config' }],
   ['/memory-hub/tokens', { method: 'GET', target: '/v1/tokens' }],
   ['/memory-hub/tokens/revoke', { method: 'POST', target: '/v1/tokens/revoke' }],
+  ['/memory-hub/timeline', { method: 'POST', target: '/v1/timeline' }],
 ]);
 
 function readBody(req) {

@@ -16,6 +16,7 @@ window.__ModuleLoader__.load({
     const PATH_CONFIG = '/memory-hub/config';
     const PATH_TOKENS = '/memory-hub/tokens';
     const PATH_REVOKE = '/memory-hub/tokens/revoke';
+    const PATH_TIMELINE = '/memory-hub/timeline';
     const TOKEN_KEY = 'memory-panel-token';
     const h = React.createElement;
 
@@ -142,6 +143,9 @@ window.__ModuleLoader__.load({
       const [tokens, setTokens] = useState(null);
       const [tokenError, setTokenError] = useState('');
       const [revokeState, setRevokeState] = useState('');
+      // 「我写下的判断」：subject=self 的时间线，只读。
+      const [judgements, setJudgements] = useState(null);
+      const [judgementsError, setJudgementsError] = useState('');
       // 保存后用它触发一次 config-state 重新拉取：语义开关的 ready/vectors 会变。
       const [reloadKey, setReloadKey] = useState(0);
 
@@ -232,6 +236,42 @@ window.__ModuleLoader__.load({
           alive = false;
         };
       }, [committedToken, revokeState]);
+
+      // 「我写下的判断」：只读，走 timeline 的 subject=self。
+      useEffect(() => {
+        const authToken = committedToken;
+        let alive = true;
+        setJudgementsError('');
+        fetch(PATH_TIMELINE, {
+          method: 'POST',
+          cache: 'no-store',
+          headers: {
+            'content-type': 'application/json',
+            ...(authToken ? { authorization: 'Bearer ' + authToken } : {}),
+          },
+          body: JSON.stringify({ subject: 'self', limit: 20, max_chars: 200 }),
+        })
+          .then(async (response) => {
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return response.json();
+          })
+          .then((data) => {
+            if (!alive) return;
+            const items = [];
+            for (const month of data.months || []) for (const item of month.items || []) items.push(item);
+            // timeline 是旧→新，这里要新的在前。
+            setJudgements(items.reverse());
+          })
+          .catch((error) => {
+            if (alive) {
+              setJudgements([]);
+              setJudgementsError(String((error && error.message) || error));
+            }
+          });
+        return () => {
+          alive = false;
+        };
+      }, [committedToken, reloadKey]);
 
       const revoke = async (id) => {
         if (!window.confirm('吊销 token ' + id + '？吊销后立即失效。')) return;
@@ -516,6 +556,40 @@ window.__ModuleLoader__.load({
             )
           : null,
         revokeState ? h('p', { style: { opacity: 0.8, fontSize: 12 } }, revokeState) : null,
+        h('h3', { style: { margin: '16px 0 4px' } }, '我写下的判断'),
+        judgementsError ? h('p', { style: { color: '#d94f3d', fontSize: 12 } }, judgementsError) : null,
+        !judgements
+          ? h('p', { style: { opacity: 0.6, fontSize: 12 } }, '读取中…')
+          : judgements.length === 0
+            ? h(
+                'p',
+                { style: { opacity: 0.6, fontSize: 12 } },
+                '还没有。用 memory_write 加 subject=self 写一条，这里就会出现。',
+              )
+            : h(
+                'div',
+                { style: { marginTop: 4 } },
+                judgements.map((item) =>
+                  h(
+                    'div',
+                    {
+                      key: item.id,
+                      style: {
+                        padding: '6px 0',
+                        borderBottom: '1px solid rgba(127,127,127,0.12)',
+                        fontSize: 12,
+                      },
+                    },
+                    h(
+                      'div',
+                      { style: { opacity: 0.55, fontSize: 11 } },
+                      `${(item.updated_at || '').slice(0, 10)} · ${item.kind}` +
+                        (item.superseded_by ? ' · 已被推翻' : ''),
+                    ),
+                    h('div', null, item.text || item.title),
+                  ),
+                ),
+              ),
       );
     }
 

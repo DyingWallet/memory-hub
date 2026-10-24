@@ -105,3 +105,44 @@ test('写 entry 时 subject 会被记进 fact 记录', async () => {
   assert.equal(got.statusCode, 200);
   assert.equal((got.json() as { memory: { subject: string } }).memory.subject, 'other');
 });
+
+test('bootstrap 的 self 带正文摘要，不只是一个标题', async () => {
+  const boot = await post('/v1/bootstrap', fixture.tokens.main.token, { scene: 'main' });
+  assert.equal(boot.statusCode, 200, JSON.stringify(boot.json()));
+  const payload = boot.json() as { self: { title: string; text?: string }[] };
+  const item = payload.self.find((entry) => entry.title.includes('记忆应该允许'));
+  assert.ok(item, JSON.stringify(payload.self));
+  assert.ok(item.text && item.text.length > 10, JSON.stringify(item));
+});
+
+test('search 把被替代的旧条目标成 superseded', async () => {
+  const first = await post('/v1/write', fixture.tokens.main.token, {
+    kind: 'stance',
+    text: '旧看法：记忆只要够全就够了。',
+    subject: 'self',
+    scene: 'main',
+  });
+  const second = await post('/v1/write', fixture.tokens.main.token, {
+    kind: 'stance',
+    text: '新看法：记忆得能记下自己的判断。',
+    subject: 'self',
+    supersedes: first.json().id as string,
+    scene: 'main',
+  });
+  assert.equal(first.statusCode, 200, JSON.stringify(first.json()));
+  assert.equal(second.statusCode, 200, JSON.stringify(second.json()));
+
+  const hits = await post('/v1/search', fixture.tokens.main.token, {
+    query: '看法 记忆',
+    subject: 'self',
+    k: 5,
+    scene: 'main',
+  });
+  assert.equal(hits.statusCode, 200, JSON.stringify(hits.json()));
+  const results = hits.json().results as { id: string; superseded?: boolean }[];
+  const older = results.find((item) => item.id === first.json().id);
+  assert.ok(older, JSON.stringify(results));
+  assert.equal(older.superseded, true, 'the replaced judgement is marked');
+  const newer = results.find((item) => item.id === second.json().id);
+  assert.equal(newer?.superseded, undefined, 'the replacement itself is not marked');
+});

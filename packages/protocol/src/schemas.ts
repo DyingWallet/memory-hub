@@ -92,6 +92,11 @@ export const TMemoryResult = Type.Object(
     stage: Type.Optional(TStage),
     /** Whose memory this is (absent = `owner`). */
     subject: Type.Optional(TSubject),
+    /**
+     * A newer memory replaced this one. Present on ranked results (search /
+     * recall) so an outdated judgement is not shown as if it were current.
+     */
+    superseded: Type.Optional(Type.Boolean()),
     expires_at: Type.Optional(Type.String()),
     /** Set when this item became visible because its owner brought it up in this scene. */
     disclosure: Type.Optional(Type.Union([Type.Literal('owner_initiated')])),
@@ -226,6 +231,8 @@ export const TRecentItem = Type.Object(
     title: Type.String(),
     kind: TMemoryKind,
     updated_at: Type.Optional(Type.String()),
+    /** Short body excerpt; bootstrap fills it for `self` only. */
+    text: Type.Optional(Type.String()),
   },
   { additionalProperties: false },
 );

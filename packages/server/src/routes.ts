@@ -446,6 +446,9 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
           title: doc.title,
           kind: doc.kind as MemoryKind,
           updated_at: new Date(doc.updated_at).toISOString(),
+          // A title alone reads like a headline; the excerpt is what makes
+          // "what I thought last time" actually usable in a fresh session.
+          text: truncate(doc.text, 140),
         })),
         counts: { docs: stats.docs, facts: stats.facts },
         instructions: config.instructions,
@@ -487,7 +490,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       finish('search', auth, started, outcome.hits.map((hit) => hit.id), body.query);
       return {
         query: body.query,
-        results: outcome.hits.map((hit) => toMemoryResult(hit)),
+        results: markSuperseded(db, outcome.hits.map((hit) => toMemoryResult(hit))),
         weak: outcome.weak,
         scanned: outcome.scanned,
       };
@@ -684,6 +687,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       } else {
         results = (await runSearch(searchParams, k)).hits.map((hit) => toMemoryResult(hit));
       }
+      markSuperseded(db, results);
       touchShortTerm(
         db,
         results.filter((result) => result.stage === 'short').map((result) => result.id),
@@ -1229,6 +1233,33 @@ function monthKeyOf(ms: number): string {
 
 function isKnownPrivacy(label: string): boolean {
   return label === 'normal' || label === 'personal' || label === 'sensitive' || label === 'secret';
+}
+
+/**
+ * Mark results that a newer memory replaced, so a ranked hit does not present
+ * an outdated judgement as if it were current.
+ *
+ * Chunk ids are the doc id for facts and `doc#0` for markdown docs, so the doc
+ * id is recoverable; `docs.supersedes` points at doc ids, which is what we
+ * compare against.
+ */
+function markSuperseded(db: Db, results: MemoryResult[]): MemoryResult[] {
+  if (results.length === 0) return results;
+  const docIdOf = (chunkId: string): string => {
+    const hash = chunkId.indexOf('#');
+    return hash >= 0 ? chunkId.slice(0, hash) : chunkId;
+  };
+  const docIds = Array.from(new Set(results.map((item) => docIdOf(item.id))));
+  const placeholders = docIds.map(() => '?').join(', ');
+  const rows = db
+    .prepare(`SELECT supersedes FROM docs WHERE supersedes IN (${placeholders})`)
+    .all(...docIds) as { supersedes: string | null }[];
+  if (rows.length === 0) return results;
+  const replaced = new Set(rows.map((row) => row.supersedes).filter((id): id is string => typeof id === 'string'));
+  for (const item of results) {
+    if (replaced.has(docIdOf(item.id))) item.superseded = true;
+  }
+  return results;
 }
 
 function toMemoryResult(hit: SearchHit, disclosure?: 'owner_initiated'): MemoryResult {

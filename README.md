@@ -101,7 +101,9 @@ pnpm embed              # 回填向量
 
 每条记忆带一个 `subject`：`owner`（默认，关于主人）、`self`（我自己的判断）、`other`（第三方）。
 
-- `/v1/write` 可指定；`/v1/search`、`/v1/recall` 可按它过滤；`/v1/bootstrap` 另带最近 3 条 `self`。
+- `/v1/write` 可指定；`/v1/search`、`/v1/recall` 可按它过滤；`/v1/bootstrap` 另带最近 3 条 `self`，每条附 140 字正文摘要。
+- 被替代的旧条目在 `search` / `recall` 里带 `superseded: true`，在 `timeline` 里带 `superseded_by`（id）与 `supersedes`（双向）。
+- 设置页「记忆服务」底部有只读的「我写下的判断」列表（走 `subject=self` 的 timeline）。
 - 去重键包含 subject：同一句话「我认为 X」和「他说 X」是两条记忆。
 - 旧数据没有这个字段，一律按 `owner` 读（SQLite 列默认值，`migrateColumns()` 自动补列，不需要迁移脚本）。
 

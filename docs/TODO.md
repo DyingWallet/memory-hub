@@ -98,7 +98,8 @@
       - MCP：`memory_write` / `memory_search` 都有 `subject` 参数。
     - 验证（2026-10-24 23:57，活库）：写入一条 `subject=self` 的立场（「记忆里最缺的不是事实，而是我自己的判断……」），`search?subject=self` 只返回它；`search?subject=owner` 返回 5 条旧记忆、全部 `subject=owner`；`/v1/bootstrap` 的 `self` 带回 1 条。
     - 测试：153 项（+6：旧数据按 owner / self 与 owner 分离且不被去重 / recall 过滤 / bootstrap.self / other 写入 / 旧库补列升级）。
-    - 还没做：设置页的「我写下的判断」列表；`supersedes` 只是写入字段，检索时还不会把旧条目标成「已被推翻」——那要跟 19 的时间线一起做。
+    - 收尾（2026-10-25）：`bootstrap` 的 `self` 带 140 字正文摘要（`TRecentItem.text`），新会话看到的是「我当时怎么想」而不是一个标题；`search` / `recall` 对被替代的旧条目返回 `superseded: true`（timeline 那边给的是 id）；设置页新增只读的「我写下的判断」列表，走 `/memory-hub/timeline` 代理 → `subject=self`。
+    - 测试：161 项（+2：bootstrap 摘要 / search 标 superseded）。
 
 21. ✅ **pet-revive 的 DSH 端口发现失效**（2026-10-24 修）
     - 现象：`dsh-pet-configurable-llm/scripts/revive.mjs` 每分钟在跑，但日志一直写 `DSH unreachable -> skipped`，8790 空着；同一时刻 DSH 是活的（`looksLikeDsh('http://127.0.0.1:7642')` 返回 true）。

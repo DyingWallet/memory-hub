@@ -692,6 +692,9 @@
                 },
                 "updated_at": {
                   "type": "string"
+                },
+                "text": {
+                  "type": "string"
                 }
               }
             }
@@ -782,6 +785,9 @@
                   ]
                 },
                 "updated_at": {
+                  "type": "string"
+                },
+                "text": {
                   "type": "string"
                 }
               }
@@ -1085,6 +1091,9 @@
                     }
                   ]
                 },
+                "superseded": {
+                  "type": "boolean"
+                },
                 "expires_at": {
                   "type": "string"
                 },
@@ -1276,6 +1285,9 @@
                         "type": "string"
                       }
                     ]
+                  },
+                  "superseded": {
+                    "type": "boolean"
                   },
                   "expires_at": {
                     "type": "string"
@@ -1530,6 +1542,9 @@
                       "type": "string"
                     }
                   ]
+                },
+                "superseded": {
+                  "type": "boolean"
                 },
                 "expires_at": {
                   "type": "string"
@@ -1806,6 +1821,9 @@
                     }
                   ]
                 },
+                "superseded": {
+                  "type": "boolean"
+                },
                 "expires_at": {
                   "type": "string"
                 },
@@ -1959,6 +1977,9 @@
                       "type": "string"
                     }
                   ]
+                },
+                "superseded": {
+                  "type": "boolean"
                 },
                 "expires_at": {
                   "type": "string"
@@ -2474,6 +2495,9 @@
                       "type": "string"
                     }
                   ]
+                },
+                "superseded": {
+                  "type": "boolean"
                 },
                 "expires_at": {
                   "type": "string"
@@ -2995,6 +3019,9 @@
                       "type": "string"
                     }
                   ]
+                },
+                "superseded": {
+                  "type": "boolean"
                 },
                 "expires_at": {
                   "type": "string"
