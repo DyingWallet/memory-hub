@@ -45,6 +45,7 @@ node scripts\doctor.mjs --shallow  # 跳过披露探针（只查文件，不发�
 ```
 
 - **重启后验证**：插件 `apply()` 时写 `data/plugin-load/<name>.json`，doctor 与 `data/setup-stamp.json` 比时间——「装了但没重启」会显示 `FAIL … 需要重启 DSH`。
+- **升级 DSH 之后**：`powershell -ExecutionPolicy Bypass -File scripts\post-upgrade.ps1`（检查 memd / doctor / pet-llm / 桥接四处，一处挂就红）。
 - **启动自检**：`dsh-memory-panel` 加载 8 秒后自动跑一遍 doctor，写 `logs/doctor-boot.log`（每次启动一行）与 `data/doctor-last.json`；`MEMD_BOOT_CHECK=0` 可关。
 - 细节与失败对照表见 [`docs/RUNBOOK.md`](docs/RUNBOOK.md) 与 [`../memories/50-knowledge/2026-10-24-memory-hub-deploy-from-zero.md`](../memories/50-knowledge/2026-10-24-memory-hub-deploy-from-zero.md)。
 
