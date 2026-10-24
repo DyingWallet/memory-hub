@@ -43,6 +43,7 @@
 11. ⬜ **pet-brain 自启**：与 memd 一起纳入；否则 DSH 重启后桌宠会失去 LLM 接入。
 12. ⬜ **dsh-pet `externalBrain` 补丁**（可选）：严格只走 pet-brain、失败不回落普通模型；文件参照 `pet-brain/patches/dsh-pet-external-brain.md`。
 13. ⬜ **语义检索：本地 embedding + sqlite-vec（v2，暂不实现）**
+    - ✅ 选型：`sqlite-vec`；LEANN 已评估，仅作为 50 万 chunk 以上的备选（见 `memories/40-decisions/2026-10-24-1500-semantic-search-sqlite-vec.md`）。
     - 目标：泛问/语义问法（“有意思的事”“那次说的那个”）能命中；FTS 仍是主路径，向量只做混合排序。
     - 方案：本地 embedding（`bge-small-zh` 或 `bge-m3`，ONNX/llama.cpp/Ollama 常驻），`sqlite-vec` 存 chunk 向量；`score = α·BM25 + (1-α)·cosine`，α 初定 0.5。
     - 数据：现有约 545 chunk 全量回填；512 维 float32 ≈ 2 KB/chunk，1 万 chunk ≈ 20 MB；新增/重建索引时同步写向量。

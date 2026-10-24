@@ -89,6 +89,7 @@
 
 ## v2 语义检索（计划，暂不实现）
 
+- **选型已定：`sqlite-vec`**；LEANN 已评估，仅作为 50 万 chunk / 存储瓶颈时的备选（决策见 `memories/40-decisions/2026-10-24-1500-semantic-search-sqlite-vec.md`）。
 - 目标：泛问/语义问法命中；FTS 保留为主路径，向量做混合排序。
 - 技术：本地 embedding（`bge-small-zh` / `bge-m3`，ONNX 或 Ollama 常驻）+ `sqlite-vec`；`score = α·BM25 + (1-α)·cosine`，α 初定 0.5。
 - 数据：约 545 chunk 全量回填；512 维 float32 ≈ 2 KB/chunk；新增/重建索引同步写向量。
