@@ -3,7 +3,7 @@
 本机记忆服务 `memd` + 两个 DSH 插件 + QQ 桥接 / 桌宠适配器。让 DSH 主会话、QQ 桥接和桌宠读同一份文本记忆：关键词检索（FTS5），可选语义检索（本地 embedding + sqlite-vec），隐私按 scope 在 SQL 层隔离。
 
 - 协议：`/v1` HTTP（JSON），OpenAPI 在 [`packages/protocol/openapi.yaml`](packages/protocol/openapi.yaml)
-- **DSH 版本支持**：目前仅在 DSH 桌面版 **0.2.1-rc.3** 上验证（MCP server 与两个插件的加载契约、`webServer.register` 形态都按这个版本测过）；其它版本未验证，升级后先跑 `node scripts\doctor.mjs`。
+- **DSH 版本支持**：**0.2.1-rc.2 / 0.2.1-rc.3 已验证**（MCP server、两个插件的加载契约、`webServer.register`、`session/*` RPC 都在这两个版本上跑通过）；其它版本未验证，升级后先跑 `node scripts\doctor.mjs`。
 - 数据：`D:\deepseek_workspace\memories\`（Markdown + `facts/*.jsonl`），索引在 `data/index.db`，可重建
 - 检索：`node:sqlite` FTS5 + 中文 bigram；默认 5 条，弱结果降到 OR、最多 10 条；语义可用时做混合排序
 - 运行时：**工作区便携版 Node** `..\tools\node\node.exe`（`pnpm fetch:node` 安装，版本写在 `tools\node\VERSION`）；没有时回落到 DSH 自带 node。独立一份的原因：memd / pet-llm / 桥接都是常驻进程，跑 DSH 自带的 `node.exe` 会锁住 DSH 安装目录，升级时安装器改名失败（`WinError 32`）。细节见 [`../tools/README.md`](../tools/README.md)。
