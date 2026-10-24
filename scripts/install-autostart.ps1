@@ -115,9 +115,20 @@ foreach ($path in @($supervisor, $runHidden, $node)) {
 }
 if ($EveryMinutes -lt 1 -or $EveryMinutes -gt 60) { throw 'EveryMinutes must be 1-60' }
 
-$action = New-ScheduledTaskAction -Execute $wscriptExe `
-  -Argument ('{0} {1} {2} {3}' -f '//nologo', $runHidden, $node, $supervisor) `
-  -WorkingDirectory $root
+# Launcher: tools\bin\run-hidden.exe (CreateProcess + CREATE_NO_WINDOW) if built,
+# else the legacy wscript + run-hidden.vbs path. The VBS route goes through
+# ShellExecute, which shows the "Open File - Security Warning" dialog for a
+# freshly extracted exe and blocks the task until someone clicks it.
+$launcher = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'tools\bin\run-hidden.exe'
+if (Test-Path -LiteralPath $launcher) {
+  $action = New-ScheduledTaskAction -Execute $launcher `
+    -Argument ('{0} {1}' -f $node, $supervisor) `
+    -WorkingDirectory $root
+} else {
+  $action = New-ScheduledTaskAction -Execute $wscriptExe `
+    -Argument ('{0} {1} {2} {3}' -f '//nologo', $runHidden, $node, $supervisor) `
+    -WorkingDirectory $root
+}
 $settings = New-ScheduledTaskSettingsSet `
   -StartWhenAvailable `
   -AllowStartIfOnBatteries `
