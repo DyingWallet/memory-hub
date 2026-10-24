@@ -28,6 +28,7 @@ interface TimelineBody {
   from: string;
   to: string;
   total: number;
+  returned: number;
   months: { month: string; count: number; items: { id: string; updated_at: string; subject: string; title: string; supersedes?: string; superseded_by?: string }[] }[];
 }
 
@@ -107,7 +108,8 @@ test('满页时返回 next_before，把它当 to 能接上更早的一页', asyn
   });
   assert.equal(first.statusCode, 200, JSON.stringify(first.json()));
   const firstBody = first.json() as TimelineBody & { next_before?: string };
-  assert.equal(firstBody.total, 2);
+  assert.equal(firstBody.returned, 2, 'the page carries exactly `limit` items');
+  assert.ok(firstBody.total >= 2, 'total counts the whole window, not the page');
   assert.ok(firstBody.next_before, 'a full page carries the next boundary');
   const firstIds = firstBody.months.flatMap((month) => month.items.map((item) => item.id));
 

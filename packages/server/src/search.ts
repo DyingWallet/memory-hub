@@ -393,7 +393,7 @@ export function timelineDocs(
     limit: number;
     maxChars: number;
   },
-): TimelineDoc[] {
+): { docs: TimelineDoc[]; total: number } {
   const visibility = visibilityClause(token, scene, 'c', restriction ? { restriction } : {});
   const clauses = [visibility.where, 'c.updated_at >= ?', 'c.updated_at < ?'];
   const values: (string | number)[] = [...visibility.params, options.from, options.to];
@@ -405,9 +405,15 @@ export function timelineDocs(
     clauses.push(`c.kind IN (${options.kinds.map(() => '?').join(', ')})`);
     values.push(...options.kinds);
   }
-  // Several chunks per document is normal; fetch a margin and de-duplicate.
-  values.push(Math.max(options.limit * 4, 64));
+  const where = clauses.join(' AND ');
 
+  // How many documents the whole window holds — the limit below only decides
+  // how many come back. `total` used to mean "this page", which reads wrong.
+  const counted = db
+    .prepare(`SELECT COUNT(DISTINCT c.doc_id) AS n FROM chunks c WHERE ${where}`)
+    .get(...values) as { n: number };
+
+  // Several chunks per document is normal; fetch a margin and de-duplicate.
   // Newest first so that a `limit` smaller than the window keeps the recent
   // end of "that period" instead of silently dropping it; the result is
   // reversed below, because a timeline reads forward in time.
@@ -415,11 +421,11 @@ export function timelineDocs(
     .prepare(
       `SELECT c.doc_id, c.title, c.kind, c.subject, c.stage, c.updated_at, c.text, c.rowid
        FROM chunks c
-       WHERE ${clauses.join(' AND ')}
+       WHERE ${where}
        ORDER BY c.updated_at DESC, c.rowid DESC
        LIMIT ?`,
     )
-    .all(...values) as unknown as {
+    .all(...values, Math.max(options.limit * 4, 64)) as unknown as {
     doc_id: string;
     title: string;
     kind: string;
@@ -445,7 +451,7 @@ export function timelineDocs(
     });
     if (out.length >= options.limit) break;
   }
-  if (out.length === 0) return out;
+  if (out.length === 0) return { docs: out, total: counted.n };
 
   // Resolve `supersedes` in both directions, but only for the rows we are about
   // to show: a replacement chain must not leak an invisible memory's id.
@@ -464,7 +470,7 @@ export function timelineDocs(
     const replaced = link.supersedes ? byId.get(link.supersedes) : undefined;
     if (replaced) replaced.superseded_by = link.id;
   }
-  return out.reverse();
+  return { docs: out.reverse(), total: counted.n };
 }
 
 export interface ReviewCandidate {

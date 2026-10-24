@@ -735,7 +735,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       if (to <= from) throw errors.invalid('"to" must be after "from"');
 
       const limit = clamp(body.limit ?? 200, 1, 1000);
-      const docs = timelineDocs(db, auth.view, auth.scene, restrictionFor(auth.view.scopes, auth.scene, config.privacy), {
+      const { docs, total } = timelineDocs(db, auth.view, auth.scene, restrictionFor(auth.view.scopes, auth.scene, config.privacy), {
         from,
         to,
         ...(body.subject ? { subject: body.subject } : {}),
@@ -770,7 +770,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       return {
         from: monthKeyOf(from),
         to: monthKeyOf(to - 1),
-        total: docs.length,
+        total,
+        returned: docs.length,
         ...(nextBefore ? { next_before: nextBefore } : {}),
         months: [...months.entries()].map(([month, items]) => ({ month, count: items.length, items })),
       };

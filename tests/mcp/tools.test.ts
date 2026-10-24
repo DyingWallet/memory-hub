@@ -52,6 +52,7 @@ const fakeApi: MemoryApi = {
       from: '2026-10',
       to: '2026-10',
       total: 1,
+      returned: 1,
       months: [
         {
           month: '2026-10',

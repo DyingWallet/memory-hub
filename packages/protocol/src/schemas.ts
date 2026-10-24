@@ -456,9 +456,12 @@ export const TTimelineResponse = Type.Object(
   {
     from: Type.String(),
     to: Type.String(),
+    /** Documents in the whole window (same visibility as the page). */
     total: Type.Integer(),
+    /** How many of them this response actually carries (≤ `limit`). */
+    returned: Type.Integer(),
     /**
-     * Set when `total` reached `limit`: pass it as `to` to read the previous
+     * Set when `returned` reached `limit`: pass it as `to` to read the previous
      * page. No cursor object — the boundary is just the oldest item returned.
      */
     next_before: Type.Optional(Type.String()),

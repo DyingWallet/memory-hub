@@ -113,6 +113,7 @@ pnpm embed              # 回填向量
 
 - `POST /v1/timeline`：`from` / `to` 支持 `YYYY` / `YYYY-MM` / `YYYY-MM-DD` / ISO（`from` 含、`to` 不含，缺省最近 12 个月），可按 `subject`、`kinds` 过滤；返回按月分桶的 `months[].items[]`。
 - `limit` 截断时保留**最近**的一段（SQL 先取最新再反转成正序）；满页时返回 `next_before`，把它当 `to` 再查就是上一页。
+- `total` 是整个区间的文档数，`returned` 是这一页实际给出的条数——只有没被截断时两者才相等。
 - `supersedes` / `superseded_by` 会双向标出替代关系——「我改过主意」在时间线上看得见。
 - `node scripts/build-timeline.mjs` 生成 `memories/10-journal/annual-<year>.md`（facts + 日记按月聚合，整篇重写，幂等，跳过短期 chat 与坏编码），让年表也能被检索到。
 

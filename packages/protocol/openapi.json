@@ -2134,6 +2134,7 @@
           "from",
           "to",
           "total",
+          "returned",
           "months"
         ],
         "properties": {
@@ -2144,6 +2145,9 @@
             "type": "string"
           },
           "total": {
+            "type": "integer"
+          },
+          "returned": {
             "type": "integer"
           },
           "next_before": {
