@@ -115,7 +115,7 @@
 - ✅ 实测（Ryzen 7 9700X / 32 GB，CPU 1 线程）：短查询 embedding 0.5 ms + KNN 0.4 ms；763 条回填 ~6 秒；
   常驻 150–250 MB；空闲 CPU 0%；**不占 GPU**。见 `memories/50-knowledge/2026-10-24-embedding-benchmark-bge-small-zh.md`。
 - ✅ 测试：`tests/unit/semantic.test.ts`（分词 / 距离换算 / 归一化 / 混合排序 / 配置夹紧 / sqlite-vec 往返）。
-- ⬜ 设置页面板开关（目前经 `/v1/config` 与 config.json）。
+- ✅ 设置页面板开关：设置 → 记忆服务 → 勾选「语义检索」并保存即热生效；状态行显示向量数或不可用原因。
 - ⬜ `verify-recall.mjs` 增加语义用例对比。
 
 ## 里程碑

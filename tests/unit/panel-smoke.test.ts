@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 /**
  * Smoke test for the client plugin bundle: it must register exactly one
@@ -52,4 +53,13 @@ test('panel bundle registers a settings section and uses the proxy paths', async
   moduleExports.apply(ctx);
   assert.equal(registered?.name, 'settings.section');
   assert.equal(registered?.id, 'memory-hub');
+
+  // The semantic toggle must be wired through the panel: it edits config.semantic,
+  // sends it with the config POST, and shows the not-ready reason instead of
+  // pretending the feature works.
+  const source = readFileSync(new URL('../../../plugins/dsh-memory-panel/lib/client.js', import.meta.url), 'utf8');
+  assert.match(source, /config\.semantic\.enabled/);
+  assert.match(source, /semantic: \{ enabled: config\.semantic\.enabled \}/);
+  assert.match(source, /pnpm fetch:model/);
+  assert.match(source, /config\.semantic\.ready/);
 });

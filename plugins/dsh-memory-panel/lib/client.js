@@ -78,6 +78,8 @@ window.__ModuleLoader__.load({
       const [tokens, setTokens] = useState(null);
       const [tokenError, setTokenError] = useState('');
       const [revokeState, setRevokeState] = useState('');
+      // 保存后用它触发一次 config-state 重新拉取：语义开关的 ready/vectors 会变。
+      const [reloadKey, setReloadKey] = useState(0);
 
       const saveToken = (value) => {
         setToken(value);
@@ -133,7 +135,7 @@ window.__ModuleLoader__.load({
         return () => {
           alive = false;
         };
-      }, [token]);
+      }, [token, reloadKey]);
 
       useEffect(() => {
         const authToken = token.trim();
@@ -209,11 +211,14 @@ window.__ModuleLoader__.load({
                 ownerAudiences: config.privacy.ownerAudiences,
               },
               archive: { ...config.archive },
+              semantic: { enabled: config.semantic.enabled },
             }),
           });
           const body = await response.json().catch(() => null);
           if (!response.ok) throw new Error((body && body.error && body.error.message) || 'HTTP ' + response.status);
           setSaveState('已保存：' + (body.applied || []).join(', '));
+          // 语义开关是热生效的：重新拉一次状态，把 ready / 向量数 / 原因带回来。
+          setReloadKey((value) => value + 1);
         } catch (error) {
           setSaveState('保存失败：' + String((error && error.message) || error));
         }
@@ -343,6 +348,41 @@ window.__ModuleLoader__.load({
                 max: 120,
                 onChange: (value) => patch('archive', 'keepMonths', value),
               }),
+              h(
+                Field,
+                { label: '语义检索' },
+                h('input', {
+                  type: 'checkbox',
+                  checked: config.semantic.enabled,
+                  onChange: (event) => patch('semantic', 'enabled', event.target.checked),
+                }),
+              ),
+              h(
+                'p',
+                {
+                  style: {
+                    opacity: config.semantic.enabled && !config.semantic.ready ? 0.95 : 0.6,
+                    fontSize: 12,
+                    margin: '0 0 8px',
+                    color: config.semantic.enabled && !config.semantic.ready ? '#d94f3d' : undefined,
+                  },
+                },
+                !config.semantic.enabled
+                  ? '关闭时只走 FTS（子串/关键词），不加载模型、不占内存。'
+                  : config.semantic.ready
+                    ? '已就绪：' +
+                      config.semantic.vectors +
+                      ' 个向量（' +
+                      config.semantic.dim +
+                      ' 维，α=' +
+                      config.semantic.alpha +
+                      '，模型 ' +
+                      config.semantic.model +
+                      '）'
+                    : '已启用但不可用：' +
+                      (config.semantic.reason || '未知原因') +
+                      '。开关不会安装任何东西——先在终端跑 pnpm fetch:model（模型 23 MB，需 pnpm install 过的 onnxruntime-node），再 pnpm embed 回填。',
+              ),
               h(
                 'p',
                 { style: { opacity: 0.6, fontSize: 12, margin: '0 0 8px' } },

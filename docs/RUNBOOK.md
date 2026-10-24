@@ -218,7 +218,12 @@ POST /memory-hub/tokens/revoke -> memd /v1/tokens/revoke  （需 Authorization�
 ```
 
 - root 令牌填 `%USERPROFILE%\.dsh\memory-token`（68 字符），存 localStorage；
-- 可改短期参数与隐私三段式；保存前二次确认，写前备份；
+- 可改短期参数、隐私三段式、月度归档，以及**语义检索开关**（勾选并保存即热生效）；
+- 语义检索那一行的状态会跟着 `config-state.semantic` 走：
+  - 关：`只走 FTS（子串/关键词）`；
+  - 开且就绪：`已就绪：N 个向量（512 维，α=0.5，模型 …）`；
+  - 开但不可用：红色显示原因（如 `model missing: …`）并提示去跑 `pnpm fetch:model` + `pnpm embed`。
+  **开关本身不会安装任何东西**——不装 npm 包、不下载模型，只是改配置并尝试加载；
 - 令牌区可吊销（签发仍走 CLI）；
 - 改 host 半侧（`lib/index.js`）必须**重启 DSH**；只改 `client.js` 刷新页面即可。
 
