@@ -39,8 +39,8 @@
 
 ## v2（架构与扩展）
 
-10. ✅ **memd 独立进程自启/看护**：`install-autostart.ps1` 注册两个任务——`memd-autostart`（AtLogOn + 30 秒延迟）+ `memd-watchdog`（每 5 分钟，已健康则 exit 0），均跑 `start.ps1 -NoWait`；`-Check` / `-Remove` 与 `uninstall-autostart.ps1` 配套；RUNBOOK §2.5。不挂 DSH 子进程。
-11. ✅ **pet-brain 自启**：不注册登录任务，改跟 DSH 生命周期——`start-stack.ps1` 第 2.7 步在 DSH 之后拉起（传 `DSH_WEB_URL`），`src/guard.mjs` 每 30 秒探一次，连续 3 次不可达（约 90 秒）自退。pet 测试 24 项（+6 孤儿保护）。
+10. ✅ **memd 独立进程自启/看护**：`install-autostart.ps1` 注册两个任务——`memd-autostart`（AtLogOn + 30 秒延迟）+ `memd-watchdog`（每 1 分钟，已健康则 exit 0），均跑 `start.ps1 -NoWait`；`-Check` / `-Remove` 与 `uninstall-autostart.ps1` 配套；RUNBOOK §2.5。不挂 DSH 子进程。
+11. ✅ **pet-brain 自启**：不注册登录任务，改跟 DSH 生命周期——`start-stack.ps1` 第 2.7 步在 DSH 之后拉起（传 `DSH_WEB_URL`），`src/guard.mjs` 每 20 秒探一次，连续 3 次不可达（约 60 秒）自退。pet 测试 24 项（+6 孤儿保护）。
 12. ⬜ **dsh-pet `externalBrain` 补丁**（可选）：严格只走 pet-brain、失败不回落普通模型；文件参照 `pet-brain/patches/dsh-pet-external-brain.md`。
 13. ⬜ **语义检索：本地 embedding + sqlite-vec（v2，暂不实现）**
     - ✅ 选型：`sqlite-vec`；LEANN 已评估，仅作为 50 万 chunk 以上的备选（见 `memories/40-decisions/2026-10-24-1500-semantic-search-sqlite-vec.md`）。

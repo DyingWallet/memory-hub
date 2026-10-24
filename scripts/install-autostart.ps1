@@ -1,4 +1,4 @@
-# Register memd's v2 autostart: one logon task plus one 5-minute watchdog.
+# Register memd's v2 autostart: one logon task plus one 1-minute watchdog.
 #
 #   powershell -ExecutionPolicy Bypass -File scripts\install-autostart.ps1
 #   powershell -ExecutionPolicy Bypass -File scripts\install-autostart.ps1 -Check
@@ -8,17 +8,17 @@
 # start.ps1 probes /v1/health first and exits 0 when memd is already healthy, so
 # the two triggers can never fight over the port:
 #   memd-autostart   30 seconds after logon
-#   memd-watchdog    every 5 minutes; picks memd up again if it died
+#   memd-watchdog    every minute; picks memd up again if it died
 #
 # pet-brain is deliberately NOT registered here. It only serves the DSH
 # pet-chat preset, so it follows DSH instead: qq-bridge\start-stack.ps1 starts it
-# (step 2.7) and it exits on its own after 3 x 30s without DSH (src/guard.mjs).
+# (step 2.7) and it exits on its own after 3 x 20s without DSH (src/guard.mjs).
 #
 # Must run from a normal (non-sandbox) PowerShell: the DSH sandbox is a low
 # integrity process and gets "access denied" from the Task Scheduler.
 param(
   [int]$LogonDelaySeconds = 30,
-  [int]$WatchdogMinutes = 5,
+  [int]$WatchdogMinutes = 1,
   [string]$AutostartTask = 'memd-autostart',
   [string]$WatchdogTask = 'memd-watchdog',
   [switch]$Check,
