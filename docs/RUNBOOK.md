@@ -264,10 +264,12 @@ Copy-Item data\qq-tokens\*.token qq-bridge\state\ -Force
 - **令牌**：`node scripts\issue-qq-tokens.mjs` 现在会多签一个 `qq-disclose`（scopes 只有 `disclose:group`，
   scenes `qq:bridge`），明文在 `data\qq-tokens\memory-disclose.token`；复制到 `qq-bridge\state\`。
   **重新签发会让所有 `state\memory-*.token` 失效**，必须整批覆盖（`Copy-Item data\qq-tokens\*.token qq-bridge\state\ -Force`）。
-- **成员表**（`qq-bridge/src/group-members.js`）：落盘在 `state/group-members.json`，只在
-  `group_increase` / `group_decrease` 事件时增减；超过 24 小时或没有基线时重拉一次；
-  拿不到成员表 → **拒绝披露**（fail-closed，不拿旧缓存放行）。重连后漏掉的事件由
-  `reconcileGroupMembers` 对账。
+- **成员表**（`qq-bridge/src/group-members.js`）：落盘在 `state/group-members.json`（0o600，目录已 ACL 收紧），
+  三处维护：① `group_increase` / `group_decrease` 事件即时增减；② **每天一次全量对账**
+  （启动后 5 分钟一次 + 之后每 24 小时，`GROUP_MEMBERS_BOOT_REFRESH_MS` 可调启动延迟），
+  兜住「事件丢失 / 网关闭」这类意外；③ 访问时若条目超过 24 小时或没有基线，再补拉一次。
+  拿不到成员表 → **拒绝披露**（fail-closed，不拿旧缓存放行），下次访问会重试。
+  重连后漏掉的事件另有 `reconcileGroupMembers` 对账。
 - **多群**：提问者只在机器人所在的一个群里 → 直接披露；在多个群里且没点名 → 不猜，
   让模型先问清楚是哪个群（prompt 里给出候选群号）。
 - **范围**：只给该群 `chat`/`note`、`privacy IN (normal, personal)`；敏感、secret、私聊、其它群永不包含。
