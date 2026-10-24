@@ -52,7 +52,7 @@
 5. ✅ **dsh-pet-configurable-llm 记忆客户端**：`src/memory.mjs`，`/v1/recall`（scene=pet）拼进 prompt、`/v1/ingest` 上报用户与回复（50/批、失败静默）。
 6. ✅ **避免双写**：`dsh-memory` 插件识别 `agentPreset === 'pet-chat'` 时跳过。
 7. ✅ **pet 视图边界**：新增 `tests/privacy/pet.test.ts`（工作/群/私聊不可见、owner 可见、pet 短期可被 owner 审计）。
-8. ✅ **联调 + 本体安装**：`dsh-pet` 0.3.8 已装（`dsh plugin add`），`pet-brain/xi` 路由已注册；`/dsh-pet-7340/config` 显示 `chatModel=pet-brain/xi`；`/chat` 实测回复正常、工资问题不含 1280；audit `recall|pet` + `ingest|pet` 持续写入，pet 短期已 13 条。
+8. ✅ **联调 + 本体安装**：`dsh-pet` 0.3.8 已装（`dsh plugin add`），`pet-brain/xi` 路由已注册（当时叫 pet-brain，2026-10-25 改名为 `pet-llm/xi`）；`/dsh-pet-7340/config` 显示 `chatModel=pet-brain/xi`；`/chat` 实测回复正常、工资问题不含 1280；audit `recall|pet` + `ingest|pet` 持续写入，pet 短期已 13 条。
 
 ### P4 设置页可编辑（已完成）
 
