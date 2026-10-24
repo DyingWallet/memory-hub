@@ -3,6 +3,7 @@
 本机记忆服务 `memd` + 两个 DSH 插件 + QQ 桥接 / 桌宠适配器。让 DSH 主会话、QQ 桥接和桌宠读同一份文本记忆：关键词检索（FTS5），可选语义检索（本地 embedding + sqlite-vec），隐私按 scope 在 SQL 层隔离。
 
 - 协议：`/v1` HTTP（JSON），OpenAPI 在 [`packages/protocol/openapi.yaml`](packages/protocol/openapi.yaml)
+- **DSH 版本支持**：目前仅在 DSH 桌面版 **0.2.1-rc.2** 上验证（MCP server 与两个插件的加载契约、`webServer.register` 形态都按这个版本测过）；其它版本未验证，升级后先跑 `node scripts\doctor.mjs`。
 - 数据：`D:\deepseek_workspace\memories\`（Markdown + `facts/*.jsonl`），索引在 `data/index.db`，可重建
 - 检索：`node:sqlite` FTS5 + 中文 bigram；默认 5 条，弱结果降到 OR、最多 10 条；语义可用时做混合排序
 - 运行时：Node 24（DSH 自带），TypeScript 5.9 + ESM，`tsc -b` 构建
