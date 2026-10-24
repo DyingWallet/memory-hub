@@ -13,6 +13,8 @@ export interface SearchHit {
   updated_at: number;
   stage: 'short' | 'long';
   expires_at: number | null;
+  /** 'owner' | 'self' | 'other' — whose memory this is. */
+  subject: string;
   score: number;
 }
 
@@ -26,6 +28,7 @@ interface ChunkRow {
   updated_at: number;
   stage: string | null;
   expires_at: number | null;
+  subject: string | null;
   rank: number;
 }
 
@@ -39,6 +42,8 @@ export interface SearchParams {
   pathPrefix?: string;
   /** Allow the owner's own memories when the owner brought the topic up here. */
   ownerDisclosure?: boolean;
+  /** Only memories about this subject. */
+  subject?: string;
   /** Sensitivity policy resolved for this request. */
   restriction?: Restriction;
   /**
@@ -106,6 +111,7 @@ export function searchChunks(db: Db, params: SearchParams): SearchOutcome {
       updated_at: row.updated_at,
       stage: row.stage === 'short' ? 'short' : 'long',
       expires_at: row.expires_at ?? null,
+      subject: row.subject ?? 'owner',
       score,
     } satisfies SearchHit;
   });
@@ -134,10 +140,14 @@ function runMatch(
     clauses.push('c.path LIKE ?');
     values.push(`${params.pathPrefix.replaceAll('\\', '/')}%`);
   }
+  if (params.subject) {
+    clauses.push('c.subject = ?');
+    values.push(params.subject);
+  }
   values.push(limit);
 
   const sql = `
-    SELECT c.id, c.path, c.title, c.heading, c.text, c.kind, c.updated_at, c.stage, c.expires_at, bm25(chunks_fts) AS rank
+    SELECT c.id, c.path, c.title, c.heading, c.text, c.kind, c.updated_at, c.stage, c.expires_at, c.subject, bm25(chunks_fts) AS rank
     FROM chunks_fts
     JOIN chunks c ON c.rowid = chunks_fts.rowid
     WHERE chunks_fts MATCH ? AND ${clauses.join(' AND ')}
@@ -157,7 +167,7 @@ export function getChunk(
   const visibility = visibilityClause(token, scene, 'c', restriction ? { restriction } : {});
   const row = db
     .prepare(
-      `SELECT c.id, c.path, c.title, c.heading, c.text, c.kind, c.updated_at, c.stage, c.expires_at
+      `SELECT c.id, c.path, c.title, c.heading, c.text, c.kind, c.updated_at, c.stage, c.expires_at, c.subject
        FROM chunks c
        WHERE c.id = ? AND ${visibility.where}
        LIMIT 1`,
@@ -174,6 +184,7 @@ export function getChunk(
     updated_at: row.updated_at,
     stage: row.stage === 'short' ? 'short' : 'long',
     expires_at: row.expires_at ?? null,
+    subject: row.subject ?? 'owner',
     score: 1,
   };
 }
@@ -201,7 +212,7 @@ export function getChunkOrDoc(
   const visibility = visibilityClause(token, scene, 'c', restriction ? { restriction } : {});
   const row = db
     .prepare(
-      `SELECT c.id, c.path, c.title, c.heading, c.text, c.kind, c.updated_at, c.stage, c.expires_at
+      `SELECT c.id, c.path, c.title, c.heading, c.text, c.kind, c.updated_at, c.stage, c.expires_at, c.subject
        FROM chunks c
        WHERE c.doc_id = ? AND ${visibility.where}
        ORDER BY c.rowid ASC
@@ -219,6 +230,7 @@ export function getChunkOrDoc(
     updated_at: row.updated_at,
     stage: row.stage === 'short' ? 'short' : 'long',
     expires_at: row.expires_at ?? null,
+    subject: row.subject ?? 'owner',
     score: 1,
   };
 }
@@ -231,6 +243,7 @@ export function recentDocs(
   k: number,
   kinds?: readonly string[],
   restriction?: Restriction,
+  subject?: string,
 ): RecentDoc[] {
   const visibility = visibilityClause(token, scene, 'c', restriction ? { restriction } : {});
   const clauses = [visibility.where];
@@ -238,6 +251,10 @@ export function recentDocs(
   if (kinds && kinds.length > 0) {
     clauses.push(`c.kind IN (${kinds.map(() => '?').join(', ')})`);
     values.push(...kinds);
+  }
+  if (subject) {
+    clauses.push('c.subject = ?');
+    values.push(subject);
   }
   values.push(Math.max(k * 6, 24));
 

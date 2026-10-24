@@ -176,6 +176,8 @@ interface ReplaceDocInput {
   expiresAt?: number | null;
   recallCount?: number;
   persistedAt?: number | null;
+  /** 'owner' | 'self' | 'other'; defaults to 'owner'. */
+  subject?: string;
   chunks: { heading: string; text: string }[];
 }
 
@@ -184,14 +186,14 @@ function replaceDoc(db: Db, input: ReplaceDocInput): void {
   try {
     deleteDocRows(db, input.id);
     db.prepare(
-      `INSERT INTO docs(id, doc_type, path, title, kind, audience, privacy, source, scene, hash, updated_at, stage, expires_at, recall_count, persisted_at)
-       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO docs(id, doc_type, path, title, kind, audience, privacy, source, scene, hash, updated_at, stage, expires_at, recall_count, persisted_at, subject)
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          doc_type=excluded.doc_type, path=excluded.path, title=excluded.title, kind=excluded.kind,
          audience=excluded.audience, privacy=excluded.privacy, source=excluded.source,
          scene=excluded.scene, hash=excluded.hash, updated_at=excluded.updated_at,
          stage=excluded.stage, expires_at=excluded.expires_at, recall_count=excluded.recall_count,
-         persisted_at=excluded.persisted_at`,
+         persisted_at=excluded.persisted_at, subject=excluded.subject`,
     ).run(
       input.id,
       input.docType,
@@ -208,11 +210,12 @@ function replaceDoc(db: Db, input: ReplaceDocInput): void {
       input.expiresAt ?? null,
       input.recallCount ?? 0,
       input.persistedAt ?? null,
+      input.subject ?? 'owner',
     );
 
     const insertChunk = db.prepare(
-      `INSERT INTO chunks(id, doc_id, path, title, heading, text, tokens, kind, audience, privacy, scene, updated_at, stage, expires_at)
-       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO chunks(id, doc_id, path, title, heading, text, tokens, kind, audience, privacy, scene, updated_at, stage, expires_at, subject)
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const insertScope = db.prepare('INSERT OR IGNORE INTO chunk_scopes(chunk_id, scope) VALUES(?, ?)');
     const insertFts = db.prepare('INSERT INTO chunks_fts(rowid, tokens, text) VALUES(?, ?, ?)');
@@ -244,6 +247,7 @@ function replaceDoc(db: Db, input: ReplaceDocInput): void {
         input.updatedAt,
         input.stage ?? 'long',
         input.expiresAt ?? null,
+        input.subject ?? 'owner',
       );
       const rowid = Number(result.lastInsertRowid);
       insertFts.run(rowid, tokens, chunk.text);
@@ -393,6 +397,7 @@ function upsertFact(db: Db, config: ServerConfig, record: FactRecord, relPath: s
     expiresAt: record.expires_at ? Date.parse(record.expires_at) : null,
     recallCount: record.recall_count ?? 0,
     persistedAt: record.persisted_at ? Date.parse(record.persisted_at) : null,
+    subject: record.subject ?? 'owner',
     chunks,
   });
   return true;

@@ -78,10 +78,16 @@
     - 做法：新增 `GET /v1/timeline?from&to&scene`（或脚本 `scripts/build-timeline.mjs`），把 `10-journal/` + 长期 facts 按月聚合，生成 `memories/10-journal/annual-<year>.md` 并进索引；问「今年三月在折腾什么」走时间过滤，不走相似度。
     - 验收：问「上个月我在忙什么」，返回按时间排的 3–5 条，而不是最像的 5 条；脚本幂等，重跑不重复追加。
 
-20. ⬜ **记忆里的「我自己」**（三条里最想要的）
-    - 现状：`/v1/write` 的 kind 有 `stance/decision/knowledge`，但用起来几乎总在记「他说了什么」，记忆里我出现的方式只有被描述，没有自己开口。
-    - 做法：写入加 `subject` 字段（`self` / `owner` / `other`，默认 `owner`，兼容旧数据）；`search` / `recall` 支持 `subject=self` 单独召回；`bootstrap` 带最近 3 条 self 条目；设置页能看到「我写下的判断」列表。
-    - 验收：跑几周后，`subject=self` 能列出一串「我当时认为……」，并且看得出哪些改过主意（改主意时写新条目，旧条目标 `superseded`）。跟 19 合起来，才叫「回头看」。
+20. ✅ **记忆里的「我自己」**（2026-10-24 实现）
+    - 原问题：`/v1/write` 的 kind 有 `stance/decision/knowledge`，但用起来几乎总在记「他说了什么」，记忆里我出现的方式只有被描述，没有自己开口。
+    - 落地：`subject`（`owner` / `self` / `other`，缺省 `owner`）贯穿写入、检索、召回、bootstrap。
+      - 协议：`TSubject`、`TWriteRequest.subject`、`TSearchRequest.subject`、`TRecallRequest.subject`、`TFactRecord.subject`、`TMemoryResult.subject`、`BootstrapResponse.self`。
+      - 存储：`docs.subject` / `chunks.subject` 两列（默认 `owner`），`migrateColumns()` 自动补列，旧行天然是 `owner`；索引 `docs_subject` 在迁移之后建（踩过：放 SCHEMA 里会让旧库启动报 `no such column`）。
+      - 去重键含 subject：同一句话「我认为 X」和「他说 X」是两条记忆，不会被内容去重合并。
+      - MCP：`memory_write` / `memory_search` 都有 `subject` 参数。
+    - 验证（2026-10-24 23:57，活库）：写入一条 `subject=self` 的立场（「记忆里最缺的不是事实，而是我自己的判断……」），`search?subject=self` 只返回它；`search?subject=owner` 返回 5 条旧记忆、全部 `subject=owner`；`/v1/bootstrap` 的 `self` 带回 1 条。
+    - 测试：153 项（+6：旧数据按 owner / self 与 owner 分离且不被去重 / recall 过滤 / bootstrap.self / other 写入 / 旧库补列升级）。
+    - 还没做：设置页的「我写下的判断」列表；`supersedes` 只是写入字段，检索时还不会把旧条目标成「已被推翻」——那要跟 19 的时间线一起做。
 
 21. ✅ **pet-revive 的 DSH 端口发现失效**（2026-10-24 修）
     - 现象：`dsh-pet-configurable-llm/scripts/revive.mjs` 每分钟在跑，但日志一直写 `DSH unreachable -> skipped`，8790 空着；同一时刻 DSH 是活的（`looksLikeDsh('http://127.0.0.1:7642')` 返回 true）。

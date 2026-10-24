@@ -97,6 +97,14 @@ pnpm embed              # 回填向量
 - **主人主动提起**：桥接标记 `from_owner` 后，该场景可临时读到 owner 本人的 `ownerAudiences` 记忆；敏感、其他人的私聊、`secret` 仍不放开。
 - **跨场景披露**（`POST /v1/disclose`）：群友在私聊问「刚才群里聊了什么」时，桥接先校验他是该群成员（持久化成员表，`group_increase`/`group_decrease` 事件维护 + 每日对账 + fail-closed），通过后才用 `disclose:group` 令牌读**那一个群**的 `chat`/`note`、`normal`/`personal` 消息。敏感、`secret`、其它群、私聊永不包含；每次披露写审计（`group` + `requester_hash`）。
 
+## 主体（subject）
+
+每条记忆带一个 `subject`：`owner`（默认，关于主人）、`self`（我自己的判断）、`other`（第三方）。
+
+- `/v1/write` 可指定；`/v1/search`、`/v1/recall` 可按它过滤；`/v1/bootstrap` 另带最近 3 条 `self`。
+- 去重键包含 subject：同一句话「我认为 X」和「他说 X」是两条记忆。
+- 旧数据没有这个字段，一律按 `owner` 读（SQLite 列默认值，`migrateColumns()` 自动补列，不需要迁移脚本）。
+
 ## 主要接口
 
 | 方法 | 路径 | 说明 |

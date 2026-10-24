@@ -18,6 +18,7 @@ function hit(id: string, score: number, updatedAt = 0): SearchHit {
     updated_at: updatedAt,
     stage: 'long',
     expires_at: null,
+    subject: 'owner',
     score,
   };
 }

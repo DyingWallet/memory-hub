@@ -49,6 +49,15 @@ export const STAGE_VALUES = ['short', 'long'] as const;
 export const TStage = Type.Union(STAGE_VALUES.map((v) => Type.Literal(v)));
 export type Stage = Static<typeof TStage>;
 
+/**
+ * Whose memory this is: the owner's, the assistant's own judgement, or a third
+ * party's. Absent means `owner` — every record written before this field existed
+ * is about the owner, so old data needs no migration.
+ */
+export const SUBJECT_VALUES = ['owner', 'self', 'other'] as const;
+export const TSubject = Type.Union(SUBJECT_VALUES.map((v) => Type.Literal(v)));
+export type Subject = Static<typeof TSubject>;
+
 /** `*` = root (main session / owner QQ DM), `shared` = every surface. */
 export const TScopeList = Type.Array(Type.String({ minLength: 1, maxLength: 120 }), {
   uniqueItems: true,
@@ -81,6 +90,8 @@ export const TMemoryResult = Type.Object(
     score: Type.Optional(Type.Number()),
     /** `short` items decay and may be forgotten; `long` items are durable. */
     stage: Type.Optional(TStage),
+    /** Whose memory this is (absent = `owner`). */
+    subject: Type.Optional(TSubject),
     expires_at: Type.Optional(Type.String()),
     /** Set when this item became visible because its owner brought it up in this scene. */
     disclosure: Type.Optional(Type.Union([Type.Literal('owner_initiated')])),
@@ -225,6 +236,8 @@ export const TBootstrapResponse = Type.Object(
     identity: Type.String(),
     audience: TAudience,
     recent: Type.Array(TRecentItem),
+    /** The assistant's own recent judgements (`subject=self`), newest first. */
+    self: Type.Array(TRecentItem),
     counts: Type.Object(
       { docs: Type.Integer(), facts: Type.Integer() },
       { additionalProperties: false },
@@ -247,6 +260,8 @@ export const TSearchRequest = Type.Object(
     kinds: Type.Optional(Type.Array(TMemoryKind, { maxItems: 16 })),
     path_prefix: Type.Optional(Type.String({ maxLength: 200 })),
     max_chars: Type.Optional(Type.Integer({ minimum: 40, maximum: 6000 })),
+    /** Only memories about this subject (`owner` / `self` / `other`). */
+    subject: Type.Optional(TSubject),
   },
   { additionalProperties: false },
 );
@@ -359,6 +374,8 @@ export const TRecallRequest = Type.Object(
     max_chars: Type.Optional(Type.Integer({ minimum: 40, maximum: 1000 })),
     /** Ask for the newest chat messages as well (see `TRecallLive`). */
     live: Type.Optional(TRecallLive),
+    /** Only memories about this subject (`owner` / `self` / `other`). */
+    subject: Type.Optional(TSubject),
     /** Owner-only: `groups` returns recent group messages instead of FTS hits. */
     scope: Type.Optional(Type.Union([Type.Literal('scene'), Type.Literal('groups')])),
     /** Time window for `scope=groups` (hours, default 24). */
@@ -507,6 +524,8 @@ export const TFactRecord = Type.Object(
     source: Type.Optional(TSource),
     device: Type.Optional(Type.String({ maxLength: 64 })),
     scene: Type.Optional(Type.String({ maxLength: 120 })),
+    /** Whose memory this is; absent means `owner` (all pre-existing records). */
+    subject: Type.Optional(TSubject),
     supersedes: Type.Optional(Type.String({ maxLength: 200 })),
     /** `short` = ordinary chat, decays; `long` = durable (default). */
     stage: Type.Optional(TStage),
@@ -532,6 +551,8 @@ export const TWriteRequest = Type.Object(
     privacy: Type.Optional(TPrivacy),
     source: Type.Optional(TSource),
     scene: Type.Optional(Type.String({ maxLength: 120 })),
+    /** `self` = the assistant's own judgement, not a fact about the owner. */
+    subject: Type.Optional(TSubject),
     supersedes: Type.Optional(Type.String({ maxLength: 200 })),
     stage: Type.Optional(TStage),
     expires_at: Type.Optional(Type.String({ maxLength: 40 })),

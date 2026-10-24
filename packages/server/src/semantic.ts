@@ -310,7 +310,7 @@ export class SemanticIndex {
     });
     const placeholders = ids.map(() => '?').join(', ');
     const values: (string | number)[] = [...ids, ...visibility.params];
-    let sql = `SELECT c.id, c.path, c.title, c.heading, c.text, c.kind, c.updated_at, c.stage, c.expires_at
+    let sql = `SELECT c.id, c.path, c.title, c.heading, c.text, c.kind, c.updated_at, c.stage, c.expires_at, c.subject
        FROM chunks c WHERE c.id IN (${placeholders}) AND ${visibility.where}`;
     if (params.kinds && params.kinds.length > 0) {
       sql += ` AND c.kind IN (${params.kinds.map(() => '?').join(', ')})`;
@@ -319,6 +319,10 @@ export class SemanticIndex {
     if (params.pathPrefix) {
       sql += ' AND c.path LIKE ?';
       values.push(`${params.pathPrefix.replaceAll('\\', '/')}%`);
+    }
+    if (params.subject) {
+      sql += ' AND c.subject = ?';
+      values.push(params.subject);
     }
     return this.db.prepare(sql).all(...values) as unknown as {
       id: string;
@@ -330,6 +334,7 @@ export class SemanticIndex {
       updated_at: number;
       stage: string | null;
       expires_at: number | null;
+      subject: string | null;
     }[];
   }
 
@@ -344,6 +349,7 @@ export class SemanticIndex {
       updated_at: number;
       stage: string | null;
       expires_at: number | null;
+      subject?: string | null;
     },
     score: number,
     maxChars: number,
@@ -359,6 +365,7 @@ export class SemanticIndex {
       updated_at: row.updated_at,
       stage: row.stage === 'short' ? 'short' : 'long',
       expires_at: row.expires_at ?? null,
+      subject: row.subject ?? 'owner',
       score,
     };
   }

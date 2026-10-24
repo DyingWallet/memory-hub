@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS docs (
   stage      TEXT NOT NULL DEFAULT 'long', -- 'short' | 'long'
   expires_at INTEGER,                     -- epoch ms for short memories
   recall_count INTEGER NOT NULL DEFAULT 0,
-  persisted_at INTEGER
+  persisted_at INTEGER,
+  subject    TEXT NOT NULL DEFAULT 'owner' -- 'owner' | 'self' | 'other'
 );
 
 CREATE INDEX IF NOT EXISTS docs_path ON docs(path);
@@ -51,7 +52,8 @@ CREATE TABLE IF NOT EXISTS chunks (
   scene      TEXT,
   updated_at INTEGER NOT NULL,
   stage      TEXT NOT NULL DEFAULT 'long',
-  expires_at INTEGER
+  expires_at INTEGER,
+  subject    TEXT NOT NULL DEFAULT 'owner' -- mirror of docs.subject
 );
 
 CREATE INDEX IF NOT EXISTS chunks_doc ON chunks(doc_id);
@@ -80,6 +82,9 @@ export function openDb(indexFile: string): Db {
   const db = new DatabaseSync(indexFile, { allowExtension: true });
   db.exec(SCHEMA);
   migrateColumns(db);
+  // Indexes over migrated columns must come after the migration: on an existing
+  // database SCHEMA runs first, and `docs.subject` does not exist yet there.
+  db.exec('CREATE INDEX IF NOT EXISTS docs_subject ON docs(subject);');
 
   // The index is disposable; on a schema bump just drop and rebuild it.
   const stored = getMeta(db, 'schema_version');
@@ -105,8 +110,12 @@ function migrateColumns(db: Db): void {
   add('docs', 'expires_at', 'INTEGER');
   add('docs', 'recall_count', 'INTEGER NOT NULL DEFAULT 0');
   add('docs', 'persisted_at', 'INTEGER');
+  // Old rows get the column default 'owner', which is exactly right: everything
+  // written before `subject` existed is about the owner.
+  add('docs', 'subject', "TEXT NOT NULL DEFAULT 'owner'");
   add('chunks', 'stage', "TEXT NOT NULL DEFAULT 'long'");
   add('chunks', 'expires_at', 'INTEGER');
+  add('chunks', 'subject', "TEXT NOT NULL DEFAULT 'owner'");
 }
 
 export function setMeta(db: Db, key: string, value: string): void {

@@ -115,14 +115,19 @@ export function createMemoryMcpServer(client: MemoryApi, options: McpServerOptio
         query: z.string().min(1).max(2000).describe('检索词，可以是用户原话'),
         k: z.number().int().min(1).max(10).optional().describe('条数，默认 5，最大 10'),
         kinds: z.array(z.string()).max(16).optional().describe('限定类型，如 event/note/knowledge'),
+        subject: z
+          .enum(['owner', 'self', 'other'])
+          .optional()
+          .describe('只取关于谁的记忆：owner=主人、self=我自己的判断、other=第三方；省略不筛'),
         scene: sceneArg,
       },
     },
-    async ({ query, k, kinds, scene }) => {
+    async ({ query, k, kinds, subject, scene }) => {
       try {
         const response = await client.search(query, {
           ...(k !== undefined ? { k } : {}),
           ...(kinds ? { kinds: kinds as MemoryKind[] } : {}),
+          ...(subject ? { subject } : {}),
           ...(scene ? { scene } : {}),
         });
         return ok(response);
@@ -218,11 +223,15 @@ export function createMemoryMcpServer(client: MemoryApi, options: McpServerOptio
         tags: z.array(z.string().max(64)).max(24).optional(),
         privacy: z.enum(['normal', 'personal', 'work', 'financial']).optional(),
         audience: z.array(z.string().max(120)).max(32).optional().describe('可见范围；省略按类型默认'),
+        subject: z
+          .enum(['owner', 'self', 'other'])
+          .optional()
+          .describe('这是关于谁的：owner=主人（默认）、self=我自己的判断、other=第三方'),
         idempotency_key: z.string().max(200).optional().describe('重试时用来去重'),
         scene: sceneArg,
       },
     },
-    async ({ kind, text, tags, privacy, audience, idempotency_key, scene }) => {
+    async ({ kind, text, tags, privacy, audience, subject, idempotency_key, scene }) => {
       if (!writeEnabled) {
         return fail(new Error('write is disabled in the plugin config'));
       }
@@ -234,6 +243,7 @@ export function createMemoryMcpServer(client: MemoryApi, options: McpServerOptio
             ...(tags ? { tags } : {}),
             ...(privacy ? { privacy } : {}),
             ...(audience ? { audience } : {}),
+            ...(subject ? { subject } : {}),
             ...(idempotency_key ? { idempotency_key } : {}),
             ...(scene ? { scene } : {}),
           }),

@@ -9,6 +9,7 @@ const bootstrapResponse: BootstrapResponse = {
   identity: '助手（潮助手的助手）',
   audience: { id: 'main', face: '主会话' },
   recent: [{ id: 'doc:1', title: '桌宠接入', kind: 'knowledge' }],
+  self: [{ id: 'f_self_1', title: '我认为记忆该能记判断', kind: 'stance' }],
   counts: { docs: 3, facts: 2 },
   instructions: '先 memory_search',
 };

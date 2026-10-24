@@ -412,14 +412,11 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       const auth = authenticate(request.headers.authorization, tokens, request.body?.scene);
       const identity = loadIdentity(config);
       const card = loadAudienceCard(config, auth.scene);
-      const recent = recentDocs(
-        db,
-        auth.view,
-        auth.scene,
-        5,
-        undefined,
-        restrictionFor(auth.view.scopes, auth.scene, config.privacy),
-      );
+      const restriction = restrictionFor(auth.view.scopes, auth.scene, config.privacy);
+      const recent = recentDocs(db, auth.view, auth.scene, 5, undefined, restriction);
+      // The assistant's own recent judgements, so a fresh session starts with
+      // "what I thought last time", not only with facts about the owner.
+      const self = recentDocs(db, auth.view, auth.scene, 3, undefined, restriction, 'self');
       const stats = readStats(db);
 
       finish('bootstrap', auth, started, recent.map((doc) => doc.id));
@@ -441,6 +438,12 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
           kind: doc.kind as MemoryKind,
           updated_at: new Date(doc.updated_at).toISOString(),
         })),
+        self: self.map((doc) => ({
+          id: doc.id,
+          title: doc.title,
+          kind: doc.kind as MemoryKind,
+          updated_at: new Date(doc.updated_at).toISOString(),
+        })),
         counts: { docs: stats.docs, facts: stats.facts },
         instructions: config.instructions,
       };
@@ -451,7 +454,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   /* search                                                           */
   /* ---------------------------------------------------------------- */
   app.post<{
-    Body: { query: string; k?: number; scene?: string; kinds?: MemoryKind[]; path_prefix?: string; max_chars?: number };
+    Body: { query: string; k?: number; scene?: string; kinds?: MemoryKind[]; path_prefix?: string; max_chars?: number; subject?: 'owner' | 'self' | 'other' };
     Reply: SearchResponse;
   }>(
     routeByOperationId('search').path,
@@ -476,6 +479,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         restriction,
         ...(body.kinds ? { kinds: body.kinds } : {}),
         ...(body.path_prefix ? { pathPrefix: body.path_prefix } : {}),
+        ...(body.subject ? { subject: body.subject } : {}),
       }, k);
       finish('search', auth, started, outcome.hits.map((hit) => hit.id), body.query);
       return {
@@ -554,6 +558,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       scope?: 'scene' | 'groups';
       since_hours?: number;
       live?: { k?: number; minutes?: number; scenes?: string[] };
+      subject?: 'owner' | 'self' | 'other';
     };
     Reply: RecallResponse;
   }>(
@@ -659,6 +664,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         token: auth.view,
         scene: auth.scene,
         restriction: restrictionFor(auth.view.scopes, auth.scene, config.privacy),
+        ...(body.subject ? { subject: body.subject } : {}),
       };
       // Owner-initiated disclosure: when the memory's owner themself brings the
       // topic up in this scene, the owner's own memories become readable here.
@@ -714,6 +720,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       privacy?: 'normal' | 'personal' | 'work' | 'financial' | 'secret';
       source?: 'main' | 'qq' | 'import' | 'work';
       scene?: string;
+      subject?: 'owner' | 'self' | 'other';
       supersedes?: string;
       stage?: 'short' | 'long';
       expires_at?: string;
@@ -763,8 +770,11 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         throw errors.forbidden(`this token may not write to audience ${JSON.stringify(audience)}`);
       }
 
-      // Cheap content de-duplication: same scene/kind/text/audience/privacy
-      // reuses the previous id instead of appending a duplicate JSONL row.
+      // Cheap content de-duplication: same scene/kind/text/audience/privacy/
+      // subject reuses the previous id instead of appending a duplicate row.
+      // `subject` has to be part of the key: "I think X" and "he thinks X" are
+      // the same words but not the same memory.
+      const subject = body.subject ?? 'owner';
       const contentKey = dedupeKey([
         'fact',
         auth.scene,
@@ -772,6 +782,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         normalizeForDedupe(body.text),
         [...audience].sort().join(','),
         privacy,
+        subject,
       ]);
       const dedupeMeta = `dedupe:${contentKey}`;
       const existingId = getMeta(db, dedupeMeta);
@@ -796,6 +807,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         source: body.source ?? (auth.scene === 'main' ? 'main' : 'qq'),
         device: 'memd',
         scene: auth.scene,
+        subject,
         ...(body.supersedes ? { supersedes: body.supersedes } : {}),
         ...(body.meta ? { meta: body.meta } : {}),
       };
@@ -1126,6 +1138,7 @@ function toMemoryResult(hit: SearchHit, disclosure?: 'owner_initiated'): MemoryR
     updated_at: new Date(hit.updated_at).toISOString(),
     score: Math.round(hit.score * 1e4) / 1e4,
     stage: hit.stage,
+    subject: hit.subject as 'owner' | 'self' | 'other',
     ...(hit.expires_at ? { expires_at: new Date(hit.expires_at).toISOString() } : {}),
     ...(disclosure ? { disclosure } : {}),
   };
