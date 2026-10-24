@@ -105,6 +105,15 @@ pnpm embed              # 回填向量
 - 去重键包含 subject：同一句话「我认为 X」和「他说 X」是两条记忆。
 - 旧数据没有这个字段，一律按 `owner` 读（SQLite 列默认值，`migrateColumns()` 自动补列，不需要迁移脚本）。
 
+## 时间线（timeline）
+
+`/v1/recall` 按相似度给片段，回答的是「像不像」；时间线回答「那阵子发生了什么」。
+
+- `POST /v1/timeline`：`from` / `to` 支持 `YYYY` / `YYYY-MM` / `YYYY-MM-DD` / ISO（`from` 含、`to` 不含，缺省最近 12 个月），可按 `subject`、`kinds` 过滤；返回按月分桶的 `months[].items[]`。
+- `limit` 截断时保留**最近**的一段（SQL 先取最新再反转成正序）。
+- `supersedes` / `superseded_by` 会双向标出替代关系——「我改过主意」在时间线上看得见。
+- `node scripts/build-timeline.mjs` 生成 `memories/10-journal/annual-<year>.md`（facts + 日记按月聚合，整篇重写，幂等，跳过短期 chat 与坏编码），让年表也能被检索到。
+
 ## 主要接口
 
 | 方法 | 路径 | 说明 |
@@ -121,6 +130,7 @@ pnpm embed              # 回填向量
 | POST | `/v1/get` | 取一条（chunk id 或 doc id） |
 | POST | `/v1/recent` | 最近记忆 |
 | POST | `/v1/recall` | 按最近对话召回 2–3 条 |
+| POST | `/v1/timeline` | 时间线：按时间倒出记忆、按月分组（另见「时间线」一节） |
 | POST | `/v1/disclose` | 跨场景披露：一个群的最近消息（`disclose:group`） |
 | POST | `/v1/write` | 追加一条事实并索引 |
 | POST | `/v1/forget` | 忘记一条（JSONL 留 tombstone） |

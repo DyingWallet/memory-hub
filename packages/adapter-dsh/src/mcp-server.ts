@@ -23,6 +23,7 @@ import type {
   RecentResponse,
   ReviewResponse,
   SearchResponse,
+  TimelineResponse,
   WriteRequest,
   WriteResponse,
 } from '@memsvc/protocol';
@@ -33,6 +34,8 @@ export const SERVER_INSTRUCTIONS = [
   '长期记忆服务。用户提到过去、旧事、约定、人或项目时，先 memory_search 再回答。',
   '默认先取 5 条；不够再 k=10。不要一次读全量，不要凭标题编造正文。',
   'memory_write 只记持久的事实、承诺、立场、偏好；不记流水账和一次性的寒暄。',
+  '记我自己的判断时用 memory_write + subject=self：记忆不只是「他说了什么」。',
+  '问「那阵子 / 上个月 / 去年在忙什么」用 memory_timeline，按时间看，不要拿 memory_search 硬凑。',
   '普通聊天已自动进短期记忆（会过期）。新会话开始时若不确定，先 memory_review(status_only=true)；需要回顾就用 memory_review 看候选、memory_persist 挑重要的转长期，其余让它过期。',
   '写不出处不确定时就别写；宁可少一条，不要写错一条。',
 ].join('\n');
@@ -40,13 +43,25 @@ export const SERVER_INSTRUCTIONS = [
 /** Subset of MemoryClient the MCP layer needs; tests inject a fake. */
 export interface MemoryApi {
   bootstrap(scene?: string): Promise<BootstrapResponse>;
-  search(query: string, options?: { k?: number; scene?: string; kinds?: MemoryKind[]; maxChars?: number }): Promise<SearchResponse>;
+  search(
+    query: string,
+    options?: { k?: number; scene?: string; kinds?: MemoryKind[]; maxChars?: number; subject?: 'owner' | 'self' | 'other' },
+  ): Promise<SearchResponse>;
   get(id: string, options?: { scene?: string; maxChars?: number }): Promise<GetResponse>;
   recent(options?: { k?: number; scene?: string; kinds?: MemoryKind[] }): Promise<RecentResponse>;
   recall(
     messages: RecallMessage[],
-    options?: { k?: number; scene?: string; maxChars?: number },
+    options?: { k?: number; scene?: string; maxChars?: number; subject?: 'owner' | 'self' | 'other' },
   ): Promise<RecallResponse>;
+  timeline(options?: {
+    from?: string;
+    to?: string;
+    scene?: string;
+    subject?: 'owner' | 'self' | 'other';
+    kinds?: MemoryKind[];
+    limit?: number;
+    maxChars?: number;
+  }): Promise<TimelineResponse>;
   write(record: WriteRequest): Promise<WriteResponse>;
   review(options?: { scene?: string; lookbackHours?: number; limit?: number; dueOnly?: boolean }): Promise<ReviewResponse>;
   persist(ids: string[], note?: { kind?: MemoryKind; text: string; tags?: string[] }): Promise<PersistResponse>;
@@ -131,6 +146,38 @@ export function createMemoryMcpServer(client: MemoryApi, options: McpServerOptio
           ...(scene ? { scene } : {}),
         });
         return ok(response);
+      } catch (error) {
+        return fail(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'memory_timeline',
+    {
+      title: '时间线',
+      description: '按时间倒出「那阵子发生了什么」：给年月范围，返回按月分组的记忆，不走相似度。',
+      inputSchema: {
+        from: z.string().max(40).optional().describe('起点：YYYY / YYYY-MM / YYYY-MM-DD；省略=一年前'),
+        to: z.string().max(40).optional().describe('终点（不含）；省略=现在'),
+        subject: z.enum(['owner', 'self', 'other']).optional().describe('只看关于谁的记忆'),
+        kinds: z.array(z.string()).max(16).optional(),
+        limit: z.number().int().min(1).max(1000).optional().describe('最多多少条，默认 200'),
+        scene: sceneArg,
+      },
+    },
+    async ({ from, to, subject, kinds, limit, scene }) => {
+      try {
+        return ok(
+          await client.timeline({
+            ...(from ? { from } : {}),
+            ...(to ? { to } : {}),
+            ...(subject ? { subject } : {}),
+            ...(kinds ? { kinds: kinds as MemoryKind[] } : {}),
+            ...(typeof limit === 'number' ? { limit } : {}),
+            ...(scene ? { scene } : {}),
+          }),
+        );
       } catch (error) {
         return fail(error);
       }

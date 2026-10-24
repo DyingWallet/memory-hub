@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS docs (
   expires_at INTEGER,                     -- epoch ms for short memories
   recall_count INTEGER NOT NULL DEFAULT 0,
   persisted_at INTEGER,
-  subject    TEXT NOT NULL DEFAULT 'owner' -- 'owner' | 'self' | 'other'
+  subject    TEXT NOT NULL DEFAULT 'owner', -- 'owner' | 'self' | 'other'
+  supersedes TEXT                        -- id of the memory this one replaced
 );
 
 CREATE INDEX IF NOT EXISTS docs_path ON docs(path);
@@ -113,6 +114,7 @@ function migrateColumns(db: Db): void {
   // Old rows get the column default 'owner', which is exactly right: everything
   // written before `subject` existed is about the owner.
   add('docs', 'subject', "TEXT NOT NULL DEFAULT 'owner'");
+  add('docs', 'supersedes', 'TEXT');
   add('chunks', 'stage', "TEXT NOT NULL DEFAULT 'long'");
   add('chunks', 'expires_at', 'INTEGER');
   add('chunks', 'subject', "TEXT NOT NULL DEFAULT 'owner'");

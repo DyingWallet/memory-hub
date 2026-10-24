@@ -301,9 +301,7 @@ export interface LiveMessage {
   text: string;
   updated_at: number;
   scene: string | null;
-}
-
-/**
+}/**
  * "What is happening right now": the newest short-term chat messages, newest
  * first in SQL and reversed so the caller sees them in conversational order.
  *
@@ -358,6 +356,113 @@ export function liveMessages(
       scene: row.scene ?? null,
     });
     if (out.length >= options.k) break;
+  }
+  return out.reverse();
+}
+
+/** One document on the timeline (not a chunk). */
+export interface TimelineDoc {
+  id: string;
+  title: string;
+  kind: string;
+  subject: string;
+  stage: 'short' | 'long';
+  updated_at: number;
+  text: string;
+  /** Id of the memory this one replaced. */
+  supersedes?: string;
+  /** Id of a newer memory that replaced this one. */
+  superseded_by?: string;
+}
+
+/**
+ * "What was going on back then" — documents ordered by time instead of
+ * similarity. Same visibility SQL as search, so a group token still cannot see
+ * the owner's timeline.
+ */
+export function timelineDocs(
+  db: Db,
+  token: TokenView,
+  scene: string,
+  restriction: Restriction | undefined,
+  options: {
+    from: number;
+    to: number;
+    subject?: string;
+    kinds?: readonly string[];
+    limit: number;
+    maxChars: number;
+  },
+): TimelineDoc[] {
+  const visibility = visibilityClause(token, scene, 'c', restriction ? { restriction } : {});
+  const clauses = [visibility.where, 'c.updated_at >= ?', 'c.updated_at < ?'];
+  const values: (string | number)[] = [...visibility.params, options.from, options.to];
+  if (options.subject) {
+    clauses.push('c.subject = ?');
+    values.push(options.subject);
+  }
+  if (options.kinds && options.kinds.length > 0) {
+    clauses.push(`c.kind IN (${options.kinds.map(() => '?').join(', ')})`);
+    values.push(...options.kinds);
+  }
+  // Several chunks per document is normal; fetch a margin and de-duplicate.
+  values.push(Math.max(options.limit * 4, 64));
+
+  // Newest first so that a `limit` smaller than the window keeps the recent
+  // end of "that period" instead of silently dropping it; the result is
+  // reversed below, because a timeline reads forward in time.
+  const rows = db
+    .prepare(
+      `SELECT c.doc_id, c.title, c.kind, c.subject, c.stage, c.updated_at, c.text, c.rowid
+       FROM chunks c
+       WHERE ${clauses.join(' AND ')}
+       ORDER BY c.updated_at DESC, c.rowid DESC
+       LIMIT ?`,
+    )
+    .all(...values) as unknown as {
+    doc_id: string;
+    title: string;
+    kind: string;
+    subject: string | null;
+    stage: string | null;
+    updated_at: number;
+    text: string;
+  }[];
+
+  const seen = new Set<string>();
+  const out: TimelineDoc[] = [];
+  for (const row of rows) {
+    if (seen.has(row.doc_id)) continue;
+    seen.add(row.doc_id);
+    out.push({
+      id: row.doc_id,
+      title: row.title || titleFrom(row.text),
+      kind: row.kind,
+      subject: row.subject ?? 'owner',
+      stage: row.stage === 'short' ? 'short' : 'long',
+      updated_at: row.updated_at,
+      text: truncate(row.text, options.maxChars),
+    });
+    if (out.length >= options.limit) break;
+  }
+  if (out.length === 0) return out;
+
+  // Resolve `supersedes` in both directions, but only for the rows we are about
+  // to show: a replacement chain must not leak an invisible memory's id.
+  const ids = out.map((doc) => doc.id);
+  const placeholders = ids.map(() => '?').join(', ');
+  const links = db
+    .prepare(
+      `SELECT id, supersedes FROM docs
+        WHERE id IN (${placeholders}) OR supersedes IN (${placeholders})`,
+    )
+    .all(...ids, ...ids) as { id: string; supersedes: string | null }[];
+  const byId = new Map(out.map((doc) => [doc.id, doc]));
+  for (const link of links) {
+    const self = byId.get(link.id);
+    if (self && link.supersedes) self.supersedes = link.supersedes;
+    const replaced = link.supersedes ? byId.get(link.supersedes) : undefined;
+    if (replaced) replaced.superseded_by = link.id;
   }
   return out.reverse();
 }

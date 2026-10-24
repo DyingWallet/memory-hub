@@ -560,6 +560,7 @@
           "identity",
           "audience",
           "recent",
+          "self",
           "counts",
           "instructions"
         ],
@@ -605,6 +606,97 @@
             }
           },
           "recent": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "title",
+                "kind"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "note",
+                      "type": "string"
+                    },
+                    {
+                      "const": "event",
+                      "type": "string"
+                    },
+                    {
+                      "const": "stance",
+                      "type": "string"
+                    },
+                    {
+                      "const": "promise",
+                      "type": "string"
+                    },
+                    {
+                      "const": "person",
+                      "type": "string"
+                    },
+                    {
+                      "const": "identity",
+                      "type": "string"
+                    },
+                    {
+                      "const": "chat",
+                      "type": "string"
+                    },
+                    {
+                      "const": "qq-topic",
+                      "type": "string"
+                    },
+                    {
+                      "const": "qq-impression",
+                      "type": "string"
+                    },
+                    {
+                      "const": "journal",
+                      "type": "string"
+                    },
+                    {
+                      "const": "decision",
+                      "type": "string"
+                    },
+                    {
+                      "const": "knowledge",
+                      "type": "string"
+                    },
+                    {
+                      "const": "audience",
+                      "type": "string"
+                    },
+                    {
+                      "const": "project",
+                      "type": "string"
+                    },
+                    {
+                      "const": "profile",
+                      "type": "string"
+                    },
+                    {
+                      "const": "preference",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "updated_at": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "self": {
             "type": "array",
             "items": {
               "additionalProperties": false,
@@ -817,6 +909,22 @@
             "minimum": 40,
             "maximum": 6000,
             "type": "integer"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "const": "owner",
+                "type": "string"
+              },
+              {
+                "const": "self",
+                "type": "string"
+              },
+              {
+                "const": "other",
+                "type": "string"
+              }
+            ]
           }
         }
       },
@@ -957,6 +1065,22 @@
                     },
                     {
                       "const": "long",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "subject": {
+                  "anyOf": [
+                    {
+                      "const": "owner",
+                      "type": "string"
+                    },
+                    {
+                      "const": "self",
+                      "type": "string"
+                    },
+                    {
+                      "const": "other",
                       "type": "string"
                     }
                   ]
@@ -1133,6 +1257,22 @@
                       },
                       {
                         "const": "long",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "subject": {
+                    "anyOf": [
+                      {
+                        "const": "owner",
+                        "type": "string"
+                      },
+                      {
+                        "const": "self",
+                        "type": "string"
+                      },
+                      {
+                        "const": "other",
                         "type": "string"
                       }
                     ]
@@ -1375,6 +1515,22 @@
                     }
                   ]
                 },
+                "subject": {
+                  "anyOf": [
+                    {
+                      "const": "owner",
+                      "type": "string"
+                    },
+                    {
+                      "const": "self",
+                      "type": "string"
+                    },
+                    {
+                      "const": "other",
+                      "type": "string"
+                    }
+                  ]
+                },
                 "expires_at": {
                   "type": "string"
                 },
@@ -1432,6 +1588,46 @@
             "minimum": 40,
             "maximum": 1000,
             "type": "integer"
+          },
+          "live": {
+            "additionalProperties": false,
+            "type": "object",
+            "properties": {
+              "k": {
+                "minimum": 1,
+                "maximum": 12,
+                "type": "integer"
+              },
+              "minutes": {
+                "minimum": 1,
+                "maximum": 1440,
+                "type": "integer"
+              },
+              "scenes": {
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "maxLength": 120,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "const": "owner",
+                "type": "string"
+              },
+              {
+                "const": "self",
+                "type": "string"
+              },
+              {
+                "const": "other",
+                "type": "string"
+              }
+            ]
           },
           "scope": {
             "anyOf": [
@@ -1594,6 +1790,176 @@
                     }
                   ]
                 },
+                "subject": {
+                  "anyOf": [
+                    {
+                      "const": "owner",
+                      "type": "string"
+                    },
+                    {
+                      "const": "self",
+                      "type": "string"
+                    },
+                    {
+                      "const": "other",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "expires_at": {
+                  "type": "string"
+                },
+                "disclosure": {
+                  "const": "owner_initiated",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "live": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "title",
+                "kind",
+                "render"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "note",
+                      "type": "string"
+                    },
+                    {
+                      "const": "event",
+                      "type": "string"
+                    },
+                    {
+                      "const": "stance",
+                      "type": "string"
+                    },
+                    {
+                      "const": "promise",
+                      "type": "string"
+                    },
+                    {
+                      "const": "person",
+                      "type": "string"
+                    },
+                    {
+                      "const": "identity",
+                      "type": "string"
+                    },
+                    {
+                      "const": "chat",
+                      "type": "string"
+                    },
+                    {
+                      "const": "qq-topic",
+                      "type": "string"
+                    },
+                    {
+                      "const": "qq-impression",
+                      "type": "string"
+                    },
+                    {
+                      "const": "journal",
+                      "type": "string"
+                    },
+                    {
+                      "const": "decision",
+                      "type": "string"
+                    },
+                    {
+                      "const": "knowledge",
+                      "type": "string"
+                    },
+                    {
+                      "const": "audience",
+                      "type": "string"
+                    },
+                    {
+                      "const": "project",
+                      "type": "string"
+                    },
+                    {
+                      "const": "profile",
+                      "type": "string"
+                    },
+                    {
+                      "const": "preference",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "render": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "text"
+                  ],
+                  "properties": {
+                    "type": {
+                      "const": "text",
+                      "type": "string"
+                    },
+                    "text": {
+                      "maxLength": 20000,
+                      "type": "string"
+                    }
+                  }
+                },
+                "path": {
+                  "type": "string"
+                },
+                "heading": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                },
+                "score": {
+                  "type": "number"
+                },
+                "stage": {
+                  "anyOf": [
+                    {
+                      "const": "short",
+                      "type": "string"
+                    },
+                    {
+                      "const": "long",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "subject": {
+                  "anyOf": [
+                    {
+                      "const": "owner",
+                      "type": "string"
+                    },
+                    {
+                      "const": "self",
+                      "type": "string"
+                    },
+                    {
+                      "const": "other",
+                      "type": "string"
+                    }
+                  ]
+                },
                 "expires_at": {
                   "type": "string"
                 },
@@ -1619,6 +1985,295 @@
               },
               "last_reviewed_at": {
                 "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "timelineRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "from": {
+            "maxLength": 40,
+            "type": "string"
+          },
+          "to": {
+            "maxLength": 40,
+            "type": "string"
+          },
+          "scene": {
+            "maxLength": 120,
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "const": "owner",
+                "type": "string"
+              },
+              {
+                "const": "self",
+                "type": "string"
+              },
+              {
+                "const": "other",
+                "type": "string"
+              }
+            ]
+          },
+          "kinds": {
+            "maxItems": 16,
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "const": "note",
+                  "type": "string"
+                },
+                {
+                  "const": "event",
+                  "type": "string"
+                },
+                {
+                  "const": "stance",
+                  "type": "string"
+                },
+                {
+                  "const": "promise",
+                  "type": "string"
+                },
+                {
+                  "const": "person",
+                  "type": "string"
+                },
+                {
+                  "const": "identity",
+                  "type": "string"
+                },
+                {
+                  "const": "chat",
+                  "type": "string"
+                },
+                {
+                  "const": "qq-topic",
+                  "type": "string"
+                },
+                {
+                  "const": "qq-impression",
+                  "type": "string"
+                },
+                {
+                  "const": "journal",
+                  "type": "string"
+                },
+                {
+                  "const": "decision",
+                  "type": "string"
+                },
+                {
+                  "const": "knowledge",
+                  "type": "string"
+                },
+                {
+                  "const": "audience",
+                  "type": "string"
+                },
+                {
+                  "const": "project",
+                  "type": "string"
+                },
+                {
+                  "const": "profile",
+                  "type": "string"
+                },
+                {
+                  "const": "preference",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "limit": {
+            "minimum": 1,
+            "maximum": 1000,
+            "type": "integer"
+          },
+          "max_chars": {
+            "minimum": 40,
+            "maximum": 1000,
+            "type": "integer"
+          }
+        }
+      },
+      "timelineResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "total",
+          "months"
+        ],
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "months": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "month",
+                "count",
+                "items"
+              ],
+              "properties": {
+                "month": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer"
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "title",
+                      "kind",
+                      "subject",
+                      "stage",
+                      "updated_at",
+                      "text"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "anyOf": [
+                          {
+                            "const": "note",
+                            "type": "string"
+                          },
+                          {
+                            "const": "event",
+                            "type": "string"
+                          },
+                          {
+                            "const": "stance",
+                            "type": "string"
+                          },
+                          {
+                            "const": "promise",
+                            "type": "string"
+                          },
+                          {
+                            "const": "person",
+                            "type": "string"
+                          },
+                          {
+                            "const": "identity",
+                            "type": "string"
+                          },
+                          {
+                            "const": "chat",
+                            "type": "string"
+                          },
+                          {
+                            "const": "qq-topic",
+                            "type": "string"
+                          },
+                          {
+                            "const": "qq-impression",
+                            "type": "string"
+                          },
+                          {
+                            "const": "journal",
+                            "type": "string"
+                          },
+                          {
+                            "const": "decision",
+                            "type": "string"
+                          },
+                          {
+                            "const": "knowledge",
+                            "type": "string"
+                          },
+                          {
+                            "const": "audience",
+                            "type": "string"
+                          },
+                          {
+                            "const": "project",
+                            "type": "string"
+                          },
+                          {
+                            "const": "profile",
+                            "type": "string"
+                          },
+                          {
+                            "const": "preference",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "subject": {
+                        "anyOf": [
+                          {
+                            "const": "owner",
+                            "type": "string"
+                          },
+                          {
+                            "const": "self",
+                            "type": "string"
+                          },
+                          {
+                            "const": "other",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "stage": {
+                        "anyOf": [
+                          {
+                            "const": "short",
+                            "type": "string"
+                          },
+                          {
+                            "const": "long",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "updated_at": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "supersedes": {
+                        "type": "string"
+                      },
+                      "superseded_by": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
               }
             }
           }
@@ -1801,6 +2456,22 @@
                     }
                   ]
                 },
+                "subject": {
+                  "anyOf": [
+                    {
+                      "const": "owner",
+                      "type": "string"
+                    },
+                    {
+                      "const": "self",
+                      "type": "string"
+                    },
+                    {
+                      "const": "other",
+                      "type": "string"
+                    }
+                  ]
+                },
                 "expires_at": {
                   "type": "string"
                 },
@@ -1941,6 +2612,22 @@
           "scene": {
             "maxLength": 120,
             "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "const": "owner",
+                "type": "string"
+              },
+              {
+                "const": "self",
+                "type": "string"
+              },
+              {
+                "const": "other",
+                "type": "string"
+              }
+            ]
           },
           "supersedes": {
             "maxLength": 200,
@@ -2286,6 +2973,22 @@
                     },
                     {
                       "const": "long",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "subject": {
+                  "anyOf": [
+                    {
+                      "const": "owner",
+                      "type": "string"
+                    },
+                    {
+                      "const": "self",
+                      "type": "string"
+                    },
+                    {
+                      "const": "other",
                       "type": "string"
                     }
                   ]
@@ -3191,6 +3894,62 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/recallRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/timeline": {
+      "post": {
+        "operationId": "timeline",
+        "summary": "Documents in time order, grouped by month — \"what was going on back then\" instead of similarity.",
+        "tags": [
+          "memory"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/timelineResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/timelineRequest"
               }
             }
           }

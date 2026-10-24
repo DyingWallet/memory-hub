@@ -19,6 +19,7 @@
     "semantic:on": "node scripts/set-semantic.mjs --on",
     "semantic:off": "node scripts/set-semantic.mjs --off",
     "verify:recall": "node scripts/verify-recall.mjs",
+    "timeline:build": "node scripts/build-timeline.mjs",
     "archive:facts": "node scripts/archive-facts.mjs",
     "backup": "node scripts/backup.mjs",
     "monitor": "node scripts/monitor.mjs",

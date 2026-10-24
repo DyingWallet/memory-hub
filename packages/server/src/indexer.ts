@@ -178,6 +178,8 @@ interface ReplaceDocInput {
   persistedAt?: number | null;
   /** 'owner' | 'self' | 'other'; defaults to 'owner'. */
   subject?: string;
+  /** Id of the memory this one replaced. */
+  supersedes?: string;
   chunks: { heading: string; text: string }[];
 }
 
@@ -186,14 +188,14 @@ function replaceDoc(db: Db, input: ReplaceDocInput): void {
   try {
     deleteDocRows(db, input.id);
     db.prepare(
-      `INSERT INTO docs(id, doc_type, path, title, kind, audience, privacy, source, scene, hash, updated_at, stage, expires_at, recall_count, persisted_at, subject)
-       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO docs(id, doc_type, path, title, kind, audience, privacy, source, scene, hash, updated_at, stage, expires_at, recall_count, persisted_at, subject, supersedes)
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          doc_type=excluded.doc_type, path=excluded.path, title=excluded.title, kind=excluded.kind,
          audience=excluded.audience, privacy=excluded.privacy, source=excluded.source,
          scene=excluded.scene, hash=excluded.hash, updated_at=excluded.updated_at,
          stage=excluded.stage, expires_at=excluded.expires_at, recall_count=excluded.recall_count,
-         persisted_at=excluded.persisted_at, subject=excluded.subject`,
+         persisted_at=excluded.persisted_at, subject=excluded.subject, supersedes=excluded.supersedes`,
     ).run(
       input.id,
       input.docType,
@@ -211,6 +213,7 @@ function replaceDoc(db: Db, input: ReplaceDocInput): void {
       input.recallCount ?? 0,
       input.persistedAt ?? null,
       input.subject ?? 'owner',
+      input.supersedes ?? null,
     );
 
     const insertChunk = db.prepare(
@@ -398,6 +401,7 @@ function upsertFact(db: Db, config: ServerConfig, record: FactRecord, relPath: s
     recallCount: record.recall_count ?? 0,
     persistedAt: record.persisted_at ? Date.parse(record.persisted_at) : null,
     subject: record.subject ?? 'owner',
+    supersedes: record.supersedes,
     chunks,
   });
   return true;

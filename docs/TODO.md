@@ -73,10 +73,16 @@
     - 验收（2026-10-24 23:20）：主会话聊完后问桌宠「我们刚才在主会话里聊的是什么」，2 秒答出「收尾记忆插件和桌宠的事、把不满意记进待办、排了优先级、准备开工」——与主会话一致。`live` 返回 6 条、按时间正序；pet 令牌读不到 sensitive 与群消息。
     - 测试：memory-hub 147 项（+2：live 可见性 / scenes 越界），pet 34 项（+4：拼装顺序 / 空 live / 关闭开关 / memd 故障降级）。
 
-19. ⬜ **时间线 / 年表**（现在只有条目，没有「那阵子」）
-    - 现状：`recall` 只按相似度给 2–3 条片段，拼得出事实，拼不出「这个人这两年怎么变的」。
-    - 做法：新增 `GET /v1/timeline?from&to&scene`（或脚本 `scripts/build-timeline.mjs`），把 `10-journal/` + 长期 facts 按月聚合，生成 `memories/10-journal/annual-<year>.md` 并进索引；问「今年三月在折腾什么」走时间过滤，不走相似度。
-    - 验收：问「上个月我在忙什么」，返回按时间排的 3–5 条，而不是最像的 5 条；脚本幂等，重跑不重复追加。
+19. ✅ **时间线 / 年表**（2026-10-25 实现）
+    - 原问题：`recall` 只按相似度给 2–3 条片段，拼得出事实，拼不出「这个人这两年怎么变的」。
+    - 落地（两条腿）：
+      - **接口** `POST /v1/timeline`：`from` / `to`（`YYYY` / `YYYY-MM` / `YYYY-MM-DD` / ISO，`from` 含、`to` 不含，缺省最近 12 个月），`subject` / `kinds` / `limit` / `max_chars`；返回按月分桶的 `months[].items[]`，走同一套可见性 SQL。新增 `docs.supersedes` 列，时间线里双向标出 `supersedes` / `superseded_by`——「改过主意」第一次能看见了（跟 20 的 subject 合起来就是「回头看」）。
+      - **年表** `scripts/build-timeline.mjs`：把 facts（含归档 .gz）+ `10-journal/` 日记按月聚合成 `memories/10-journal/annual-<year>.md`，整篇重写、内容相同就不落盘（幂等），跳过短期 chat 和历史坏编码。
+      - MCP 加 `memory_timeline`；SDK 加 `client.timeline()`；instructions 里写明「问那阵子/上个月用 timeline，别拿 search 硬凑」。
+    - 排序取舍：SQL 取**最近** N 条再反转为正序，这样 `limit` 截断时丢掉的是最早那段，而不是把「今天」截掉。
+    - 验证（2026-10-25 00:35 活库）：`2026-10` 返回 200 条（被 limit 截断），第一条 `06:22Z`、最后一条 `16:36Z`（刚生成的年表）；`subject=self` 只有 1 条；年表生成 37 条、跳过 2 条坏编码。
+    - 测试：158 项（+4：按月分组与正序 / 群令牌边界 / subject+替代关系 / 倒序区间 400）。
+    - 还没做：分页（现在超限只保留最近一段，看更早的要用 `to` 收窄）；年表里还留着几条「测试：…」的脏数据，等哪天清库时一起处理。
 
 20. ✅ **记忆里的「我自己」**（2026-10-24 实现）
     - 原问题：`/v1/write` 的 kind 有 `stance/decision/knowledge`，但用起来几乎总在记「他说了什么」，记忆里我出现的方式只有被描述，没有自己开口。

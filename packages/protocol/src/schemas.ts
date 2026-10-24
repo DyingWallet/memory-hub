@@ -408,6 +408,64 @@ export const TRecallResponse = Type.Object(
 export type RecallResponse = Static<typeof TRecallResponse>;
 
 /* ------------------------------------------------------------------ */
+/* timeline（「那阵子发生了什么」）                                   */
+/* ------------------------------------------------------------------ */
+
+export const TTimelineRequest = Type.Object(
+  {
+    /** `YYYY` / `YYYY-MM` / `YYYY-MM-DD` / ISO time. Default: 12 months back. */
+    from: Type.Optional(Type.String({ maxLength: 40 })),
+    to: Type.Optional(Type.String({ maxLength: 40 })),
+    scene: Type.Optional(Type.String({ maxLength: 120 })),
+    subject: Type.Optional(TSubject),
+    kinds: Type.Optional(Type.Array(TMemoryKind, { maxItems: 16 })),
+    /** Max documents returned (default 200). */
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 1000 })),
+    max_chars: Type.Optional(Type.Integer({ minimum: 40, maximum: 1000 })),
+  },
+  { additionalProperties: false },
+);
+export type TimelineRequest = Static<typeof TTimelineRequest>;
+
+export const TTimelineItem = Type.Object(
+  {
+    id: Type.String(),
+    title: Type.String(),
+    kind: TMemoryKind,
+    subject: TSubject,
+    stage: TStage,
+    updated_at: Type.String(),
+    text: Type.String(),
+    /** This memory replaced an older one. */
+    supersedes: Type.Optional(Type.String()),
+    /** A newer memory replaced this one. */
+    superseded_by: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false },
+);
+export type TimelineItem = Static<typeof TTimelineItem>;
+
+export const TTimelineResponse = Type.Object(
+  {
+    from: Type.String(),
+    to: Type.String(),
+    total: Type.Integer(),
+    months: Type.Array(
+      Type.Object(
+        {
+          month: Type.String(),
+          count: Type.Integer(),
+          items: Type.Array(TTimelineItem),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  },
+  { additionalProperties: false },
+);
+export type TimelineResponse = Static<typeof TTimelineResponse>;
+
+/* ------------------------------------------------------------------ */
 /* short-term chat ingestion, review, persistence                     */
 /* ------------------------------------------------------------------ */
 

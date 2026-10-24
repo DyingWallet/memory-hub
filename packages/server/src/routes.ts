@@ -47,6 +47,9 @@ import {
   type RecentResponse,
   type ReviewResponse,
   type SearchResponse,
+  type TimelineItem,
+  type TimelineRequest,
+  type TimelineResponse,
   type TokenRevokeRequest,
   type TokenRevokeResponse,
   type TokensResponse,
@@ -59,7 +62,7 @@ import { loadConfig, type ServerConfig } from './config.js';
 import { getMeta, readStats, setMeta, type Db } from './db.js';
 import { errors } from './errors.js';
 import { appendFact, forgetFact, loadAudienceCard, loadIdentity, type FactRecord } from './indexer.js';
-import { getChunkOrDoc, liveMessages, recentDocs, reviewCandidates, searchChunks, type SearchHit } from './search.js';
+import { getChunkOrDoc, liveMessages, recentDocs, reviewCandidates, searchChunks, timelineDocs, type SearchHit } from './search.js';
 import { lastReviewAt, markReviewSeen, reminderSince, shouldReview } from './review.js';
 import { visibilityClause } from './visibility.js';
 import { dedupeKey, isNearDuplicate, normalizeForDedupe } from './dedupe.js';
@@ -709,6 +712,63 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   );
 
   /* ---------------------------------------------------------------- */
+  /* timeline（「那阵子发生了什么」）                                   */
+  /* ---------------------------------------------------------------- */
+  app.post<{ Body: TimelineRequest; Reply: TimelineResponse }>(
+    routeByOperationId('timeline').path,
+    {
+      schema: {
+        body: routeByOperationId('timeline').request,
+        response: responseSchema('timeline'),
+      },
+    },
+    async (request) => {
+      const started = performance.now();
+      const body = request.body;
+      const auth = authenticate(request.headers.authorization, tokens, body.scene);
+      const from = timelineBound(body.from, 'from');
+      const to = timelineBound(body.to, 'to');
+      if (to <= from) throw errors.invalid('"to" must be after "from"');
+
+      const docs = timelineDocs(db, auth.view, auth.scene, restrictionFor(auth.view.scopes, auth.scene, config.privacy), {
+        from,
+        to,
+        ...(body.subject ? { subject: body.subject } : {}),
+        ...(body.kinds ? { kinds: body.kinds } : {}),
+        limit: clamp(body.limit ?? 200, 1, 1000),
+        maxChars: clamp(body.max_chars ?? 160, 40, 1000),
+      });
+
+      const months = new Map<string, TimelineItem[]>();
+      for (const doc of docs) {
+        const key = monthKeyOf(doc.updated_at);
+        const item: TimelineItem = {
+          id: doc.id,
+          title: doc.title,
+          kind: doc.kind as MemoryKind,
+          subject: doc.subject as 'owner' | 'self' | 'other',
+          stage: doc.stage,
+          updated_at: new Date(doc.updated_at).toISOString(),
+          text: doc.text,
+          ...(doc.supersedes ? { supersedes: doc.supersedes } : {}),
+          ...(doc.superseded_by ? { superseded_by: doc.superseded_by } : {}),
+        };
+        const bucket = months.get(key);
+        if (bucket) bucket.push(item);
+        else months.set(key, [item]);
+      }
+
+      finish('timeline', auth, started, docs.map((doc) => doc.id));
+      return {
+        from: monthKeyOf(from),
+        to: monthKeyOf(to - 1),
+        total: docs.length,
+        months: [...months.entries()].map(([month, items]) => ({ month, count: items.length, items })),
+      };
+    },
+  );
+
+  /* ---------------------------------------------------------------- */
   /* write                                                            */
   /* ---------------------------------------------------------------- */
   app.post<{
@@ -1120,6 +1180,46 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, Math.trunc(value)));
+}
+
+/**
+ * Accepts `YYYY`, `YYYY-MM`, `YYYY-MM-DD` or an ISO time. `from` is inclusive,
+ * `to` is exclusive. No bound means "the last 12 months".
+ */
+function timelineBound(value: string | undefined, side: 'from' | 'to'): number {
+  const text = String(value ?? '').trim();
+  if (text.length === 0) {
+    if (side === 'from') {
+      const now = new Date();
+      return new Date(now.getFullYear() - 1, now.getMonth(), 1).getTime();
+    }
+    return Date.now() + 1;
+  }
+  const month = /^(\d{4})-(\d{2})$/.exec(text);
+  if (month) {
+    const year = Number(month[1]);
+    const index = Number(month[2]) - 1;
+    if (index < 0 || index > 11) throw errors.invalid(`bad month in "${text}"`);
+    return side === 'from' ? new Date(year, index, 1).getTime() : new Date(year, index + 1, 1).getTime();
+  }
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (day) {
+    const start = new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])).getTime();
+    return side === 'from' ? start : start + 86_400_000;
+  }
+  const year = /^(\d{4})$/.exec(text);
+  if (year) {
+    const value = Number(year[1]);
+    return side === 'from' ? new Date(value, 0, 1).getTime() : new Date(value + 1, 0, 1).getTime();
+  }
+  const parsed = Date.parse(text);
+  if (Number.isNaN(parsed)) throw errors.invalid(`cannot parse "${text}" as a date`);
+  return parsed;
+}
+
+function monthKeyOf(ms: number): string {
+  const date = new Date(ms);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
 function isKnownPrivacy(label: string): boolean {

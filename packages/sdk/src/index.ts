@@ -16,9 +16,12 @@ import type {
   RecentResponse,
   ReviewResponse,
   SearchResponse,
+  TimelineRequest,
+  TimelineResponse,
   WriteRequest,
   WriteResponse,
   MemoryKind,
+  Subject,
 } from '@memsvc/protocol';
 
 export interface MemoryClientOptions {
@@ -63,7 +66,7 @@ export class MemoryClient {
 
   search(
     query: string,
-    options: { k?: number; scene?: string; kinds?: MemoryKind[]; maxChars?: number } = {},
+    options: { k?: number; scene?: string; kinds?: MemoryKind[]; maxChars?: number; subject?: Subject } = {},
   ): Promise<SearchResponse> {
     return this.request<SearchResponse>('POST', '/v1/search', {
       query,
@@ -71,6 +74,7 @@ export class MemoryClient {
       ...(options.scene ? { scene: options.scene } : {}),
       ...(options.kinds ? { kinds: options.kinds } : {}),
       ...(options.maxChars !== undefined ? { max_chars: options.maxChars } : {}),
+      ...(options.subject ? { subject: options.subject } : {}),
     });
   }
 
@@ -90,13 +94,33 @@ export class MemoryClient {
     });
   }
 
-  recall(messages: RecallMessage[], options: { k?: number; scene?: string; maxChars?: number } = {}): Promise<RecallResponse> {
+  recall(
+    messages: RecallMessage[],
+    options: { k?: number; scene?: string; maxChars?: number; subject?: Subject } = {},
+  ): Promise<RecallResponse> {
     return this.request<RecallResponse>('POST', '/v1/recall', {
       messages,
       ...(options.k !== undefined ? { k: options.k } : {}),
       ...(options.scene ? { scene: options.scene } : {}),
       ...(options.maxChars !== undefined ? { max_chars: options.maxChars } : {}),
+      ...(options.subject ? { subject: options.subject } : {}),
     });
+  }
+
+  /** Documents in time order, grouped by month ("what was going on back then"). */
+  timeline(
+    options: { from?: string; to?: string; scene?: string; subject?: Subject; kinds?: MemoryKind[]; limit?: number; maxChars?: number } = {},
+  ): Promise<TimelineResponse> {
+    const body: TimelineRequest = {
+      ...(options.from ? { from: options.from } : {}),
+      ...(options.to ? { to: options.to } : {}),
+      ...(options.scene ? { scene: options.scene } : {}),
+      ...(options.subject ? { subject: options.subject } : {}),
+      ...(options.kinds ? { kinds: options.kinds } : {}),
+      ...(options.limit !== undefined ? { limit: options.limit } : {}),
+      ...(options.maxChars !== undefined ? { max_chars: options.maxChars } : {}),
+    };
+    return this.request<TimelineResponse>('POST', '/v1/timeline', body);
   }
 
   write(record: WriteRequest): Promise<WriteResponse> {

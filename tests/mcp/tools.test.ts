@@ -47,6 +47,31 @@ const fakeApi: MemoryApi = {
   async recall(messages) {
     return { keywords: ['桌宠'], results: messages.length > 0 ? searchResponse.results : [] };
   },
+  async timeline() {
+    return {
+      from: '2026-10',
+      to: '2026-10',
+      total: 1,
+      months: [
+        {
+          month: '2026-10',
+          count: 1,
+          items: [
+            {
+              id: 'f_self_1',
+              title: '我认为记忆该能记判断',
+              kind: 'stance',
+              subject: 'self',
+              stage: 'long',
+              updated_at: '2026-10-24T15:00:00.000Z',
+              text: '我认为记忆该能记判断',
+              supersedes: 'f_self_0',
+            },
+          ],
+        },
+      ],
+    };
+  },
   async write(record) {
     return { id: `f_test_${record.kind}`, indexed: true, duplicate: false };
   },
@@ -103,6 +128,7 @@ test('all v1 tools are registered with descriptions', async () => {
     'memory_recent',
     'memory_review',
     'memory_search',
+    'memory_timeline',
     'memory_write',
   ]);
   for (const tool of tools) assert.ok((tool.description ?? '').length > 5, tool.name);
@@ -124,8 +150,17 @@ test('memory_bootstrap includes the rendered block', async () => {
   assert.match(String(payload.block), /memory_search/);
 });
 
-test('memory_get returns null memory for unknown ids', async () => {
-  const result = await client.callTool({ name: 'memory_get', arguments: { id: 'nope' } });
+test('memory_timeline returns month buckets with subject and replacement links', async () => {
+  const result = await client.callTool({ name: 'memory_timeline', arguments: { from: '2026-10', to: '2026-11' } });
+  const payload = JSON.parse((result.content as { text: string }[])[0]?.text ?? '{}') as {
+    months: { month: string; items: { subject: string; supersedes?: string }[] }[];
+  };
+  assert.equal(payload.months[0]?.month, '2026-10');
+  assert.equal(payload.months[0]?.items[0]?.subject, 'self');
+  assert.equal(payload.months[0]?.items[0]?.supersedes, 'f_self_0');
+});
+
+test('memory_get returns null memory for unknown ids', async () => {  const result = await client.callTool({ name: 'memory_get', arguments: { id: 'nope' } });
   const payload = JSON.parse((result.content as { text: string }[])[0]?.text ?? '{}') as { memory: unknown };
   assert.equal(payload.memory, null);
 });
