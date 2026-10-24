@@ -57,11 +57,14 @@ powershell -ExecutionPolicy Bypass -File scripts\stop.ps1
 
 | 任务 | 触发 | 动作 |
 |---|---|---|
-| `memd-autostart` | 登录后 30 秒 | `scripts\start.ps1 -NoWait` |
-| `memd-watchdog` | 每 1 分钟 | 同上（已健康则 `exit 0`） |
+| `memd-autostart` | 登录后 30 秒 | `wscript run-hidden.vbs` → `task-start.ps1` → `start.ps1 -NoWait` |
+| `memd-watchdog` | 每 1 分钟 | 同上（memd 已健康则只刷新心跳，`exit 0`） |
 
+- **动作链为什么这么长**：任务计划直接跑 `powershell.exe`（哪怕带 `-WindowStyle Hidden`）每次都会闪一下黑框——控制台窗口在 PowerShell 解析参数之前就由系统建好。1 分钟一次之后很显眼，所以统一改成 `wscript.exe + scripts\run-hidden.vbs`（window style 0，窗口不创建），中间再垫一层 `task-start.ps1` 把输出落盘（隐藏运行没有控制台，否则出错完全没线索）。`memd-monitor` / `memd-backup` 同样走这条链。
+- **看护是否真的在跑**：`logs\task-last-tick.txt` 每次触发被覆盖（含 `start.ps1` 的输出摘要）；真正拉起 memd 时才追加 `logs\task-start.log`。`-Check` 会打印最后心跳。
 - 两者幂等：`start.ps1` 先探 `/v1/health`，已在线就只做 health-check，所以和 `start-stack.ps1` 第 2.6 步撞上也无害。
 - 沙箱身份下 `Get-ScheduledTask` / `schtasks` 一律「拒绝访问」（低完整性进程，连 `New-ScheduledTaskSettingsSet` 都会拒），装/查任务请用普通 PowerShell 窗口。
+- `schtasks /TR` 有 **261 字符上限**：动作串更长时（隐藏启动器就超了）先用 `schtasks` 建出无限期重复的触发器，再用 `Set-ScheduledTask -Action` 换动作。
 - **pet-brain 没有登录任务**：它只服务 DSH 的 `pet-chat` preset，跟着 DSH 生命周期——`qq-bridge\start-stack.ps1` 第 2.7 步在 DSH 起来后拉起它，DSH 关闭/崩溃后它自己退出（每 20 秒探一次，连续 3 次不可达约 60 秒退出，见 `dsh-pet-configurable-llm/src/guard.mjs`）。调试时可 `PET_BRAIN_ORPHAN_GUARD=0` 关掉。
 
 ## 3. 令牌
