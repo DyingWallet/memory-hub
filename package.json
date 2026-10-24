@@ -20,6 +20,7 @@
     "semantic:off": "node scripts/set-semantic.mjs --off",
     "verify:recall": "node scripts/verify-recall.mjs",
     "timeline:build": "node scripts/build-timeline.mjs",
+    "test:e2e": "node scripts/e2e-dsh-session.mjs",
     "archive:facts": "node scripts/archive-facts.mjs",
     "backup": "node scripts/backup.mjs",
     "monitor": "node scripts/monitor.mjs",

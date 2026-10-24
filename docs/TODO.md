@@ -39,7 +39,12 @@
 6. ✅ **保留与归档（可选，默认关闭）**：`config.archive.enabled=false` / `keepMonths=12`，设置页可开关；开启后 `scripts/archive-facts.mjs` 把更老月份压成 `facts/archive/*.jsonl.gz`（回读校验后删原文件）；indexer 透明读取 gz，tombstone 写活动分片；`--force` 可临时跑一次。测试 117 项。
 7. ✅ **备份自动化**：`pnpm backup` 每天一份 `<dir>/YYYY-MM-DD/`（memories + tokens.json + config.json + manifest），同日覆盖、`keepDays` 清理；由看护任务 `supervisor.mjs` 按「过了 04:00 且今天没快照」触发（失败后 1 小时内只重试一次）；RUNBOOK 写恢复演练。测试 119 项。
 8. ✅ **监控**：`pnpm monitor` 采样 `/v1/health` 到 `data/metrics.csv`（成功/失败、延迟、docs/facts/chunks、uptime）；支持 `--loop`，自动采样由 `supervisor.mjs` 按「metrics.csv 超 60 分钟没更新」触发；`verify-recall.mjs` 仍作手动回归。测试 120 项。
-9. 🔶 **测试补强**：adapter-qq 客户端 4 项（场景映射/召回提示/镜像幂等/禁用）+ 设置页 bundle 冒烟 + `verify-recall.mjs` 实库检索通过；**真实 DSH 会话 e2e** 仍靠手动清单（起会话、看 ingest 落库、看 review 提示）。测试 125 项。
+9. ✅ **测试补强**（2026-10-25 补上最后一段）
+    - 原有：adapter-qq 客户端 4 项（场景映射/召回提示/镜像幂等/禁用）、设置页 bundle 冒烟、`verify-recall.mjs` 实库检索。
+    - 新增 `scripts/e2e-dsh-session.mjs`（`pnpm test:e2e`）：真实 DSH 会话 e2e——先信 `DSH_WEB_URL`、不通再动态发现（沙箱里 `tasklist` 被禁，动态发现拿不到端口）→ 建 `minimal` 会话（`pet-chat` 会被 `dsh-memory` 插件主动跳过）→ 发一条带随机标记的消息 → 轮询 memd 直到标记出现。
+    - 实测（2026-10-25 02:30）：会话 `session-5d134e27…` 的标记在 3 秒内以 `chat:main:0ad7712b63c005ac`（`short` / `owner`）入库。
+    - 取舍：会真的调一次模型，所以不进 `pnpm test`；会话保留在 DSH 里可审计，跑多了要手动删。
+    - 口径：单测 161 项 + e2e 1 项。
 
 ## v2（架构与扩展）
 

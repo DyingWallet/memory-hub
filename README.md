@@ -144,13 +144,15 @@ pnpm embed              # 回填向量
 ## 测试
 
 ```powershell
-pnpm test     # 144 项
+pnpm test       # 161 项：单测 / 集成 / 隐私矩阵 / 契约 / MCP / 插件
+pnpm test:e2e   # 真实 DSH 会话：建 minimal 会话 → 发标记 → 等 memd 收到（会调一次模型）
 ```
 
-- 单测（tokenize / chunk / frontmatter / policy / token 热重载 / 可见性 / 混合排序 / 语义纯函数 / 面板冒烟）
-- 集成（临时目录 + 真 SQLite + `app.inject`：recall 作用域、披露、配置热更新）
+- 单测（tokenize / chunk / frontmatter / policy / token 热重载 / 可见性 / 混合排序 / 语义纯函数 / 面板冒烟 / 旧库补列）
+- 集成（临时目录 + 真 SQLite + `app.inject`：recall 作用域、披露、配置热更新、live、timeline、subject）
 - 隐私矩阵（群搜工作=0、群 get owner=404、私聊互不可见、伪造 scene=403、`secret` 全隐藏、披露不串场景）
 - 契约（路由 ↔ OpenAPI 一致）、MCP 工具（InMemoryTransport）、DSH 插件
+- e2e 单独的：`scripts/e2e-dsh-session.mjs` 会真的建一个 DSH 会话并发消息，所以不并入 `pnpm test`；会话留在 DSH 里可审计，跑多了要手动删
 - 沙箱里跑 `node --test` 需要 `--test-isolation=none`（脚本里已带）
 
 ## 状态
