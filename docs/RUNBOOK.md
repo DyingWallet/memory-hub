@@ -374,3 +374,6 @@ Invoke-RestMethod http://127.0.0.1:8787/v1/config-state -Headers @{ authorizatio
 - **别调大**：`batchSize > 8` 或 `maxLen > 256` 会把激活张量放大到 GB 级（实测 RSS 1.7 GB）；
   `threads > 1` 对单条查询没有收益，只抬高总 CPU。回填可以 `pnpm embed -- --threads 4`。
 - 换模型：改 `semantic.{modelDir,modelFile,dim}` → 启动时维度不一致会自动重建向量表 → 再 `pnpm embed`。
+- 回归检查：`pnpm verify:recall` 先跑 FTS 基线（不能退化），再跑 4 组「和库内措辞错开」的语义查询，
+  要求每组至少 1 条命中、与 FTS 结果有交集、且至少一组召回 FTS 没给出的 chunk；
+  语义不可用时只提示并退出 0（降级是预期），`--require-semantic` 则强制要求可用。
