@@ -15,7 +15,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const name = 'dsh-memory-panel';
 export const inject = ['webServer'];
@@ -84,9 +84,37 @@ function writeLoadMarker(name) {
   }
 }
 
+/**
+ * 启动后自检：等 8 秒（memd 与另一个插件都稳定）跑一次 doctor，结果写进
+ * logs/doctor-boot.log 与 data/doctor-last.json。`MEMD_BOOT_CHECK=0` 可关掉。
+ * 任何异常都只打一行 warning——自检永远不能影响面板。
+ */
+function scheduleBootCheck() {
+  if (process.env.MEMD_BOOT_CHECK === '0') return;
+  const timer = setTimeout(() => {
+    void (async () => {
+      try {
+        const here = dirname(fileURLToPath(import.meta.url));
+        const doctorUrl = pathToFileURL(join(here, '..', '..', '..', 'scripts', 'doctor.mjs')).href;
+        const { runDoctor, recordBootCheck } = await import(doctorUrl);
+        const summary = recordBootCheck(await runDoctor());
+        if (!summary.ready) {
+          console.warn(`[dsh-memory-panel] 启动自检未通过：${summary.failed.join(', ')}（logs/doctor-boot.log）`);
+        }
+      } catch (error) {
+        console.warn(`[dsh-memory-panel] 启动自检失败：${error?.message ?? error}`);
+      }
+    })();
+  }, 8000);
+  timer.unref?.();
+}
+
 export function apply(ctx) {
   // 加载标记：doctor 用它判断「安装之后有没有重启」。
   writeLoadMarker('dsh-memory-panel');
+  // 启动后自检：等 memd/插件都稳定了再跑一次，结果进 logs/doctor-boot.log 与
+  // data/doctor-last.json。任何失败都只写日志，不影响面板本身。
+  scheduleBootCheck();
   for (const [path, route] of ROUTES) {
     ctx.effect(() =>
       ctx.webServer.register({

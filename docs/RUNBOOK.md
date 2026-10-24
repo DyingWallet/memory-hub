@@ -280,6 +280,16 @@ POST /memory-hub/tokens/revoke -> memd /v1/tokens/revoke  （需 Authorization�
 所以**每跑一次 doctor，审计里会多一条 `route=disclose` 记录**。这是刻意的：它证明的是
 「令牌 + 接口 + 数据」整条链路可用，而不是只看文件在不在。
 
+**启动后自动自检**：面板插件加载 8 秒后自己跑一遍 doctor（`plugins/dsh-memory-panel` 里的
+`scheduleBootCheck`），结果：
+
+- 追加一行到 `logs/doctor-boot.log`（每次启动一行 JSON）；
+- 覆盖 `data/doctor-last.json`（`{ at, ready, failed[], warns[] }`，只把**核心**失败算进 `failed`）；
+- 核心项有失败时，DSH 日志里会有一行 `[dsh-memory-panel] 启动自检未通过：…`；
+- doctor 的「上次启动自检」一行读的就是 `data/doctor-last.json`。
+
+关掉它：环境变量 `MEMD_BOOT_CHECK=0`。`runDoctor({ deep:false })` 可跳过披露探针（只查文件）。
+
 ### 5.2 桌宠（pet-brain）
 
 - 令牌：`pet-brain\state\memory.token`（surface `pet`，scopes `main/qq:owner/pet`，**无 `sensitive:read`**；scene `pet`）。
