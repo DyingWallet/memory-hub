@@ -141,7 +141,7 @@ export function createQQMemoryClient(options: QQMemoryOptions): QQMemoryClient {
             text: message.text.slice(0, 2000),
             ...(message.from_owner === true ? { from_owner: true } : {}),
           }));
-        if (recentMessages.length === 0) return null;
+        if (recentMessages.length === 0 && recallOptions?.scope !== 'groups') return null;
 
         const [payload, identityLine] = await Promise.all([
           call('/v1/recall', {

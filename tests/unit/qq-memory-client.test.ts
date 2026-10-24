@@ -96,3 +96,21 @@ test('a disabled client never calls fetch', async () => {
   assert.equal(await client.mirrorWrite({ kind: 'qq-topic', text: 'y', scene: 'qq:group:1' }), false);
   assert.equal(calls.length, 0);
 });
+test('groups recall still runs with no messages (owner asking about the group)', async () => {
+  const calls: Captured[] = [];
+  const client = createQQMemoryClient({ endpoint: 'http://127.0.0.1:8787', tokenFile, fetchImpl: fakeFetch(calls), recallK: 3 });
+
+  // 消息为空时只有 scope=groups 继续：主人问「群里聊了什么」不该因为
+  // 这一轮没有最近消息就拿不到任何群内容。
+  const block = await client.recallBlock('private:10000', '10000', [], { scope: 'groups', sinceHours: 24 });
+  assert.ok(block && block.includes('相关记忆'), 'groups recall should return a block');
+  const recall = calls.filter((item) => item.path === '/v1/recall').at(-1);
+  assert.ok(recall, 'groups recall must hit /v1/recall');
+  assert.equal(recall.body.scope, 'groups');
+  assert.equal(recall.body.since_hours, 24);
+
+  // 普通场景召回没有消息时仍然是 null，且不发请求。
+  calls.length = 0;
+  assert.equal(await client.recallBlock('private:10000', '10000', []), null);
+  assert.equal(calls.filter((item) => item.path === '/v1/recall').length, 0);
+});
