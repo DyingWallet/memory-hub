@@ -3,7 +3,10 @@
 本机记忆服务 `memd` + DSH 插件 + QQ 桥接适配器。让 DSH 主会话和 QQ 桥接读同一份文本记忆，关键词检索，隐私按 scope 隔离。
 
 - 协议：`/v1` HTTP（JSON），OpenAPI 在 [`packages/protocol/openapi.yaml`](packages/protocol/openapi.yaml)
-- 部署：本机 `127.0.0.1:8787` + `172.22.0.10:8787`（ZeroTier），不绑 `0.0.0.0`
+- 部署：
+  - 默认只绑 `127.0.0.1:8787`，本机 DSH / QQ 桥接 / 桌宠已经够用；
+  - **可选**：需要多设备（笔记本、手机、VPS）经 ZeroTier 访问时，再追加 ZeroTier 内网地址（如 `172.22.0.10:8787`）。原因是 memd 本身没有公网防护，ZeroTier 提供点对点加密和成员准入，且地址只在虚拟内网可达；
+  - 无论是否加入 VLAN/ZeroTier，都**绝不绑** `0.0.0.0`。
 - 数据：`D:\deepseek_workspace\memories\`（Markdown + `facts/*.jsonl`），索引在 `data/index.db`，可重建
 - 检索：`node:sqlite` FTS5 + 中文 bigram；默认 5 条，弱结果降到 OR、最多 10 条
 - 运行时：Node 24（DSH 自带），TypeScript 5.9 + ESM，`tsc -b` 构建
