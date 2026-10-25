@@ -71,6 +71,16 @@ check('文件不存在时返回空串（不影响唤醒）', () => {
   assert.equal(reader.read(), '');
 });
 
+check('whole 模式读整篇并去掉 frontmatter', () => {
+  const wholeFile = join(dir, 'private-tone.md');
+  writeFileSync(wholeFile, '---\ndate: 2026-10-25\nkind: profile\n---\n\n# 私密\n\n正文内容。\n', 'utf8');
+  const reader = createPersonaReader({ file: wholeFile, whole: true, log: () => {} });
+  const text = reader.read();
+  assert.match(text, /私密/);
+  assert.match(text, /正文内容/);
+  assert.equal(text.includes('date: 2026-10-25'), false, 'frontmatter 必须去掉');
+});
+
 rmSync(dir, { recursive: true, force: true });
 console.log(failures === 0 ? '\nall persona checks passed' : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);

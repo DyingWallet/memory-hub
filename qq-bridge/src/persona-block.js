@@ -24,13 +24,19 @@ export function sectionBody(markdown, keyword) {
   return lines.slice(start + 1, end).join('\n').trim();
 }
 
+/** 去掉 frontmatter（`---` 包起来的那段），只留正文。 */
+function stripFrontMatter(raw) {
+  return String(raw ?? '').replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trim();
+}
+
 /**
  * @param {object} options
- * @param {string} options.file       AGENTS.md 路径
- * @param {string[]} [options.sections] 要抽取的标题关键词
+ * @param {string} options.file       AGENTS.md 或 private-tone.md 的路径
+ * @param {string[]} [options.sections] 要抽取的标题关键词（whole=true 时忽略）
+ * @param {boolean} [options.whole]    true = 读整篇正文（去掉 frontmatter）
  * @param {(message: string) => void} [options.log]
  */
-export function createPersonaReader({ file, sections = ['我是谁', '语气'], log = () => {} } = {}) {
+export function createPersonaReader({ file, sections = ['我是谁', '语气'], whole = false, log = () => {} } = {}) {
   let cache = { mtime: 0, text: '' };
 
   return {
@@ -40,10 +46,12 @@ export function createPersonaReader({ file, sections = ['我是谁', '语气'], 
         const stat = fs.statSync(file);
         if (stat.mtimeMs === cache.mtime) return cache.text;
         const markdown = fs.readFileSync(file, 'utf8');
-        const picked = sections
-          .map((name) => sectionBody(markdown, name))
-          .filter((body) => body.length > 0)
-          .join('\n\n');
+        const picked = whole
+          ? stripFrontMatter(markdown)
+          : sections
+              .map((name) => sectionBody(markdown, name))
+              .filter((body) => body.length > 0)
+              .join('\n\n');
         cache = { mtime: stat.mtimeMs, text: picked };
         if (!picked) log(`[persona] ${file} 里没抽到任何段落（标题改名了？）`);
         return picked;

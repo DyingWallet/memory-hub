@@ -11420,13 +11420,24 @@ async function main() {
     sections: ['我是谁', '语气'],
     log,
   });
+  // 私密语气只给主人私聊；群聊和他人私聊永远读不到这里。
+  const privateReader = createPersonaReader({
+    file: path.join(ROOT, '..', 'memories', 'user', 'private-tone.md'),
+    whole: true,
+    log,
+  });
 
   function buildWakePromptV2Core(key, reason, memoryBlock = '') {
     const roleState = readRoleState();
     const roleLine = roleState.role ? `【当前角色】${roleState.role}（完整角色卡请调用 qq_get_prompt 查看）\n\n` : '';
     // 角色卡关闭时（role=null），人格段是身份与语气的主要来源。
+    // 对外（群 / 他人私聊）只注入 AGENTS.md 的两节；私密语气只给主人私聊。
     const personaText = personaReader.read();
-    const personaLine = personaText ? `【人格】\n${personaText}\n\n` : '';
+    const isOwnerChat = key === `private:${String(cfg.ownerQQ ?? '')}`;
+    const privateText = isOwnerChat ? privateReader.read() : '';
+    const personaLine = personaText || privateText
+      ? `【人格】\n${[personaText, privateText].filter(Boolean).join('\n\n')}\n\n`
+      : '';
     const st = getSocialV2State(key);
     const tokenLine = `【会话令牌】${st.agentToken}（调用二代状态工具时请在参数中带上此令牌）\n\n`;
     const memoryText = formatMemoryV2(st);
