@@ -236,7 +236,10 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
             return;
           }
           const kind = category === 'memberImpression' ? 'qq-impression' : 'qq-topic';
-          await api.mirrorWrite({
+          // 注意：adapter 客户端把任何失败都吞成 `false`（memory-client.ts 里
+          // catch { return false }），所以**不能只靠 catch 判断失败**——
+          // 只捕获异常的版本在实测里一条痕迹都不会留下。
+          const ok = await api.mirrorWrite({
             kind,
             text,
             scene,
@@ -244,6 +247,10 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
             tags: [category],
             idempotencyKey: idemKey(scene, category, extra, text),
           });
+          if (ok === false) {
+            log.warn?.('[memory] mirror write returned false (memd unreachable or rejected)');
+            journal?.recordFailure({ op: 'write', scene, category, target: extra?.target, error: 'client returned false' });
+          }
         } catch (error) {
           log.warn?.(`[memory] mirror write failed: ${error?.message ?? error}`);
           journal?.recordFailure({ op: 'write', scene, category, target: extra?.target, error });
@@ -264,7 +271,16 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
             journal?.recordFailure({ op: 'forget', scene, category, target: extra?.target, error: 'no memory client (token not mapped)' });
             return;
           }
-          await api.forget({ idempotencyKey: idemKey(scene, category, extra, text) });
+          const ok = await api.forget({ idempotencyKey: idemKey(scene, category, extra, text) });
+          if (ok === false) {
+            // 该忘而没忘掉：进队列，由 drainForgetQueue 重试（不静默丢弃）。
+            log.warn?.('[memory] mirror forget returned false — queued for retry');
+            journal?.recordFailure({ op: 'forget', scene, category, target: extra?.target, error: 'client returned false' });
+            journal?.enqueueForget(
+              { scene, category, target: extra?.target, text, error: 'client returned false' },
+              idemKey(scene, category, extra, text),
+            );
+          }
         } catch (error) {
           log.warn?.(`[memory] mirror forget failed: ${error?.message ?? error}`);
           journal?.recordFailure({ op: 'forget', scene, category, target: extra?.target, error });

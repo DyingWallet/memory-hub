@@ -6,14 +6,17 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { idemKey } from '../src/memory/idem.js';
 import { createMirrorJournal } from '../src/memory/mirror-journal.js';
 import { classify, collectEntries, loadIndex, sceneOfConversationKey } from '../src/memory/reconcile.js';
+import { createMemoryBridge } from '../src/memory/memory-bridge.js';
 
+const ROOT_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const quiet = { warn() {}, info() {} };
 const tempRoot = () => mkdtempSync(join(tmpdir(), 'qq-mirror-'));
 
@@ -143,6 +146,48 @@ test('截断副本单独归类：不算 present，也不进 --fix 名单', () =>
   assert.equal(result.counts.missing, 0);
   assert.equal(result.partial[0].reason, 'partial-text');
   assert.equal(result.partial[0].matchedDocId, 'import:trunc');
+});
+
+/**
+ * adapter 客户端把任何失败都吞成 `false`（memory-client.ts: catch { return false }），
+ * 所以只捕获异常的版本在真实环境里**一条痕迹都不会留下**。这条测试专门钉住
+ * 「返回 false 也要留痕」——它是包 A 里最容易写错的一处。
+ */
+test('镜像失败即使只是返回 false，也要落失败流水与遗忘队列', async (t) => {
+  const clientPath = ['../memory-hub/packages/adapter-qq/dist/memory-client.mjs', '../../memory-hub/packages/adapter-qq/dist/memory-client.mjs']
+    .map((candidate) => resolve(ROOT_DIR, candidate))
+    .find((candidate) => existsSync(candidate));
+  if (!clientPath) return t.skip('adapter memory-client.mjs not built');
+
+  const root = tempRoot();
+  try {
+    mkdirSync(join(root, 'state'), { recursive: true });
+    writeFileSync(join(root, 'state', 'dummy.token'), 'not-a-real-token', 'utf8');
+    const bridge = createMemoryBridge({
+      root,
+      log: quiet,
+      cfg: {
+        ownerQQ: '10001',
+        memory: { enabled: true, endpoint: 'http://127.0.0.1:1', tokens: { owner: 'state/dummy.token' }, timeoutMs: 300, clientPath },
+      },
+    });
+    bridge.mirrorWrite('private:10001', 'activeTopic', '写不进去也要留痕');
+    bridge.mirrorForget('private:10001', 'memberImpression', '忘不掉也要留痕', { target: '甲' });
+    await new Promise((resolveDone) => setTimeout(resolveDone, 800));
+    bridge.stopForgetQueue();
+
+    const failures = readFileSync(join(root, 'logs', 'mirror-failures.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+    assert.equal(failures.length, 2);
+    assert.deepEqual(failures.map((entry) => entry.op).sort(), ['forget', 'write']);
+    assert.equal(failures[0].error, 'client returned false');
+
+    const queue = readFileSync(join(root, 'state', 'forget-queue.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+    assert.equal(queue.length, 1, '只有 forget 进队列，write 不进（重写会重复）');
+    assert.equal(queue[0].target, '甲');
+    assert.equal(queue[0].attempts, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('索引只读校验：schema_version 不对就拒绝，而不是猜', () => {

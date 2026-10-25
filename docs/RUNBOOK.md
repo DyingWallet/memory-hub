@@ -151,6 +151,11 @@ npm run test:memory
 失败痕迹：`logs/mirror-failures.jsonl`（只追加，给人看）；遗忘待办：`state/forget-queue.jsonl`
 （会被消掉，成功即出队，重试 5 次仍失败就留在队列里等人工——**不静默丢弃**）。
 
+> 坑（2026-10-26 实测）：adapter 客户端把任何失败都吞成 `false`
+> （`packages/adapter-qq/src/memory-client.ts` 的 `catch { return false }`），
+> 所以 `mirrorWrite` 只靠 `try/catch` 判断失败时**一条痕迹都不会留下**。
+> 现在两处都判了返回值；回归测试「镜像失败即使只是返回 false，也要落失败流水与遗忘队列」钉住这一点。
+
 ## 3. 令牌
 
 签发（明文只显示一次）：
