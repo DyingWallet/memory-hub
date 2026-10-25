@@ -97,20 +97,27 @@ export function createMirrorJournal({ root, log = console, maxAttempts = DEFAULT
   /**
    * 把「该忘而没忘掉」的条目放进队列。同一条（scene+category+target+text）
    * 已经在队列里时不重复入队，只更新错误信息与时间。
+   *
+   * `entry`（id / rev / target）必须一起落盘：重试时要靠它重算出**同一把身份键**。
+   * 2026-10-26 复测踩过：只存文本，重试就算成旧的内容指纹键，forget 命中不到
+   * 却返回成功——队列看着清空了，副本还留在 memd 里。
    */
   function enqueueForget(entry, dedupeKey) {
     const items = readQueue();
     const stamp = now();
+    const identity = entry.entry && typeof entry.entry === 'object' ? entry.entry : null;
     const existing = items.find((item) => item.dedupeKey === dedupeKey);
     if (existing) {
       existing.lastError = textOf(entry.error);
       existing.lastTriedAt = stamp;
+      if (identity && !existing.entry) existing.entry = identity;
     } else {
       items.push({
         ts: new Date(stamp).toISOString(),
         dedupeKey,
         scene: entry.scene,
         category: entry.category,
+        ...(identity ? { entry: identity } : {}),
         ...(entry.target ? { target: String(entry.target) } : {}),
         text: entry.text,
         attempts: 0,

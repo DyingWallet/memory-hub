@@ -235,6 +235,23 @@ test('镜像失败即使只是返回 false，也要落失败流水与遗忘队�
   }
 });
 
+test('遗忘队列要带着身份信息：重试算出的键必须与写入时一致', () => {
+  const root = tempRoot();
+  try {
+    const journal = createMirrorJournal({ root, log: quiet });
+    const scene = 'qq:private:10001';
+    const entry = { id: 'abcd1234', rev: 2 };
+    const key = mirrorKey(scene, 'activeTopic', entry, '要忘掉的文本');
+    journal.enqueueForget({ scene, category: 'activeTopic', text: '要忘掉的文本', error: 'boom', entry }, key);
+    const [item] = journal.readQueue();
+    assert.deepEqual(item.entry, entry, '队列项必须落盘 id/rev，否则重试会算成另一把键');
+    assert.equal(item.dedupeKey, key);
+    assert.equal(mirrorKey(item.scene, item.category, item.entry, item.text), key);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('索引只读校验：schema_version 不对就拒绝，而不是猜', () => {
   const root = tempRoot();
   const file = join(root, 'index.db');
