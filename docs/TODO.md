@@ -210,6 +210,12 @@
         - 在线冒烟 `scripts/identity-drill.mjs`：**12/12 通过**（新建 → 编辑 → 删除；印象 → 追加 traits），验证「旧文本搜不到、新文本可命中、present 数字对得上」。
         - 测试 10 项（新增 mirrorKey/forgetKeys 两代键、编辑遗留 superseded）。
         - **未做**：把历史 3 条 legacy 接管成 present（需人工 `--fix missing` 或逐条认领）；包 C（定时）。
+      - **数据核对 + 历史条目处置（2026-10-26 02:00）**：
+        - 核对工具 `scripts/audit-mirror.mjs`（只读）：轻量层现存条目 / 每条在 memd 的对应物 / memd 里 `qq-*` 按来源分组（摘要 / 迁移 / 演练 / 其他）/ 孤儿 idem 键。
+        - 事实：轻量层只有 2 条有效记忆（黑天炎、沐沐，都是 10-23 的群友印象）；memd 里 41 条 `qq-*` 中 **37 条是自动摘要**（`[群摘要]`/`[聊天摘要]`，机器生成）、1 条 owner 迁移副本、3 条其他。
+        - 处置（`scripts/adopt-legacy.mjs`，逐条 dry-run + `--apply`）：黑天炎、沐沐 → `--adopt`（身份键重写完整文本 + tombstone `import:` 旧副本）；404 → `--drop`（数据太少，两层都不留）。
+        - 结果：对账 `present 2 / legacy 0 / missing 0 / partial 0`；audit 显示两条都是 `exact-new-key`；`import:` 文档剩 1 条（owner 的「桌宠那事」）。
+        - 孤儿 idem 键 39 个：37 个指向摘要文档（摘要本来就不来自轻量层）、2 个指向已 tombstone 的演练文档——都不是问题。
 
 32. ✅ **QQ 桥接看护并入 `memd-watchdog`**（2026-10-25 夜）
     - 起因：桥接原本只有登录时的 `Startup\qq-stack.vbs` 一条链，会话里手动关掉后没人补；沙箱身份也起不了它（`qq-bridge\state\` 与 `config.json` 做过 ACL 收紧）。

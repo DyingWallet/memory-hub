@@ -196,6 +196,22 @@ node scripts\identity-drill.mjs
 > `superseded` 是**异常检测**，不是正常现象：正常编辑会主动 forget 旧 rev，所以它应该一直是 0；
 > 一旦出现，说明某次编辑「写了新版本、没忘旧版本」，用 `--fix superseded` 清。
 
+### 2.6.2 历史条目的接管 / 丢弃（2026-10-26）
+
+10-23 迁移进来的 `import:` 文档没有身份键，文本还带 `member-0: ` 前缀，所以永远是 `legacy`。
+逐条人工决定，工具是 `scripts\adopt-legacy.mjs`（先看不写）：
+
+```powershell
+node scripts\adopt-legacy.mjs --list                                    # 有哪些可处理
+node scripts\adopt-legacy.mjs --adopt "qq:private:1225292178:黑天炎"      # dry-run
+node scripts\adopt-legacy.mjs --adopt "qq:private:1225292178:黑天炎" --apply
+node scripts\adopt-legacy.mjs --drop  "qq:private:1793813578:404" --apply # 不要这条
+```
+
+- `--adopt`：用身份键重写完整文本（`/v1/write`，带 `scene`/`audience`），再 tombstone 旧的 `import:` 文档；
+- `--drop`：先 `memory-remove` 删轻量条目，再 tombstone `import:` 副本——两层都不留；
+- 每个动作写 `logs\reconcile\adopt-<日期>.jsonl`（含旧文档 id 与文本），可逐条回滚。
+
 ## 3. 令牌
 
 签发（明文只显示一次）：
