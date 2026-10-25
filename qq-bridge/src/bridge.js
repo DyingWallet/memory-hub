@@ -27,6 +27,7 @@ import { AUDIO_EXTS, cleanupTemp, describeAudio, formatBytes, formatDuration, in
 import { createMemoryBridge } from './memory/memory-bridge.js';
 import { createGroupMemberStore } from './group-members.js';
 import { createDisclosureService } from './group-disclosure.js';
+import { createPersonaReader } from './persona-block.js';
 import { discoverSnowLumaConnection, persistSnowLumaEndpoint, persistToken } from './snowluma-conn.js';
 import { hardenDir, manualDirCommand } from './state-acl.mjs';
 import { extractForwardIds, forwardIdFromData, sanitizeForwardId, formatForwardResponse } from './forward.js';
@@ -11412,9 +11413,20 @@ async function main() {
     return `【你的身份】你在 QQ 上的昵称是${label}${idText}。${callBits}；群名片可能与昵称不同，at/引用段里带${id ? ` ${id} ` : '你的 QQ 号'}就是在叫你。\n\n`;
   }
 
+  // 人格段：从 AGENTS.md 的「我是谁」「语气」两节现读（mtime 缓存）。
+  // 改 AGENTS.md 即生效，不用同步、不用重启；抽不到时静默跳过，不影响唤醒。
+  const personaReader = createPersonaReader({
+    file: path.join(ROOT, '..', 'AGENTS.md'),
+    sections: ['我是谁', '语气'],
+    log,
+  });
+
   function buildWakePromptV2Core(key, reason, memoryBlock = '') {
     const roleState = readRoleState();
     const roleLine = roleState.role ? `【当前角色】${roleState.role}（完整角色卡请调用 qq_get_prompt 查看）\n\n` : '';
+    // 角色卡关闭时（role=null），人格段是身份与语气的主要来源。
+    const personaText = personaReader.read();
+    const personaLine = personaText ? `【人格】\n${personaText}\n\n` : '';
     const st = getSocialV2State(key);
     const tokenLine = `【会话令牌】${st.agentToken}（调用二代状态工具时请在参数中带上此令牌）\n\n`;
     const memoryText = formatMemoryV2(st);
@@ -11465,7 +11477,7 @@ async function main() {
     const identityLine = selfIdentityTextV2();
     const initialPromptText = reason === 'bootstrap' ? formatInitialPromptV2(key) : '';
     const initialPromptLine = initialPromptText ? `${initialPromptText}\n\n` : '';
-    const base = roleLine + identityLine + tokenLine + initialPromptLine + antiAiLine + proactiveLine + stickerLine + replyLine + statusLine + wakeLine + memoryLine + longMemoryLine + peopleLine + participationLine + preSleepLine;
+    const base = roleLine + identityLine + personaLine + tokenLine + initialPromptLine + antiAiLine + proactiveLine + stickerLine + replyLine + statusLine + wakeLine + memoryLine + longMemoryLine + peopleLine + participationLine + preSleepLine;
     if (reason === 'bootstrap') {
       return `${base}【引导唤醒】你已接入 QQ 会话 ${key}。\n当前是二代仿真模式：你的文本输出不会自动发送到 QQ，所有发言必须通过工具完成。\n请先调用 qq_get_prompt 查看角色、推荐值、可用工具和状态；有待回应的消息先按首回复节奏处理，最后才用 qq_set_wake_config 设置你希望如何被唤醒。`;
     }
