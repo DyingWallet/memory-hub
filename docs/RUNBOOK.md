@@ -159,6 +159,43 @@ npm run test:memory
 > 验证删除是否真的生效：看索引（`chunks` 里已无该文本），**别看 JSONL 文本**——
 > tombstone 行只有 `{"id":"f_…","deleted":true,"text":"deleted"}`，不带原文。
 
+### 2.6.1 两级键：身份键与内容指纹（2026-10-26 起）
+
+镜像键有两代，`src/memory/idem.js` 是唯一实现：
+
+| 代 | 形状 | 用在 |
+|---|---|---|
+| 新（身份） | `qq:mirror:<scene>:<category>:<id>:<rev>` | 带 `id` 的轻量条目（迁移后全部） |
+| 旧（内容） | `<scene>:<category>:<sha256 前16位>` | 迁移前写入的、以及没有 id 的历史条目 |
+
+- **单条式**（`activeTopic` / `pendingThought`）：`id` 是条目自带的 8 位十六进制，`rev` 每次编辑 +1。
+- **聚合式**（`memberImpression`）：`id` 就是 `m:<target>`，`rev` 是 traits 追加次数；
+  镜像文本是**整串 traits**（`join('、')`），不是单独一条。
+- 为什么 `rev` 要进键：`/v1/write` 命中 `idem:` 直接返回 `duplicate`，**不回查文档是否已被 tombstone**，
+  所以「同键覆盖写」写不进去。带 rev 之后：同版本重试幂等，编辑自然换键。
+- 遗忘时**两把键都试**（`forgetKeys()`）：新键忘了、旧的漏掉，或者反过来，都会留下「说忘还在」的副本。
+
+迁移（必须在桥接停机时跑，否则运行中的状态会覆盖文件）：
+
+```powershell
+# 停桥接 → 备份并补 id/rev + schemaVersion=2 → 起桥接
+node scripts\migrate-social-v2-ids.mjs --apply
+```
+
+- 幂等：已有 `id` 的条目一个字段都不动（id 变了等于换身份）。
+- **只动 social-v2.json，不碰 memd**：迁移后的老条目在对账里仍是 `legacy`，要变 `present` 得显式补写。
+
+冒烟（在线，不停服）：
+
+```powershell
+node scripts\identity-drill.mjs
+```
+
+它验证「新建 → 编辑 → 删除」「印象 → 追加 traits」两条链路，以及每一步的 `present / superseded` 数字。
+
+> `superseded` 是**异常检测**，不是正常现象：正常编辑会主动 forget 旧 rev，所以它应该一直是 0；
+> 一旦出现，说明某次编辑「写了新版本、没忘旧版本」，用 `--fix superseded` 清。
+
 ## 3. 令牌
 
 签发（明文只显示一次）：

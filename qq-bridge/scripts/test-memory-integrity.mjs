@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
-import { idemKey } from '../src/memory/idem.js';
+import { idemKey, mirrorKey, forgetKeys } from '../src/memory/idem.js';
 import { createMirrorJournal } from '../src/memory/mirror-journal.js';
 import { classify, collectEntries, loadIndex, sceneOfConversationKey } from '../src/memory/reconcile.js';
 import { createMemoryBridge } from '../src/memory/memory-bridge.js';
@@ -122,6 +122,7 @@ test('对账判定：present / legacy(text-only) / missing 分开，长期层多
     legacy: 1,
     partial: 0,
     missing: 1,
+    superseded: 0,
     orphanIdem: 1,
     staleDocs: 1,
   });
@@ -130,6 +131,50 @@ test('对账判定：present / legacy(text-only) / missing 分开，长期层多
   assert.equal(result.missing[0].text, '完全没写过');
   assert.equal(result.orphanIdem[0].idemKey, 'qq:owner:activeTopic:deadbeefdeadbeef');
   assert.equal(result.staleDocs[0].id, 'f_digest', '摘要只统计，不进 missing/legacy');
+});
+
+test('mirrorKey：有 id 用身份键，没 id 回退内容指纹，成员印象按 target', () => {
+  assert.equal(mirrorKey('qq:owner', 'activeTopic', { id: 'a3f91c07', rev: 2 }, '随便'), 'qq:mirror:qq:owner:activeTopic:a3f91c07:2');
+  assert.equal(mirrorKey('qq:owner', 'activeTopic', { id: 'a3f91c07' }, '随便'), 'qq:mirror:qq:owner:activeTopic:a3f91c07:1');
+  // 无 id → 旧格式（内容是唯一的输入）
+  assert.equal(mirrorKey('qq:owner', 'activeTopic', {}, '旧条目'), idemKey('qq:owner', 'activeTopic', {}, '旧条目'));
+  // 成员印象：id 是 m:<target>，键里用 target（编码后）
+  assert.equal(
+    mirrorKey('qq:private:10001', 'memberImpression', { id: 'm:甲', rev: 3, target: '甲' }, '整串'),
+    `qq:mirror:qq:private:10001:memberImpression:${encodeURIComponent('甲')}:3`,
+  );
+  // 同一版本重复写必须同键（幂等），换 rev 必须换键（编辑）
+  const a = mirrorKey('qq:owner', 'activeTopic', { id: 'x', rev: 1 }, '文本');
+  assert.equal(mirrorKey('qq:owner', 'activeTopic', { id: 'x', rev: 1 }, '文本'), a);
+  assert.notEqual(mirrorKey('qq:owner', 'activeTopic', { id: 'x', rev: 2 }, '文本'), a);
+
+  // forget 要两把键都试：新键 + 旧内容键
+  const keys = forgetKeys('qq:owner', 'activeTopic', { id: 'x', rev: 2 }, '文本');
+  assert.equal(keys[0], 'qq:mirror:qq:owner:activeTopic:x:2');
+  assert.equal(keys[1], idemKey('qq:owner', 'activeTopic', { id: 'x', rev: 2 }, '文本'));
+  assert.deepEqual(forgetKeys('qq:owner', 'activeTopic', {}, '无 id'), [idemKey('qq:owner', 'activeTopic', {}, '无 id')]);
+});
+
+test('编辑遗留：同一条目的旧 rev 在 memd 里要被标成 superseded', () => {
+  const social = { conversations: { 'private:709038511': { activeTopics: [{ id: 'abc12345', rev: 2, text: '第二版' }] } } };
+  const entries = collectEntries(social, '709038511');
+  const index = {
+    schemaVersion: '3',
+    docs: [
+      { id: 'f_v2', kind: 'qq-topic', scenes: new Set(['qq:owner']), text: '第二版' },
+      { id: 'f_v1', kind: 'qq-topic', scenes: new Set(['qq:owner']), text: '第一版' },
+    ],
+    idem: new Map([
+      [mirrorKey('qq:owner', 'activeTopic', { id: 'abc12345', rev: 2 }, '第二版'), 'f_v2'],
+      [mirrorKey('qq:owner', 'activeTopic', { id: 'abc12345', rev: 1 }, '第一版'), 'f_v1'],
+    ]),
+  };
+  const result = classify(entries, index);
+  assert.equal(result.counts.present, 1);
+  assert.equal(result.counts.superseded, 1);
+  assert.equal(result.superseded[0].docId, 'f_v1');
+  assert.equal(result.superseded[0].rev, 1);
+  assert.equal(result.superseded[0].currentRev, 2);
 });
 
 test('截断副本单独归类：不算 present，也不进 --fix 名单', () => {

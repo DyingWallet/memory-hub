@@ -132,6 +132,7 @@ const report = {
   missing: result.missing,
   legacy: result.legacy,
   partial: result.partial,
+  superseded: result.superseded,
   orphanIdem: result.orphanIdem.slice(0, 50),
   staleDocs: result.staleDocs.slice(0, 50),
 };
@@ -145,6 +146,7 @@ function printSummary() {
   const c = report.counts;
   console.log(`对账 ${generatedAt}  (schema v${index.schemaVersion})`);
   console.log(`  轻量条目 ${c.live} → present ${c.present} / legacy ${c.legacy} / partial ${c.partial} / missing ${c.missing}`);
+  console.log(`  编辑遗留 ${c.superseded} 条（同一条目的旧版本还在 memd 里，--fix superseded 才删）`);
   console.log(`  孤儿 idem 键 ${c.orphanIdem}（历史上写过、现已无对应条目）`);
   console.log(`  长期层多出 ${c.staleDocs} 条（摘要/迁移/退役话题，**只报不删**）`);
   console.log(`  遗忘队列 ${c.forgetQueue} 条`);
@@ -277,6 +279,43 @@ async function fixForget() {
   console.log(`遗忘队列：忘掉 ${drained}，剩余 ${remaining.length}（失败 ${left}）`);
 }
 
+/**
+ * 清掉「同一条目的旧版本」：编辑后忘了写新键、却没忘旧键留下的副本。
+ * 键在报告里已经算好，这里只负责调用，不做二次推断。
+ */
+async function fixSuperseded() {
+  const latest = join(OUT_DIR, 'latest.json');
+  if (!existsSync(latest)) fail('no report yet; run once without --fix first');
+  const previous = JSON.parse(readFileSync(latest, 'utf8'));
+  if (previous.input.size !== input.size || previous.input.mtimeMs !== input.mtimeMs) {
+    fail('social-v2.json changed since the report was written; re-run to refresh the report first', 3);
+  }
+  const items = previous.superseded ?? [];
+  if (items.length === 0) {
+    console.log('编辑遗留：0 条');
+    return;
+  }
+  let forgotten = 0;
+  let failed = 0;
+  for (const item of items) {
+    const tokenFile = tokenFileForScene(item.scene);
+    if (!tokenFile) {
+      failed += 1;
+      record({ action: 'superseded-skip', scene: item.scene, reason: 'no-token', idemKey: item.idemKey });
+      continue;
+    }
+    try {
+      await callApi('/v1/forget', { idempotency_key: item.idemKey }, tokenFile);
+      forgotten += 1;
+      record({ action: 'superseded-forget', scene: item.scene, id: item.id, rev: item.rev, idemKey: item.idemKey });
+    } catch (error) {
+      failed += 1;
+      record({ action: 'superseded-failed', scene: item.scene, error: String(error?.message ?? error), idemKey: item.idemKey });
+    }
+  }
+  console.log(`编辑遗留：忘掉 ${forgotten}，失败 ${failed}`);
+}
+
 if (!fixMode) {
   printSummary();
   if (wantJson) console.log(JSON.stringify(report.counts));
@@ -290,6 +329,9 @@ if (fixMode === 'missing') {
 } else if (fixMode === 'forget') {
   printSummary();
   await fixForget();
+} else if (fixMode === 'superseded') {
+  printSummary();
+  await fixSuperseded();
 } else {
-  fail(`unknown --fix mode "${fixMode}" (missing | forget)`);
+  fail(`unknown --fix mode "${fixMode}" (missing | forget | superseded)`);
 }

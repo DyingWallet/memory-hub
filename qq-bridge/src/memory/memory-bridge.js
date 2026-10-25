@@ -24,10 +24,35 @@
  */
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { idemKey } from './idem.js';
+import { idemKey, mirrorKey, forgetKeys } from './idem.js';
 import { createMirrorJournal } from './mirror-journal.js';
 
 const RECALL_CACHE_MS = 5000;
+
+/**
+ * 条目身份：`{id, rev, target}`。没有 id 的历史条目走内容指纹。
+ * rev 缺省 1；memberImpression 的 id 由调用方给成 `m:<target>`，这里只兜底 target。
+ */
+function normalizeEntry(extra, category) {
+  const raw = extra?.entry ?? {};
+  const id = String(raw.id ?? '').trim();
+  const rev = Math.max(1, Math.trunc(Number(raw.rev) || 1));
+  const target = category === 'memberImpression' ? String(raw.target ?? extra?.target ?? '').trim() : '';
+  return {
+    ...(id ? { id } : {}),
+    rev,
+    ...(target ? { target } : {}),
+  };
+}
+
+/** 只把可持久化的字段放进队列（重试时要能重算出同一把键）。 */
+function entryKeys(entry) {
+  return {
+    ...(entry?.id ? { id: String(entry.id) } : {}),
+    ...(entry?.rev ? { rev: Number(entry.rev) } : {}),
+    ...(entry?.target ? { target: String(entry.target) } : {}),
+  };
+}
 
 /**
  * @param {object} options
@@ -122,8 +147,11 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
     const result = await journal.drain(async (item) => {
       const api = await getClient(item.scene);
       if (!api) throw new Error('no memory client (token not mapped)');
-      const key = item.dedupeKey ?? idemKey(item.scene, item.category, { target: item.target }, item.text);
-      await api.forget({ idempotencyKey: key });
+      const keys = forgetKeys(item.scene, item.category, item.entry ?? { target: item.target }, item.text);
+      for (const idempotencyKey of keys) {
+        const ok = await api.forget({ idempotencyKey });
+        if (ok === false) return false;
+      }
       return true;
     });
     if (result.drained > 0 || result.gaveUp > 0) {
@@ -227,6 +255,7 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
       const text = String(content ?? '').trim();
       if (text.length === 0) return;
       const scene = sceneOf(key, cfg?.ownerQQ);
+      const entry = normalizeEntry(extra, category);
       void (async () => {
         try {
           const api = await getClient(scene);
@@ -245,7 +274,7 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
             scene,
             privacy: category === 'memberImpression' ? 'personal' : 'normal',
             tags: [category],
-            idempotencyKey: idemKey(scene, category, extra, text),
+            idempotencyKey: mirrorKey(scene, category, entry, text),
           });
           if (ok === false) {
             log.warn?.('[memory] mirror write returned false (memd unreachable or rejected)');
@@ -264,6 +293,16 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
       const text = String(content ?? '').trim();
       if (text.length === 0) return;
       const scene = sceneOf(key, cfg?.ownerQQ);
+      const entry = normalizeEntry(extra, category);
+      // 新键（带 id/rev）+ 旧内容键都要试：迁移前的写入只有旧键，
+      // 迁移后的写入只有新键；漏掉任何一个都会留下「说忘了还在」的副本。
+      const keys = forgetKeys(scene, category, entry, text);
+      const primary = keys[0];
+      const enqueue = (error) =>
+        journal?.enqueueForget(
+          { scene, category, target: extra?.target, text, error, entry: entryKeys(entry) },
+          primary,
+        );
       void (async () => {
         try {
           const api = await getClient(scene);
@@ -271,32 +310,34 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
             journal?.recordFailure({ op: 'forget', scene, category, target: extra?.target, error: 'no memory client (token not mapped)' });
             return;
           }
-          const ok = await api.forget({ idempotencyKey: idemKey(scene, category, extra, text) });
-          if (ok === false) {
+          let ok = true;
+          for (const idempotencyKey of keys) {
+            const result = await api.forget({ idempotencyKey });
+            if (result === false) ok = false;
+          }
+          if (!ok) {
             // 该忘而没忘掉：进队列，由 drainForgetQueue 重试（不静默丢弃）。
             log.warn?.('[memory] mirror forget returned false — queued for retry');
             journal?.recordFailure({ op: 'forget', scene, category, target: extra?.target, error: 'client returned false' });
-            journal?.enqueueForget(
-              { scene, category, target: extra?.target, text, error: 'client returned false' },
-              idemKey(scene, category, extra, text),
-            );
+            enqueue('client returned false');
           }
         } catch (error) {
           log.warn?.(`[memory] mirror forget failed: ${error?.message ?? error}`);
           journal?.recordFailure({ op: 'forget', scene, category, target: extra?.target, error });
-          // 该忘而没忘掉：进队列，由 drainForgetQueue 重试（不静默丢弃）。
-          journal?.enqueueForget({ scene, category, target: extra?.target, text, error }, idemKey(scene, category, extra, text));
+          enqueue(error);
         }
       })();
     },
 
-    /** 编辑一条记忆：先忘掉旧文本的镜像，再写新文本。 */
+    /** 编辑一条记忆：先忘掉旧版本，再写新版本（新版本的键带新的 rev）。 */
     mirrorUpdate(key, category, oldContent, newContent, extra = {}) {
       const oldText = String(oldContent ?? '').trim();
       const newText = String(newContent ?? '').trim();
       if (oldText.length === 0 || newText.length === 0 || oldText === newText) return;
-      this.mirrorForget(key, category, oldText, extra);
-      this.mirrorWrite(key, category, newText, extra);
+      const previous = extra?.entry ? normalizeEntry(extra, category) : null;
+      const next = extra?.nextEntry ? normalizeEntry({ entry: extra.nextEntry }, category) : previous;
+      this.mirrorForget(key, category, oldText, previous ? { ...extra, entry: previous } : extra);
+      this.mirrorWrite(key, category, newText, next ? { ...extra, entry: next } : extra);
     },
 
     /** Read-only helpers for future MCP tools (`qq_memory_search` 等). */

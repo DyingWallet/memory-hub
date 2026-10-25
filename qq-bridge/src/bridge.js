@@ -7435,10 +7435,24 @@ async function main() {
           if (req.headers['x-agent-token'] && !v2SessionAllowed(key)) { sendJson({ ok: false, error: '目标不在当前模式允许范围内' }, 403); return; }
           if (req.headers['x-agent-token'] && !v2ToolEnabled('memory')) { sendJson({ ok: false, error: '工具未启用：qq_memory_append' }, 403); return; }
           const st = getSocialV2State(key);
-          appendMemoryV2(st, category, content, extra);
+          const entry = appendMemoryV2(st, category, content, extra);
           // 镜像到 memd：fire-and-forget，服务不可用时静默失败（模块内部 catch）。
-          void memory.mirrorWrite(key, category, content, extra);
-          sendJson({ ok: true, key, category, content, memory: formatMemoryV2(st) });
+          // entry 带 id / rev，镜像键是 qq:mirror:<scene>:<category>:<id>:<rev>。
+          //
+          // 成员印象的镜像文本用**整串 traits**而不是这一条：一条记录 = 一个人的完整印象，
+          // rev 就是 traits 的版本号。这样追加一条新印象时「先忘旧 rev，再写新 rev」，
+          // memd 里不会堆出「同一人 N 条不同版本的印象」。
+          const mirrorText = category === 'memberImpression'
+            ? (Array.isArray(entry?.traits) && entry.traits.length ? entry.traits.join('、') : content)
+            : content;
+          if (category === 'memberImpression' && entry && Number(entry.rev) > 1) {
+            void memory.mirrorForget(key, category, mirrorText, {
+              target: extra.target,
+              entry: { id: entry.id, rev: Number(entry.rev) - 1, target: extra.target },
+            });
+          }
+          void memory.mirrorWrite(key, category, mirrorText, { ...extra, entry });
+          sendJson({ ok: true, key, category, content, entry, memory: formatMemoryV2(st) });
           return;
         }
         if (req.method === 'POST' && url.pathname === '/api/socialV2/memory-update') {
@@ -7465,18 +7479,34 @@ async function main() {
           if (req.headers['x-agent-token'] && !v2SessionAllowed(key)) { sendJson({ ok: false, error: '目标不在当前模式允许范围内' }, 403); return; }
           if (req.headers['x-agent-token'] && !v2ToolEnabled('memory')) { sendJson({ ok: false, error: '工具未启用：qq_memory_*' }, 403); return; }
           const st = getSocialV2State(key);
+          /** 编辑前后的条目身份：镜像要「用旧 rev 忘、用新 rev 写」。 */
+          let editPlan = null;
           if (category === 'activeTopic' && Array.isArray(st.activeTopics)) {
             const idx = st.activeTopics.findIndex((t) => String(t?.text ?? '') === oldContent);
             if (idx < 0) { sendJson({ ok: false, error: '找不到要编辑的 activeTopic' }, 404); return; }
-            if (newContent !== undefined) st.activeTopics[idx].text = newContent.slice(0, 200);
-            if (cleanNewExtra.pendingQuestion !== undefined) st.activeTopics[idx].pendingQuestion = String(cleanNewExtra.pendingQuestion).slice(0, 200);
-            if (Array.isArray(cleanNewExtra.participants)) st.activeTopics[idx].participants = cleanNewExtra.participants.map(String).slice(0, 10);
+            const item = st.activeTopics[idx];
+            if (!item.id) item.id = newEntryId();
+            const oldRev = Number(item.rev) > 0 ? Number(item.rev) : 1;
+            item.rev = oldRev;
+            const changed = newContent !== undefined && newContent !== oldContent;
+            if (newContent !== undefined) item.text = newContent.slice(0, 200);
+            if (cleanNewExtra.pendingQuestion !== undefined) item.pendingQuestion = String(cleanNewExtra.pendingQuestion).slice(0, 200);
+            if (Array.isArray(cleanNewExtra.participants)) item.participants = cleanNewExtra.participants.map(String).slice(0, 10);
+            if (changed) item.rev = oldRev + 1;
+            editPlan = { previous: { id: item.id, rev: oldRev }, next: { id: item.id, rev: item.rev } };
           } else if (category === 'pendingThought' && Array.isArray(st.pendingThoughts)) {
             const idx = st.pendingThoughts.findIndex((t) => String(t?.text ?? '') === oldContent);
             if (idx < 0) { sendJson({ ok: false, error: '找不到要编辑的 pendingThought' }, 404); return; }
-            if (newContent !== undefined) st.pendingThoughts[idx].text = newContent.slice(0, 200);
-            if (cleanNewExtra.motivation !== undefined) st.pendingThoughts[idx].motivation = String(cleanNewExtra.motivation).slice(0, 50);
-            if (cleanNewExtra.expiresAtMs !== undefined) st.pendingThoughts[idx].expiresAt = Date.now() + Math.max(0, Number(cleanNewExtra.expiresAtMs) || 0);
+            const item = st.pendingThoughts[idx];
+            if (!item.id) item.id = newEntryId();
+            const oldRev = Number(item.rev) > 0 ? Number(item.rev) : 1;
+            item.rev = oldRev;
+            const changed = newContent !== undefined && newContent !== oldContent;
+            if (newContent !== undefined) item.text = newContent.slice(0, 200);
+            if (cleanNewExtra.motivation !== undefined) item.motivation = String(cleanNewExtra.motivation).slice(0, 50);
+            if (cleanNewExtra.expiresAtMs !== undefined) item.expiresAt = Date.now() + Math.max(0, Number(cleanNewExtra.expiresAtMs) || 0);
+            if (changed) item.rev = oldRev + 1;
+            editPlan = { previous: { id: item.id, rev: oldRev }, next: { id: item.id, rev: item.rev } };
           } else if (category === 'memberImpression' && st.memberImpressions && typeof st.memberImpressions === 'object') {
             const oldTarget = target;
             if (['__proto__', 'constructor', 'prototype'].includes(oldTarget)) { sendJson({ ok: false, error: '非法的群友名字' }, 400); return; }
@@ -7489,6 +7519,8 @@ async function main() {
             }
             const im = st.memberImpressions[oldTarget];
             const oldTraitsText = Array.isArray(im?.traits) ? im.traits.join('、') : '';
+            const oldRev = Number(im?.rev) > 0 ? Number(im.rev) : 1;
+            if (!im.id) im.id = `m:${oldTarget}`;
             const newTarget = String(cleanNewExtra.target || oldTarget).trim().slice(0, 64);
             if (!newTarget || ['__proto__', 'constructor', 'prototype'].includes(newTarget)) { sendJson({ ok: false, error: '非法的群友名字' }, 400); return; }
             if (newContent !== undefined) {
@@ -7496,11 +7528,24 @@ async function main() {
             }
             if (cleanNewExtra.interactionCount !== undefined) im.interactionCount = Math.max(0, Number(cleanNewExtra.interactionCount) || 0);
             if (newTarget !== oldTarget) delete st.memberImpressions[oldTarget];
-            st.memberImpressions[newTarget] = im;
-            // memd 镜像：旧 traits（按旧 target）忘掉，新 traits（按新 target）写入。
+            // 身份跟着 target 走；只有 traits 真的变了才涨 rev。
             const newTraitsText = Array.isArray(im.traits) ? im.traits.join('、') : '';
-            if (oldTraitsText && oldTraitsText !== newTraitsText) memory.mirrorForget(key, category, oldTraitsText, { target: oldTarget });
-            if (newTraitsText && newTraitsText !== oldTraitsText) memory.mirrorWrite(key, category, newTraitsText, { target: newTarget });
+            im.id = `m:${newTarget}`;
+            im.rev = oldTraitsText !== newTraitsText ? oldRev + 1 : oldRev;
+            st.memberImpressions[newTarget] = im;
+            // memd 镜像：旧 traits（旧 target/旧 rev）忘掉，新 traits（新 target/新 rev）写入。
+            if (oldTraitsText && oldTraitsText !== newTraitsText) {
+              memory.mirrorForget(key, category, oldTraitsText, {
+                target: oldTarget,
+                entry: { id: `m:${oldTarget}`, rev: oldRev, target: oldTarget },
+              });
+            }
+            if (newTraitsText && newTraitsText !== oldTraitsText) {
+              memory.mirrorWrite(key, category, newTraitsText, {
+                target: newTarget,
+                entry: { id: im.id, rev: im.rev, target: newTarget },
+              });
+            }
             // 与控制台/AI 的 append 路径保持一致：条目数上限 50，超了按 lastSeenAt 淘汰最旧，
             // 否则 memory-update 能无限塞名字（每次 1MB 请求 → 状态文件与每轮 prompt 一起膨胀）。
             const impressionEntries = Object.entries(st.memberImpressions);
@@ -7509,9 +7554,9 @@ async function main() {
               for (let i = 0; i < impressionEntries.length - 50; i += 1) delete st.memberImpressions[impressionEntries[i][0]];
             }
           }
-          // 普通类别（activeTopic / pendingThought）编辑：忘旧文本、写新文本。
-          if (category !== 'memberImpression' && newContent !== undefined) {
-            memory.mirrorUpdate(key, category, oldContent, newContent);
+          // 普通类别（activeTopic / pendingThought）编辑：用旧 rev 忘、用新 rev 写。
+          if (category !== 'memberImpression' && newContent !== undefined && editPlan) {
+            memory.mirrorUpdate(key, category, oldContent, newContent, { entry: editPlan.previous, nextEntry: editPlan.next });
           }
           saveSocialV2State();
           sendJson({ ok: true, key, category, memory: formatMemoryV2(st) });
@@ -7559,16 +7604,23 @@ async function main() {
           if (req.headers['x-agent-token'] && !v2ToolEnabled('memory')) { sendJson({ ok: false, error: '工具未启用：qq_memory_remove' }, 403); return; }
           const st = getSocialV2State(key);
           if (category === 'activeTopic' && Array.isArray(st.activeTopics)) {
+            const removed = st.activeTopics.find((t) => String(t?.text ?? '') === content);
             st.activeTopics = st.activeTopics.filter((t) => String(t?.text ?? '') !== content);
-            memory.mirrorForget(key, category, content);
+            memory.mirrorForget(key, category, content, removed ? { entry: { id: removed.id, rev: removed.rev } } : {});
           } else if (category === 'pendingThought' && Array.isArray(st.pendingThoughts)) {
+            const removed = st.pendingThoughts.find((t) => String(t?.text ?? '') === content);
             st.pendingThoughts = st.pendingThoughts.filter((t) => String(t?.text ?? '') !== content);
-            memory.mirrorForget(key, category, content);
+            memory.mirrorForget(key, category, content, removed ? { entry: { id: removed.id, rev: removed.rev } } : {});
           } else if (category === 'memberImpression' && st.memberImpressions && typeof st.memberImpressions === 'object') {
             const removed = st.memberImpressions[target];
             const removedTraits = Array.isArray(removed?.traits) ? removed.traits.join('、') : '';
             delete st.memberImpressions[target];
-            if (removedTraits) memory.mirrorForget(key, category, removedTraits, { target });
+            if (removedTraits) {
+              memory.mirrorForget(key, category, removedTraits, {
+                target,
+                entry: { id: `m:${target}`, rev: removed?.rev, target },
+              });
+            }
           }
           saveSocialV2State();
           sendJson({ ok: true, key, category, memory: formatMemoryV2(st) });
@@ -7587,20 +7639,25 @@ async function main() {
           // 清空前把要删的文本交给 memd 镜像删除（tombstone），否则 search 还能搜到。
           if (!category || category === 'activeTopic') {
             for (const topic of Array.isArray(st.activeTopics) ? st.activeTopics : []) {
-              memory.mirrorForget(key, 'activeTopic', String(topic?.text ?? ''));
+              memory.mirrorForget(key, 'activeTopic', String(topic?.text ?? ''), { entry: { id: topic?.id, rev: topic?.rev } });
             }
             st.activeTopics = [];
           }
           if (!category || category === 'pendingThought') {
             for (const thought of Array.isArray(st.pendingThoughts) ? st.pendingThoughts : []) {
-              memory.mirrorForget(key, 'pendingThought', String(thought?.text ?? ''));
+              memory.mirrorForget(key, 'pendingThought', String(thought?.text ?? ''), { entry: { id: thought?.id, rev: thought?.rev } });
             }
             st.pendingThoughts = [];
           }
           if (!category || category === 'memberImpression') {
             for (const [name, entry] of Object.entries(st.memberImpressions && typeof st.memberImpressions === 'object' ? st.memberImpressions : {})) {
               const traits = Array.isArray(entry?.traits) ? entry.traits.join('、') : '';
-              if (traits) memory.mirrorForget(key, 'memberImpression', traits, { target: name });
+              if (traits) {
+                memory.mirrorForget(key, 'memberImpression', traits, {
+                  target: name,
+                  entry: { id: `m:${name}`, rev: entry?.rev, target: name },
+                });
+              }
             }
             st.memberImpressions = {};
           }
@@ -9480,7 +9537,10 @@ async function main() {
 
   function saveSocialV2State() {
     try {
-      const obj = { paused: socialV2.paused, conversations: Object.create(null) };
+      // schemaVersion 2（2026-10-26）：轻量记忆条目带 id / rev，镜像键用
+      // qq:mirror:<scene>:<category>:<id>:<rev>。旧文件没有这个字段，读的时候按 1 处理；
+      // 这里每次都写，方便迁移脚本与对账判断文件代际。
+      const obj = { schemaVersion: 2, paused: socialV2.paused, conversations: Object.create(null) };
       for (const [key, st] of socialV2.conversations) {
         obj.conversations[key] = {
           wakeConfig: st.wakeConfig,
@@ -9741,10 +9801,15 @@ async function main() {
     return lines.join('\n');
   }
 
+  /** 条目 id：8 位十六进制。单会话 ≤ 50 条，碰撞可以忽略。 */
+  const newEntryId = () => crypto.randomBytes(4).toString('hex');
+
   function appendMemoryV2(st, category, content, extra = {}) {
-    if (!st) return;
+    if (!st) return null;
     const text = redactKnownTokensOnly(String(content ?? '')).trim();
     const cat = String(category || '').trim();
+    /** 本次真正被创建/更新的条目：镜像写入靠它拿 id / rev。 */
+    let entry = null;
     // 轻量清理：过期想法移除；超过 24h 未提起的话题移除（避免无限膨胀）。
     if (Array.isArray(st.pendingThoughts)) {
       st.pendingThoughts = st.pendingThoughts.filter((t) => t && (!t.expiresAt || Date.now() < Number(t.expiresAt)));
@@ -9762,13 +9827,20 @@ async function main() {
           existing.participants = [...set].slice(0, 10);
         }
         if (extra.pendingQuestion) existing.pendingQuestion = truncateText(redactKnownTokensOnly(String(extra.pendingQuestion)), 200);
+        // 懒迁移：老条目没有 id/rev，下一次被写入时补上（不用等迁移脚本）。
+        if (!existing.id) existing.id = newEntryId();
+        if (!(Number(existing.rev) > 0)) existing.rev = 1;
+        entry = existing;
       } else {
-        st.activeTopics.push({
+        entry = {
+          id: newEntryId(),
+          rev: 1,
           text: truncateText(text, 200),
           lastMentionAt: Date.now(),
           participants: Array.isArray(extra.participants) ? extra.participants.map((p) => redactKnownTokensOnly(String(p))).slice(0, 10) : [],
           pendingQuestion: redactKnownTokensOnly(String(extra.pendingQuestion || '')).slice(0, 200)
-        });
+        };
+        st.activeTopics.push(entry);
       }
       if (st.activeTopics.length > 20) st.activeTopics.splice(0, st.activeTopics.length - 20);
     } else if (cat === 'pendingThought' && text) {
@@ -9778,27 +9850,40 @@ async function main() {
         existing.createdAt = Date.now();
         existing.expiresAt = Date.now() + (Number(extra.expiresAtMs) || 2 * 60 * 60 * 1000);
         if (extra.motivation) existing.motivation = redactKnownTokensOnly(String(extra.motivation)).slice(0, 50);
+        if (!existing.id) existing.id = newEntryId();
+        if (!(Number(existing.rev) > 0)) existing.rev = 1;
+        entry = existing;
       } else {
-        st.pendingThoughts.push({
+        entry = {
+          id: newEntryId(),
+          rev: 1,
           text: text.slice(0, 200),
           createdAt: Date.now(),
           expiresAt: Date.now() + (Number(extra.expiresAtMs) || 2 * 60 * 60 * 1000),
           motivation: redactKnownTokensOnly(String(extra.motivation || 'curiosity')).slice(0, 50)
-        });
+        };
+        st.pendingThoughts.push(entry);
       }
       if (st.pendingThoughts.length > 20) st.pendingThoughts.splice(0, st.pendingThoughts.length - 20);
     } else if (cat === 'memberImpression') {
       const target = String(extra.target || '').trim();
-      if (!target || ['__proto__', 'constructor', 'prototype'].includes(target)) return;
+      if (!target || ['__proto__', 'constructor', 'prototype'].includes(target)) return null;
       if (!st.memberImpressions || typeof st.memberImpressions !== 'object') st.memberImpressions = {};
       const old = st.memberImpressions[target] || {};
       const traits = Array.isArray(old.traits) ? old.traits.slice(0, 10) : [];
-      if (text && !traits.includes(text.slice(0, 50))) traits.push(text.slice(0, 50));
-      st.memberImpressions[target] = {
+      const added = Boolean(text) && !traits.includes(text.slice(0, 50));
+      if (added) traits.push(text.slice(0, 50));
+      // 身份是 target，内容版本是 traits 的追加次数：只有真的加了一条才 +1，
+      // 否则重复 append 会不断造新键、在 memd 里堆重复副本。
+      const previousRev = Number(old.rev) > 0 ? Number(old.rev) : 1;
+      entry = {
+        id: `m:${target}`,
+        rev: added ? previousRev + 1 : previousRev,
         traits,
         interactionCount: (Number(old.interactionCount) || 0) + 1,
         lastSeenAt: Date.now()
       };
+      st.memberImpressions[target] = entry;
       const impressionEntries = Object.entries(st.memberImpressions);
       if (impressionEntries.length > 50) {
         impressionEntries.sort((a, b) => (Number(a[1]?.lastSeenAt) || 0) - (Number(b[1]?.lastSeenAt) || 0));
@@ -9808,6 +9893,7 @@ async function main() {
       }
     }
     saveSocialV2State();
+    return entry;
   }
 
   loadSocialV2State();

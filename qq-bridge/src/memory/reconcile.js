@@ -10,7 +10,7 @@
  * 那些条目只统计成 staleDocs，供人看，不进任何修复路径。
  */
 import { DatabaseSync } from 'node:sqlite';
-import { idemKey } from './idem.js';
+import { idemKey, mirrorKey } from './idem.js';
 
 /** `packages/server/src/db.ts` 的 SCHEMA_VERSION；索引结构一变就该报警，而不是猜。 */
 export const EXPECTED_SCHEMA_VERSION = '3';
@@ -37,17 +37,32 @@ export function collectEntries(social, ownerQQ) {
     const scene = sceneOfConversationKey(convKey, ownerQQ);
     for (const topic of conv.activeTopics ?? []) {
       const text = String(topic?.text ?? '').trim();
-      if (text) entries.push({ convKey, scene, category: 'activeTopic', kind: 'qq-topic', text, privacy: 'normal' });
+      if (text) {
+        entries.push({ convKey, scene, category: 'activeTopic', kind: 'qq-topic', text, privacy: 'normal', id: topic?.id, rev: topic?.rev });
+      }
     }
     for (const thought of conv.pendingThoughts ?? []) {
       const text = String(thought?.text ?? '').trim();
-      if (text) entries.push({ convKey, scene, category: 'pendingThought', kind: 'qq-topic', text, privacy: 'normal' });
+      if (text) {
+        entries.push({ convKey, scene, category: 'pendingThought', kind: 'qq-topic', text, privacy: 'normal', id: thought?.id, rev: thought?.rev });
+      }
     }
     for (const [target, impression] of Object.entries(conv.memberImpressions ?? {})) {
-      const text = typeof impression === 'string' ? impression : String(impression?.text ?? impression?.traits ?? '');
+      const text = typeof impression === 'string' ? impression : String(impression?.text ?? impression?.traits?.join?.('、') ?? '');
       const trimmed = text.trim();
       if (trimmed) {
-        entries.push({ convKey, scene, category: 'memberImpression', kind: 'qq-impression', text: trimmed, target, privacy: 'personal' });
+        entries.push({
+          convKey,
+          scene,
+          category: 'memberImpression',
+          kind: 'qq-impression',
+          text: trimmed,
+          target,
+          // 成员印象的身份就是 target（id 派生成 m:<target>，rev 随 traits 追加递增）。
+          id: impression?.id ?? `m:${target}`,
+          rev: impression?.rev,
+          privacy: 'personal',
+        });
       }
     }
   }
@@ -113,13 +128,18 @@ export function classify(entries, index) {
   const missing = [];
 
   for (const entry of entries) {
-    const key = idemKey(entry.scene, entry.category, { target: entry.target }, entry.text);
-    const docId = index.idem.get(key);
+    const primary = mirrorKey(entry.scene, entry.category, entry, entry.text);
+    const docId = index.idem.get(primary);
     const doc = docId ? docById.get(docId) : undefined;
     if (doc && doc.kind === entry.kind) {
-      present.push({ ...entry, idemKey: key, docId });
+      present.push({ ...entry, idemKey: primary, docId });
       continue;
     }
+    // 旧键（迁移前写的、以及还没有 id 的条目）也要试：它们是同一段记忆的另一种指纹。
+    const legacyKey = entry.id ? idemKey(entry.scene, entry.category, entry, entry.text) : primary;
+    const legacyDocId = legacyKey !== primary ? index.idem.get(legacyKey) : undefined;
+    const legacyDoc = legacyDocId ? docById.get(legacyDocId) : undefined;
+
     const sameKindScene = (candidate) => candidate.kind === entry.kind && candidate.scenes.has(entry.scene);
     const textHit = index.docs.find((candidate) => sameKindScene(candidate) && candidate.text.includes(normalize(entry.text)));
     // 迁移/截断留下的副本：开头对得上、后面被切掉了。它既不是「写好了」，
@@ -127,21 +147,54 @@ export function classify(entries, index) {
     const partialHit = textHit
       ? undefined
       : index.docs.find((candidate) => sameKindScene(candidate) && candidate.text.includes(normalize(entry.text).slice(0, 30)));
-    const reason = docId ? (doc ? 'kind-mismatch' : 'doc-gone') : textHit ? 'text-only' : partialHit ? 'partial-text' : 'no-idem';
+    const reason = legacyDoc
+      ? 'legacy-key'
+      : docId
+        ? (doc ? 'kind-mismatch' : 'doc-gone')
+        : textHit
+          ? 'text-only'
+          : partialHit
+            ? 'partial-text'
+            : 'no-idem';
     const record = {
       convKey: entry.convKey,
       scene: entry.scene,
       category: entry.category,
       ...(entry.target ? { target: entry.target } : {}),
+      ...(entry.id ? { id: entry.id, rev: Number(entry.rev) || 1 } : {}),
       text: clip(entry.text),
-      idemKey: key,
+      idemKey: primary,
       reason,
       ...(textHit && textHit.id !== docId ? { matchedDocId: textHit.id } : {}),
       ...(partialHit ? { matchedDocId: partialHit.id } : {}),
     };
-    if (textHit) legacy.push(record);
+    if (legacyDoc || textHit) legacy.push(record);
     else if (partialHit) partial.push(record);
     else missing.push(record);
+  }
+
+  // 同一条目的历史版本还留在 memd 里（编辑后忘了写新、没忘旧的）。
+  const superseded = [];
+  for (const entry of entries) {
+    if (!entry.id) continue;
+    const currentRev = Math.max(1, Number(entry.rev) || 1);
+    for (let rev = 1; rev < currentRev; rev += 1) {
+      const key = mirrorKey(entry.scene, entry.category, { ...entry, rev }, entry.text);
+      const docId = index.idem.get(key);
+      const doc = docId ? docById.get(docId) : undefined;
+      if (!doc) continue;
+      superseded.push({
+        scene: entry.scene,
+        category: entry.category,
+        ...(entry.target ? { target: entry.target } : {}),
+        id: entry.id,
+        rev,
+        currentRev,
+        idemKey: key,
+        docId,
+        text: clip(doc.text),
+      });
+    }
   }
 
   const liveKeys = new Set(entries.map((entry) => idemKey(entry.scene, entry.category, { target: entry.target }, entry.text)));
@@ -159,6 +212,7 @@ export function classify(entries, index) {
     legacy,
     partial,
     missing,
+    superseded,
     orphanIdem,
     staleDocs,
     counts: {
@@ -167,6 +221,7 @@ export function classify(entries, index) {
       legacy: legacy.length,
       partial: partial.length,
       missing: missing.length,
+      superseded: superseded.length,
       orphanIdem: orphanIdem.length,
       staleDocs: staleDocs.length,
     },
