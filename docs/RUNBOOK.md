@@ -156,6 +156,9 @@ npm run test:memory
 > 所以 `mirrorWrite` 只靠 `try/catch` 判断失败时**一条痕迹都不会留下**。
 > 现在两处都判了返回值；回归测试「镜像失败即使只是返回 false，也要落失败流水与遗忘队列」钉住这一点。
 
+> 验证删除是否真的生效：看索引（`chunks` 里已无该文本），**别看 JSONL 文本**——
+> tombstone 行只有 `{"id":"f_…","deleted":true,"text":"deleted"}`，不带原文。
+
 ## 3. 令牌
 
 签发（明文只显示一次）：

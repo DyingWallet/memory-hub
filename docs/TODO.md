@@ -197,6 +197,9 @@
       - 实测（真数据）：live 4 → present 0 / legacy 2 / partial 1 / missing 1；孤儿 idem 键 37；长期层多出 26 条（只报不删）。
       - 测试 7 项（`npm run test:memory`），覆盖 key 稳定性、失败流水、队列去重与上限、摊平映射、五桶判定、截断副本、schema 断言。
         RUNBOOK §2.6 已写。第 2 步（`entryId` 稳定键 + legacy 认领）待决。
+      - **线上演练（2026-10-26 01:20）**：真停 memd 做了一遍——在线写 A 落库；停服后写 B 只进 `mirror-failures.jsonl`（0→1）、不进队列；删 A 失败进队列（0→1，`qq:owner:activeTopic:e035e719224b756e`）；起 memd + 重启桥接后 42 秒队列清零，A 在 `facts` 里出现 `deleted:true` 行（`f_1792948808305_404f8ead`，17:20:26Z），索引里已无该文本。
+        残留：`facts/2026-10.jsonl` 多了一行演练写入 + 一行 tombstone（append-only，不删；索引里不可见）。
+        演练脚本 `_tmp/mirror-drill.mjs`（临时，未入库）。
 
 32. ✅ **QQ 桥接看护并入 `memd-watchdog`**（2026-10-25 夜）
     - 起因：桥接原本只有登录时的 `Startup\qq-stack.vbs` 一条链，会话里手动关掉后没人补；沙箱身份也起不了它（`qq-bridge\state\` 与 `config.json` 做过 ACL 收紧）。
