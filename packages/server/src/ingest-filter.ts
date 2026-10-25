@@ -17,8 +17,9 @@ const DEFAULT_PLACEHOLDERS =
 /**
  * 「内部 prompt 被当聊天发进来」的前缀。
  *
- * 只匹配开头 + 要求够长（默认 80 字符）：正常用户不会用这种长句开头，
+ * 只匹配开头 + 要求够长（默认 40 字符）：正常用户不会用这种长句开头，
  * 而系统提示词/学习器 prompt/工具报错都又长又固定。
+ * 40 而不是 80：黑话学习器的 prompt 有 70 多字的版本，真实数据回放时被漏掉过。
  */
 const DEFAULT_INTERNAL_PREFIXES = [
   '你是主人桌面上的',
@@ -52,7 +53,7 @@ export function cleanIngestText(raw: string, options: IngestFilterOptions = {}):
   const placeholders = options.placeholders ?? DEFAULT_PLACEHOLDERS;
   const minChars = options.minChars ?? 2;
   const internalPrefixes = options.internalPrefixes ?? DEFAULT_INTERNAL_PREFIXES;
-  const internalMinLength = options.internalMinLength ?? 80;
+  const internalMinLength = options.internalMinLength ?? 40;
 
   const original = collapse(String(raw ?? ''));
   if (original.length === 0) return { text: '', drop: true, reason: 'empty' };

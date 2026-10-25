@@ -54,6 +54,12 @@ test('内部 prompt 被识别为噪音', () => {
   assert.equal(cleanIngestText(toolError).reason, 'internal-prompt');
 });
 
+test('70 多字的内部 prompt 也会被识别（门槛 40）', () => {
+  const slang =
+    '你是一个群聊黑话学习器。请从下面的聊天记录中提取“可能是黑话/网络用语/抽象话/群内梗”的候选项，只提取你无法确定含义、或需要群内语境才能理解的词。';
+  assert.equal(cleanIngestText(slang).reason, 'internal-prompt');
+});
+
 test('同开头但很短的话不会被误杀', () => {
   const r = cleanIngestText('你是主人桌面上的谁呀');
   assert.equal(r.drop, false);
