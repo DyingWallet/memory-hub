@@ -81,6 +81,14 @@ start.bat                 # 前台，退出后 5 秒自动重启
 # 或 qq-stack.vbs（隐藏窗口，同时拉起 DSH / SnowLuma / 桥接）
 ```
 
+**源码以本仓库为准**。实际部署目录（带 `state/`、`config.json`、`node_modules/`）只是运行环境，改完代码用脚本同步过去，不会覆盖运行状态：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\sync-qq-bridge.ps1           # 预览
+powershell -ExecutionPolicy Bypass -File scripts\sync-qq-bridge.ps1 -Apply    # 同步
+# 加 -Restart 会顺带停掉 3100 上的进程并用 start.bat 重新拉起
+```
+
 桥接侧的改动记录在 [`docs/QQ-BRIDGE-PATCH.md`](docs/QQ-BRIDGE-PATCH.md) 与 [`docs/TODO.md`](docs/TODO.md)。
 
 **许可**：`qq-bridge/` 是 MIT（Copyright Derpyu520 and qq-bridge / QSH contributors），保留其 `LICENSE` 与 `NOTICE.md`；SnowLuma 本体是专有组件，不随仓库分发。
