@@ -1111,8 +1111,43 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
           continue;
         }
 
+        // 先取原状态：UPDATE 之后 stage 就变 long 了，判断不出「这原本是不是短期」。
+        const before = db
+          .prepare('SELECT stage, kind, audience, privacy, source, scene, subject FROM docs WHERE id = ?')
+          .get(id) as
+          | { stage?: string; kind: string; audience: string; privacy: string; source: string; scene: string | null; subject: string | null }
+          | undefined;
+
         db.prepare("UPDATE docs SET stage = 'long', expires_at = NULL, persisted_at = ? WHERE id = ?").run(now, id);
         db.prepare("UPDATE chunks SET stage = 'long', expires_at = NULL WHERE doc_id = ?").run(id);
+
+        // 把 long 状态也写进 JSONL。index.db 是可以从 memories/ 重建的，持久化状态不能
+        // 只活在索引里——否则从备份恢复（备份不含 index.db）后，reindex 会把它变回短期，
+        // 等 TTL 到了就被删掉。追加一行同 id 的记录，reindex 时后行覆盖前行。
+        // 只对原本是 short 的记录写：多 chunk 的文档用单个 chunk 文本会截断。
+        if (before?.stage === 'short') {
+          try {
+            appendFact(db, config, {
+              schema_version: 1,
+              id,
+              ts: new Date(now).toISOString(),
+              kind: before.kind as MemoryKind,
+              text: row.text,
+              audience: JSON.parse(before.audience) as string[],
+              privacy: before.privacy,
+              source: before.source,
+              ...(before.scene ? { scene: before.scene } : {}),
+              ...(before.subject ? { subject: before.subject as 'owner' | 'self' | 'other' } : {}),
+              stage: 'long',
+              recall_count: 0,
+              persisted_at: new Date(now).toISOString(),
+            } as TFactRecord);
+          } catch (error) {
+            // 写 JSONL 失败不能回滚已经生效的 persist：索引已经是 long，只是重建能力丢了。
+            // 记一行日志，下一次 persist 或手动迁移可以补。
+            console.error(`[persist] failed to append long row for ${id}: ${(error as Error).message}`);
+          }
+        }
         persisted.push(id);
         longCandidates.push({ ...row, doc_id: id, text: hit.text });
       }
