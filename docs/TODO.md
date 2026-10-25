@@ -113,6 +113,78 @@
     - 影响面：`resolveDshBaseUrl` 的调用点（bridge ×3、control-center、self-test）自动受益，不用各自改；`revive.mjs` 一行没动。
     - 验证：真实 netstat 输出解析出 47 个端口并命中 7642；杀掉 pet 后 `pet-revive` 自己在 `15:23:06Z` 拉起（日志 `DSH http://127.0.0.1:7642 reachable -> started pet pid=39104`）。测试 `scripts/test-dsh-endpoint.mjs` 11 项（+1 兜底用例）、`test-dsh-health.mjs` 4 项通过；`test-dsh-auth.mjs` 硬编码 3080（本机 DSH 在 7642），跟这次改动无关。
 
+## 2026-10-25 检索质量与披露（讨论稿）
+
+> 来源：QQ 私聊里问「昨晚一起实现了什么」，答成了 10-23 的旧状态。排查出若干独立问题（检索质量、生命周期、披露、工具面），按性价比排。编号接 21。
+
+22. 🔶 **QQ search 透传 stage**
+    - 现状：`adapter-qq` 的 `normalizeResults` 只留 `id/title/kind/text`，把服务端一直返回的 `stage` / `expires_at` 裁掉了。
+    - 已做：`MemoryItem` 加字段 + 透传 + 单测（7/7 过）+ `dist` 已构建；**等重启桥接生效**。
+    - 成本：已完成（~40 分钟）。
+
+23. 🔶 **ingest 去噪（源头）**
+    - 数据：短期 709 条里 114 条是噪音（16%）——`[图片]` 46、桌宠系统提示 24、`[表情N]` 17、`[卡片消息]` 11、黑话学习器 prompt 8、工具报错 8；另有 287 条 ≤10 字。
+    - 已做（2026-10-25）：新增 `packages/server/src/ingest-filter.ts`（占位符剥离 / 内部 prompt 前缀 / 最短 2 字 / 空白折叠），`/v1/ingest` 循环里接入，过滤掉的计入 `skipped`（协议不变）；9 项单测 + 全量 171 项通过；真实库回放覆盖 125/732（17%：占位 71、过短 18、内部 prompt 36）。
+    - 待做：**重启 memd 生效**；上游根因仍要修（桌宠别把 system prompt 当 user message、黑话学习器 prompt 不该进 main 短期）——入口过滤只是兜底，改上游能让 JSONL 也干净。
+    - 成本：已完成（约 1 小时）。
+
+24. ⬜ **过期短期记忆不再复活**
+    - 数据：`chunks_fts` 1180 行里 324 行是已过期短期（27.5%），仍参与 bm25 统计。
+    - 根因：`purgeExpired` 每小时删索引，但 `indexFacts` 无过期判断，任何一次 reindex（ingest 写 JSONL 就触发）都把过期记录插回来。
+    - 做法：`indexFacts` 跳过 `expires_at <= now` 的记录（注意保住 persist 后 long 记录的 hash 短路，别误删）。
+    - 成本：0.5–1 天（要配 persist 回归测试）。
+
+25. ⬜ **存量噪音清理**
+    - 做法：24 上线后跑一次 purge；把占位符/系统 prompt 类短期记忆写 tombstone。
+    - 成本：0.5 小时。
+
+26. ⬜ **跨场景披露放开（在群全量 / 退群拒绝）**
+    - 口径：当前在群的成员，披露该群全部历史（不限时间）；已退群/非成员拒绝；不做 `joinedAt`、不做入群时间判断。
+    - 现状限制：`group-disclosure.js` 按 24h/48h/7d 截断、最多 12 条、每条 160 字。
+    - 做法：去掉时间下界（最近 20 条分页），保留实时成员校验（防退群事件丢失）、`chat/note` + `normal/personal`、60 秒限流、审计。
+    - 成本：约 1 天（含四种用例测试）。
+    - 依据：qq-owner 与主会话读范围实测一致；群/他人私聊被 scene + scope 隔开。
+
+27. ⬜ **QQ 加 timeline 入口**
+    - 依据：实测同一个「昨晚」问题，`/v1/timeline` 直接给出 `memory-hub.md`、`live-context.md`，`search` 给的全是聊天碎片。
+    - 做法：复用 `memory_timeline`，桥接加端点 + MCP 工具。
+    - 成本：2–3 小时。
+
+28. ⬜ **统一入口（compact 视图 + 薄透传）**
+    - 现状：QQ 的 `max_chars` 写死 400、没有 `kinds/subject`、返回被裁；主会话默认 600、字段全量。
+    - 做法：memd 定一份 compact 字段，桥接不再裁剪；`kinds/subject` 下放。
+    - 成本：3–4 小时 + 2 小时测试。
+
+29. ⬜ **排序改造（待评估）**
+    - 问题：`709 short vs 90 long`，bm25 天然偏短文档；问句和文档词面重合低。
+    - 方向：长期加权 / 短文档惩罚 / 问句改写。
+    - 成本：1–2 天 + 评估集，收益不确定，排在最后。
+
+30. ⬜ **QQ 记忆工具面：不合并，定契约**
+    - 现状：QQ 侧 7 个——`append/query/remove/clear` 是本地轻量记忆（`social-v2.json`），`search/get/recent` 是 memd；加 `timeline` 后 8 个。主会话 10 个（含 `memory_call` 兜底）。两层存储语义不同，不能合成一个工具。
+    - 决定：不合并成一个 `qq_memory(action)`；轻量与长期也不合并。
+    - 要做：① `qq_memory_timeline` 描述照抄主会话口径（「那阵子 / 上个月用 timeline，别拿 search 硬凑」）；② `search/get/recent/timeline` 共用 adapter-qq 的 `normalizeResults`，保证字段一致；③ 以后还要加工具时，加 `qq_memory(op)` 兜底而不是替换。
+    - 成本：0.5 小时。
+
+31. ⬜ **两层记忆保留，补对账**
+    - 决定：桥接轻量记忆（`social-v2.json`）不迁到 memd。理由：memd 挂时唤醒仍要能注入（fail-soft）；轻量记忆是「我主动提炼的当前关注」，memd short 是「自动收录的原文流」；按会话 key 隔离比 `*` scope 更干净。
+    - 现状：写入已镜像（`mirrorWrite` → `qq-topic` / `qq-impression`），但读取仍各走各的，可能漂移。
+    - 要做：`mirrorWrite` 失败时记日志；定期对账 `social-v2` 的轻量条目与 memd facts 是否一致。
+    - 成本：约 1 小时。
+
+### 明确不做（已实测负收益）
+
+- **k 上限 10 → 20**：实测多出的 5 条全是短期 chat（0.285–0.298），纯噪音。
+- **放宽短期 TTL / 检索时间范围**：会把 323 条过期聊天放回来。
+- **QQ 直连 `mcp__memory__*`**：桌面 root token，群里等于交出整库读权限。
+- **用 memd 取代桥接轻量记忆**：会丢 fail-soft、提炼语义和话题生命周期；而且 `qq-owner` 带 `*` scope，读 memd 会连 main/pet 一起看到，污染更大不是更小。
+
+### 本轮新增待决策
+
+- `search` 是否默认排除短期（只走 recent/review/timeline）？
+- 披露是否保留 `sensitive` 不给（建议保留，与成员资格无关）。
+- `qq-owner` 的 scope 要不要收窄（去掉 `*`）：更纯净，但会失去「主人私聊 = 主会话」的读范围一致性。
+
 ## 待决策
 
 - **pet 是否看群聊**：现在是 owner 的 main/qq:owner + shared，不含 `qq:group:*`；「全部 − 工作/财务」要不要包括群？
