@@ -20,7 +20,8 @@
  * 退出码：0 正常；1 出错；2 --strict 且发现 missing；3 报告过期。
  */
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, statSync, appendFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, appendFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { collectEntries, classify, loadIndex } from '../src/memory/reconcile.js';
@@ -141,6 +142,36 @@ mkdirSync(join(OUT_DIR, 'history'), { recursive: true });
 writeFileSync(join(OUT_DIR, 'latest.json'), `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 const day = generatedAt.slice(0, 10);
 writeFileSync(join(OUT_DIR, `history/${day}.json`), `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+
+/** 保留最近 N 天的历史报告（定时任务会传 --retain-days）。 */
+function pruneHistory(retainDays) {
+  const dir = join(OUT_DIR, 'history');
+  if (!(retainDays > 0) || !existsSync(dir)) return 0;
+  const cutoff = Date.now() - retainDays * 86_400_000;
+  let removed = 0;
+  for (const name of readdirSync(dir)) {
+    const ts = Date.parse(name.replace('.json', ''));
+    if (Number.isFinite(ts) && ts < cutoff) {
+      rmSync(join(dir, name));
+      removed += 1;
+    }
+  }
+  return removed;
+}
+const retainDays = Number(arg('retain-days', '')) || 0;
+if (retainDays > 0) {
+  const removed = pruneHistory(retainDays);
+  if (removed) console.log(`清理旧报告 ${removed} 份（保留 ${retainDays} 天）`);
+}
+
+/**
+ * 修完之后报告会「过期」（它记的是修之前的数字）。
+ * 重新跑一遍自己（不带 --fix），让 latest.json 反映修复后的真实状态。
+ */
+function refreshReportAfterFix() {
+  const result = spawnSync(process.execPath, [fileURLToPath(import.meta.url)], { stdio: 'ignore' });
+  return result.status === 0;
+}
 
 function printSummary() {
   const c = report.counts;
@@ -326,12 +357,15 @@ if (!fixMode) {
 if (fixMode === 'missing') {
   printSummary();
   await fixMissing();
+  refreshReportAfterFix();
 } else if (fixMode === 'forget') {
   printSummary();
   await fixForget();
+  refreshReportAfterFix();
 } else if (fixMode === 'superseded') {
   printSummary();
   await fixSuperseded();
+  refreshReportAfterFix();
 } else {
   fail(`unknown --fix mode "${fixMode}" (missing | forget | superseded)`);
 }

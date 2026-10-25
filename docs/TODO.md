@@ -216,6 +216,13 @@
         - 处置（`scripts/adopt-legacy.mjs`，逐条 dry-run + `--apply`）：黑天炎、沐沐 → `--adopt`（身份键重写完整文本 + tombstone `import:` 旧副本）；404 → `--drop`（数据太少，两层都不留）。
         - 结果：对账 `present 2 / legacy 0 / missing 0 / partial 0`；audit 显示两条都是 `exact-new-key`；`import:` 文档剩 1 条（owner 的「桌宠那事」）。
         - 孤儿 idem 键 39 个：37 个指向摘要文档（摘要本来就不来自轻量层）、2 个指向已 tombstone 的演练文档——都不是问题。
+      - **包 C（定时对账）已落地（2026-10-26 02:28，默认开）**：
+        - 调度在桥接内：`src/memory/reconcile-scheduler.js`，每 15 分钟醒一次判断「间隔够 + 在窗口里」，桥接启动 60 秒后补跑；只 spawn 子进程，不在主循环 await。
+        - 窗口：每天 17:30（下班时间），`graceHours: 2` 让晚启动的桥接还能补；`fix: true` 只补 `missing`（`legacy`/`partial` 不碰）。
+        - 通知：`alertOn` 桶非 0 时发 owner 私聊（固定文案、只有计数与路径），同日同组桶只发一次，全 0 不发。
+        - 日志与状态：`logs/reconcile/scheduler.log` / `scheduler-state.json`；`--retain-days 30` 清旧报告；修完自动重跑一次报告，`latest.json` 反映修复后状态。
+        - 实测：临时窗口（02:00）下启动 60 秒后自动跑了一次，`ok 0.1s exit=0 present=2 missing=0 …`，状态落盘；随后改回 17:30 并清 `lastRunAt`，今天 17:30 会跑第一次。
+        - 单测 13 项（新增调度窗口判断、通知文案与频控）。配置示例见 `config.example.json` 的 `memory.reconcile`。
 
 32. ✅ **QQ 桥接看护并入 `memd-watchdog`**（2026-10-25 夜）
     - 起因：桥接原本只有登录时的 `Startup\qq-stack.vbs` 一条链，会话里手动关掉后没人补；沙箱身份也起不了它（`qq-bridge\state\` 与 `config.json` 做过 ACL 收紧）。

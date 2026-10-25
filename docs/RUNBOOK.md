@@ -196,7 +196,41 @@ node scripts\identity-drill.mjs
 > `superseded` 是**异常检测**，不是正常现象：正常编辑会主动 forget 旧 rev，所以它应该一直是 0；
 > 一旦出现，说明某次编辑「写了新版本、没忘旧版本」，用 `--fix superseded` 清。
 
-### 2.6.2 历史条目的接管 / 丢弃（2026-10-26）
+### 2.6.2 定时对账（2026-10-26 起，默认开）
+
+跑在桥接进程里（`src/memory/reconcile-scheduler.js`），到点 spawn 一次 `reconcile-memory.mjs`，
+**不在主循环里 await**——对账再慢也不能拖住 QQ 回复。
+
+```jsonc
+"memory": {
+  "reconcile": {
+    "enabled": true,
+    "everyHours": 24,
+    "runAtHour": 17,        // 下班时间，出问题当天能处理
+    "runAtMinute": 30,
+    "graceHours": 2,        // 17:00–19:00 之间补跑（桥接晚启动也不漏）
+    "fix": true,            // 目前只允许补写
+    "fixMode": "missing",
+    "retainDays": 30,
+    "alertOn": ["missing", "superseded"]
+  }
+}
+```
+
+- **检查频率**：每 15 分钟醒一次，只读 `logs/reconcile/scheduler-state.json` 判断「间隔够不够 + 在不在窗口里」；桥接启动 60 秒后补跑一次；
+- **`fix: missing`**：只补「完全没有副本」的条目（`/v1/write` + 身份键，幂等）；`legacy` / `partial` 一律不碰，避免造近似重复；
+- **通知**：`alertOn` 里任一桶非 0 时，往 owner 私聊发一条固定文案（只有计数与路径，不含正文）：
+  `【记忆对账】2026-10-26 17:30 / missing 2 · superseded 1 / 报告：…`
+  同日同组桶只发一次；全 0 不发；
+- **产物**：`logs/reconcile/latest.json`（修完之后会重跑一次，反映修复后的真实状态）、`history/<日期>.json`、`scheduler.log`、`scheduler-state.json`；`retainDays` 之外的历史自动清；
+- **失败**：只写 `scheduler.log`，不重试、不改桥接状态，等下一个窗口；
+- **手动跑**（不走调度器、不发通知）：`node scripts\reconcile-memory.mjs --fix missing`。
+
+为什么放桥接而不是 `memd-watchdog`：要抓的病是「桥接活着、但写不进 memd」；
+桥接整个挂掉是另一类事故（QQ 不回话，症状明显），由看护任务负责。把它塞进 watchdog 会让
+「让服务活着」和「查数据一致性」混在一起，历史上刚为此把四个任务合并成一个。
+
+### 2.6.3 历史条目的接管 / 丢弃（2026-10-26）
 
 10-23 迁移进来的 `import:` 文档没有身份键，文本还带 `member-0: ` 前缀，所以永远是 `legacy`。
 逐条人工决定，工具是 `scripts\adopt-legacy.mjs`（先看不写）：

@@ -14,6 +14,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { idemKey, mirrorKey, forgetKeys } from '../src/memory/idem.js';
 import { createMirrorJournal } from '../src/memory/mirror-journal.js';
 import { classify, collectEntries, loadIndex, sceneOfConversationKey } from '../src/memory/reconcile.js';
+import { buildAlertText, isDue, shouldNotify } from '../src/memory/reconcile-scheduler.js';
 import { createMemoryBridge } from '../src/memory/memory-bridge.js';
 
 const ROOT_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -250,6 +251,37 @@ test('遗忘队列要带着身份信息：重试算出的键必须与写入时�
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('对账调度：只在窗口内、且间隔够了才跑', () => {
+  const config = { enabled: true, everyHours: 24, runAtHour: 17, runAtMinute: 30, graceHours: 2 };
+  const at = (hour, minute, dayOffset = 0) => new Date(2026, 9, 26 + dayOffset, hour, minute, 0).getTime();
+  assert.equal(isDue({ nowMs: at(17, 29), lastRunAt: 0, config }), false, '窗口前不跑');
+  assert.equal(isDue({ nowMs: at(17, 30), lastRunAt: 0, config }), true);
+  assert.equal(isDue({ nowMs: at(19, 0), lastRunAt: 0, config }), true, '宽限期内补跑');
+  assert.equal(isDue({ nowMs: at(20, 0), lastRunAt: 0, config }), false, '超过宽限就不跑');
+  assert.equal(isDue({ nowMs: at(17, 30, 1), lastRunAt: at(17, 31), config }), false, '间隔不足 24h');
+  assert.equal(isDue({ nowMs: at(17, 30), lastRunAt: 0, config: { ...config, enabled: false } }), false, '关着不跑');
+});
+
+test('对账通知：文案只有计数，同日同组桶只发一次', () => {
+  const counts = { present: 2, missing: 2, superseded: 1, legacy: 0, partial: 0, forgetQueue: 0 };
+  const text = buildAlertText({ counts, alertOn: ['missing', 'superseded'], at: Date.parse('2026-10-26T09:30:00Z') });
+  assert.match(text, /missing 2/);
+  assert.match(text, /superseded 1/);
+  assert.match(text, /记忆对账/);
+
+  const first = shouldNotify({ state: {}, alertOn: ['missing'], counts, nowMs: Date.parse('2026-10-26T09:30:00Z') });
+  assert.equal(first.notify, true);
+  const again = shouldNotify({
+    state: { lastAlertSignature: first.signature },
+    alertOn: ['missing'],
+    counts,
+    nowMs: Date.parse('2026-10-26T10:00:00Z'),
+  });
+  assert.equal(again.notify, false, '同一天同一个桶不重复骚扰');
+  const quiet = shouldNotify({ state: {}, alertOn: ['missing'], counts: { missing: 0 }, nowMs: Date.now() });
+  assert.equal(quiet.notify, false, '全 0 不发');
 });
 
 test('索引只读校验：schema_version 不对就拒绝，而不是猜', () => {

@@ -138,7 +138,18 @@
     "writeMirror": true,
     "ingestLimit": 999,
     "liveIngest": true,
-    "disclosure": true
+    "disclosure": true,
+    "reconcile": {
+      "enabled": false,
+      "everyHours": 24,
+      "runAtHour": 17,
+      "runAtMinute": 30,
+      "graceHours": 2,
+      "fix": false,
+      "fixMode": "missing",
+      "retainDays": 30,
+      "alertOn": ["missing", "superseded"]
+    }
   },
   "slang": {
     "enabled": true,

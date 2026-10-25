@@ -25,6 +25,7 @@ import { safeFetchBuffer, looksLikeImageBuffer } from './safe-fetch.js';
 import { stickerMaxBytes } from './lib/sticker-limits.mjs';
 import { AUDIO_EXTS, cleanupTemp, describeAudio, formatBytes, formatDuration, inspectAudio, listAudioFiles, parseTargetKey, processAudioVolume, resolveAudioProcessing, resolveAudioSource, safeJoinLibrary } from './send-voice-lib.js';
 import { createMemoryBridge } from './memory/memory-bridge.js';
+import { createReconcileScheduler } from './memory/reconcile-scheduler.js';
 import { createGroupMemberStore } from './group-members.js';
 import { createDisclosureService } from './group-disclosure.js';
 import { createPersonaReader } from './persona-block.js';
@@ -2903,6 +2904,15 @@ async function main() {
     root: ROOT,
     log: { warn: (message) => log(`[memory] ${message}`), info: (message) => log(`[memory] ${message}`) },
   });
+  // 定时对账（config.memory.reconcile，默认关）。只 spawn 子进程、读报告、必要时通知 owner，
+  // 不在主循环里 await——对账再慢也不能拖住 QQ 回复。
+  const reconcileScheduler = createReconcileScheduler({
+    root: ROOT,
+    cfg,
+    log: (message) => log(message),
+    notifyOwner: (text) => sendOwnerDirect(text),
+  });
+  reconcileScheduler.start();
   const queued = new Map(); // key -> { promptText }[]
   const queuedHintAt = new Map(); // key -> timestamp（冷却提示）
   const QUEUE_MAX = 50;
