@@ -132,6 +132,7 @@
     - 数据：`chunks_fts` 1180 行里 324 行是已过期短期（27.5%），仍参与 bm25 统计。
     - 根因：`purgeExpired` 每小时删索引，但 `indexFacts` 无过期判断，任何一次 reindex（ingest 写 JSONL 就触发）都把过期记录插回来。
     - 已做（2026-10-25）：`indexFacts` 跳过 `stage=short && expires_at <= now` 的记录；如果索引里该 id 已经是 `long`（persist 过，JSONL 仍留原 short 行）则加进 `liveIds` 保住，不被 stale 清理误删。新增 `tests/integration/indexer-expiry.test.ts` 3 项（purge 后不复活 / persist 的 long 幸存 / 未过期短期正常）；全量 174 项通过。
+    - 顺手补上（同日）：`/v1/persist` 现在会往 JSONL 追加一行同 id 的 `stage=long`（无 `expires_at`），reindex 后行覆盖前行——索引终于可以从 `memories/` 完整重建（备份不含 `index.db`，在此之前从备份恢复会把长期记忆变回短期并在 TTL 后删掉）。只对原本是 short 的记录写，多 chunk 文档不会被截断。测试 `tests/integration/persist-jsonl.test.ts` 2 项；存量缺标记的 1 条已手工补齐。全量 176 项通过。
     - 待做：**重启 memd 生效**；生效后再做 25（否则清完又被 reindex 加回来）。
     - 成本：约 1 小时。
 
