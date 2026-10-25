@@ -200,6 +200,16 @@
       - **线上演练（2026-10-26 01:20）**：真停 memd 做了一遍——在线写 A 落库；停服后写 B 只进 `mirror-failures.jsonl`（0→1）、不进队列；删 A 失败进队列（0→1，`qq:owner:activeTopic:e035e719224b756e`）；起 memd + 重启桥接后 42 秒队列清零，A 在 `facts` 里出现 `deleted:true` 行（`f_1792948808305_404f8ead`，17:20:26Z），索引里已无该文本。
         残留：`facts/2026-10.jsonl` 多了一行演练写入 + 一行 tombstone（append-only，不删；索引里不可见）。
         演练脚本 `_tmp/mirror-drill.mjs`（临时，未入库）。
+      - **包 B-full（稳定身份）已落地（2026-10-26 02:05，commit b342096）**：
+        - 键分两代：`qq:mirror:<scene>:<category>:<id>:<rev>`（有 id）与旧内容指纹（无 id），实现集中在 `src/memory/idem.js`（`mirrorKey` / `forgetKeys`）。
+        - 单条式条目带 8 位十六进制 `id`，编辑 `rev + 1`；成员印象以 `m:<target>` 为身份、`rev` 随 traits 追加递增，镜像文本改成**整串 traits**（原来写单条，语义和删除时不一致）。
+        - `rev` 进键的原因：`/v1/write` 的 idem 命中直接返回 duplicate、不回查文档是否已 tombstone，同键覆盖写不进去。
+        - 遗忘时两把键都试（`forgetKeys`），兼容迁移前写入；`social-v2.json` 加 `schemaVersion: 2`（save 时写，load 容错）。
+        - 迁移脚本 `scripts/migrate-social-v2-ids.mjs`（幂等、只补 id/rev、不碰 memd、写前备份）；本机已跑：3 条 memberImpression 补 id（activeTopic 已被 24h 清理规则自然退役）。
+        - 对账新增 `superseded` 桶（同一条目的旧 rev 留在 memd）+ `--fix superseded`；正常编辑不产生，出现即「写了新版没忘旧版」。
+        - 在线冒烟 `scripts/identity-drill.mjs`：**12/12 通过**（新建 → 编辑 → 删除；印象 → 追加 traits），验证「旧文本搜不到、新文本可命中、present 数字对得上」。
+        - 测试 10 项（新增 mirrorKey/forgetKeys 两代键、编辑遗留 superseded）。
+        - **未做**：把历史 3 条 legacy 接管成 present（需人工 `--fix missing` 或逐条认领）；包 C（定时）。
 
 32. ✅ **QQ 桥接看护并入 `memd-watchdog`**（2026-10-25 夜）
     - 起因：桥接原本只有登录时的 `Startup\qq-stack.vbs` 一条链，会话里手动关掉后没人补；沙箱身份也起不了它（`qq-bridge\state\` 与 `config.json` 做过 ACL 收紧）。
