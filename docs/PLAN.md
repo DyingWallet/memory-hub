@@ -98,7 +98,7 @@
      `memd healthy again on 8787`，心跳 `memd=restarted`）；
    - ✅ memd 不依赖 DSH：整机重启后 DSH 换到 5354，memd 照常在 8787 服务（合并前的登录任务实测）；
    - ⬜ DSH 关闭后 60 秒内 pet 退出（单元测试 + probe 实测已过，真实链路待观察一次）；
-   - ⬜ `setup-dsh-* --check` 全绿。
+   - ✅ `setup-dsh-* --check` 全绿（2026-10-25 23:10：mcp / plugin / panel 三个脚本均 exit 0、`ready: true`）。
 
 > 2026-10-24 追改：按用户要求把最坏恢复时间压到 1 分钟以内——看护 5 分钟 → **1 分钟**，pet 孤儿保护
 > 30 秒 x 3 → **20 秒 x 3（60 秒）**；随后又把四个任务合并成**一个** `memd-watchdog`（跑

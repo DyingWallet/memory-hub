@@ -189,6 +189,13 @@
     - 要做：`mirrorWrite` 失败时记日志；定期对账 `social-v2` 的轻量条目与 memd facts 是否一致。
     - 成本：约 1 小时。
 
+32. ✅ **QQ 桥接看护并入 `memd-watchdog`**（2026-10-25 夜）
+    - 起因：桥接原本只有登录时的 `Startup\qq-stack.vbs` 一条链，会话里手动关掉后没人补；沙箱身份也起不了它（`qq-bridge\state\` 与 `config.json` 做过 ACL 收紧）。
+    - 已做：`scripts/supervisor.mjs` 新增可选第 2 步——`config.bridge.enabled`（默认 `false`）为真时探 `probeUrl`（默认 `http://127.0.0.1:3100/`，**401 也算活着**），掉线跑 `qq-bridge\start-bridge.ps1`，起不来退避 `retryMinutes`；`logs/supervisor-state.json` 从「直接覆盖」改成合并写入，`bridgeRetryAt` 与 `lastBackupAttemptAt` 互不踩。
+    - 配置面：`ServerConfig.bridge`（`enabled/dir/probeUrl/retryMinutes/startTimeoutSeconds`）+ `normalizeBridge` 夹紧；`config.example.json` / `RUNBOOK.md` §2.5 有样例。
+    - 实测：手动 `Stop-Process` 掉桥接 → `22:43:01 bridge down -> starting`、`22:43:13 exit=0`、`22:43:14 bridge healthy again`，13 秒补回；心跳 `memd=up bridge=up`。
+    - 测试 184 项（+2 `normalizeBridge`）；commit `71eb617`。没单开任务：临时建的 `qq-bridge-manual` 与 `run-bridge-hidden.cmd` 已删，全机仍只有 `memd-watchdog` / `pet-revive`。
+
 ### 明确不做（已实测负收益）
 
 - **k 上限 10 → 20**：实测多出的 5 条全是短期 chat（0.285–0.298），纯噪音。
