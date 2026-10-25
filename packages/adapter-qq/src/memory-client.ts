@@ -36,6 +36,10 @@ export interface MemoryItem {
   title: string;
   kind: string;
   text: string;
+  /** `short` = 短期记忆（会被遗忘，`expires_at` 到期后不再召回到）。 */
+  stage?: 'short' | 'long';
+  /** 短期记忆的过期时间（ISO）；长期记忆没有这个字段。 */
+  expires_at?: string;
 }
 
 export interface MirrorEntry {
@@ -309,6 +313,10 @@ function normalizeResults(raw: unknown): MemoryItem[] {
       title: String(value.title ?? ''),
       kind: String(value.kind ?? ''),
       text,
+      // stage/expires_at 必须透传：没有 stage，模型分不清「今天某人随口一句」
+      // （short，会过期）和长期项目记忆，会把临时聊天当事实引用。
+      ...(value.stage === 'short' || value.stage === 'long' ? { stage: value.stage } : {}),
+      ...(typeof value.expires_at === 'string' ? { expires_at: value.expires_at } : {}),
     });
   }
   return out;

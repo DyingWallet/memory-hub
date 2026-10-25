@@ -89,6 +89,28 @@ test('recall can ask for the owner group scope and write digests', async () => {
   assert.equal(write.body.idempotency_key, 'd1');
 });
 
+test('search passes stage/expires_at through so QQ can tell short from long', async () => {
+  const fake = (async (input: string | URL | Request) => {
+    const url = new URL(String(input));
+    if (url.pathname !== '/v1/search') throw new Error(`unexpected ${url.pathname}`);
+    return new Response(
+      JSON.stringify({
+        results: [
+          { id: 'f_1', title: '体检', kind: 'event', render: { text: '周六去取体检报告' }, stage: 'long' },
+          { id: 'f_2', title: '随口一句', kind: 'chat', render: { text: '今天好困' }, stage: 'short', expires_at: '2026-10-26T00:00:00.000Z' },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  }) as typeof fetch;
+  const client = createQQMemoryClient({ endpoint: 'http://127.0.0.1:8787', tokenFile, fetchImpl: fake });
+  const items = await client.search('体检', 'qq:owner', 5);
+  assert.equal(items.length, 2);
+  assert.equal(items[0]?.stage, 'long');
+  assert.equal(items[1]?.stage, 'short');
+  assert.equal(items[1]?.expires_at, '2026-10-26T00:00:00.000Z');
+});
+
 test('a disabled client never calls fetch', async () => {
   const calls: Captured[] = [];
   const client = createQQMemoryClient({ endpoint: 'http://127.0.0.1:8787', tokenFile, enabled: false, fetchImpl: fakeFetch(calls) });
