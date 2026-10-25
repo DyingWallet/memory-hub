@@ -71,11 +71,36 @@ powershell -ExecutionPolicy Bypass -File scripts\stop.ps1
 |---|---|---|
 | `memd-watchdog` | 每 1 分钟 | `wscript run-hidden.vbs` → `node scripts\supervisor.mjs` |
 
-`supervisor.mjs` 每分钟做三件事，顺序固定：
+`supervisor.mjs` 每分钟做四件事，顺序固定：
 
 1. **探活** `/v1/health`，不在就用 `scripts\start.ps1 -NoWait` 拉起来（最常见的情况什么都不做）；
-2. `data\metrics.csv` 超过 60 分钟没更新 → 跑一次 `scripts\monitor.mjs`；
-3. 今天的备份目录不存在且已过 04:00 → 跑一次 `scripts\backup.mjs`（失败后同一小时内只重试一次，记在 `logs\supervisor-state.json`）。
+2. **桥接看护（可选，默认关）**：`config.json` 的 `bridge.enabled` 为 `true` 时，探一下
+   `bridge.probeUrl`（默认 `http://127.0.0.1:3100/`，**401 也算活着**——不带 token 时控制台就这么回；
+   其它 4xx/5xx 或连不上算没起），不在就跑 `qq-bridge\start-bridge.ps1` 拉起来，最多等 `startTimeoutSeconds`
+   秒确认；起不来就退避 `retryMinutes` 分钟再试（记在 `logs\supervisor-state.json` 的 `bridgeRetryAt`，
+   免得 DSH 没开的时候每分钟刷一次日志）。
+3. `data\metrics.csv` 超过 60 分钟没更新 → 跑一次 `scripts\monitor.mjs`；
+4. 今天的备份目录不存在且已过 04:00 → 跑一次 `scripts\backup.mjs`（失败后同一小时内只重试一次，记在 `logs\supervisor-state.json`）。
+
+```jsonc
+// config.json —— 想让看护任务顺手照看 QQ 桥接时才加这一段；默认就是关的
+"bridge": {
+  "enabled": true,                          // 关掉 = 删除这一段或改成 false
+  "dir": "../qq-bridge",                    // 相对 memory-hub/，别写绝对路径
+  "probeUrl": "http://127.0.0.1:3100/",     // 桥接控制台
+  "retryMinutes": 10,                       // 起不来之后的退避
+  "startTimeoutSeconds": 20                 // 冷启动实测 2–5 秒
+}
+```
+
+- **桥接为什么必须可选**：没装 qq-bridge 的机器不该被一条「找不到 start-bridge.ps1」的日志每分钟骚扰。
+  关着的时候 `supervisor.mjs` 连探活都不做。
+- **桥接要非沙箱身份**：`qq-bridge\state\` 与 `config.json` 做过 ACL 收紧，低完整性进程写不了。
+  `memd-watchdog` 跑在普通用户令牌下，所以它拉桥接是没问题的；从 DSH 沙箱里手动起会被拒。
+- **桥接和 DSH 的关系**：桥接自己会按 `DSH_WEB_URL` / 端口探测找 DSH，DSH 没开时 `start-bridge.ps1` 会以非 0 退出
+  → 走退避。DSH 起来之后最多等一个 `retryMinutes` 就自动补上。
+- `logs\supervisor-state.json` 现在放两个键（`lastBackupAttemptAt` / `bridgeRetryAt`），写入一律**合并**——
+  `writeState()` 会先读再写，别改成直接覆盖，否则备份和桥接会互相清掉对方的退避状态。
 
 - **为什么合成一个**：原来是四个任务（登录、看护、监控、备份），触发器各写一份，改一个忘三个；现在只有一个触发器、一份日志。
 - **动作链**：任务计划直接跑控制台程序必闪黑框（窗口在程序启动前就创建），所以走 `wscript.exe + scripts\run-hidden.vbs`（window style 0）。`supervisor.mjs` 自己写日志，不需要中间垫 powershell。

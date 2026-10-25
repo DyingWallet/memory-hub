@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 /**
- * memory-hub 的唯一看护：每分钟跑一次，按顺序做三件事。
+ * memory-hub 的唯一看护：每分钟跑一次，按顺序做四件事。
  *
  *   1. memd 活着吗？不在就用 scripts\start.ps1 -NoWait 拉起来（最常见的情况，什么都不做）；
- *   2. data\metrics.csv 超过 60 分钟没更新 -> 跑一次 scripts\monitor.mjs；
- *   3. 今天的备份目录还不存在、且已过 04:00 -> 跑一次 scripts\backup.mjs。
+ *   2. config.bridge.enabled 为真时，盯着 QQ 桥接的控制台探活，掉了就起（可选，默认关）；
+ *   3. data\metrics.csv 超过 60 分钟没更新 -> 跑一次 scripts\monitor.mjs；
+ *   4. 今天的备份目录还不存在、且已过 04:00 -> 跑一次 scripts\backup.mjs。
  *
  * 为什么合成一个：之前是四个计划任务（登录、看护、监控、备份），触发器各写一份，改一个忘三个，
  * 而且每次都要单独处理「黑框」。现在只有这一个任务，日志也只有一份。
  *
  * 顺序要求：先探活，后面的到期检查各自 try/catch——备份炸了不能影响看护。
+ * 桥接排在 memd 之后、定时任务之前：它是「服务活着吗」这一类，和监控/备份不是一类。
+ * 但桥接必须**可选**（config.bridge.enabled），没装桥接的机器不该被它拖累。
  *
  * 环境变量（测试用）：
  *   MEMD_SUPERVISOR_MONITOR_MINUTES   监控间隔，默认 60
@@ -81,6 +84,40 @@ async function memdHealthy(port) {
   }
 }
 
+/**
+ * 桥接控制台的探活：401 也算活着（不带 token 时控制台就这么回，说明进程在听）。
+ * 其它 4xx/5xx 或者根本连不上，都按「没起」处理。
+ */
+async function bridgeHealthy(url) {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(2000) });
+    return response.ok || response.status === 401;
+  } catch {
+    return false;
+  }
+}
+
+const STATE_FILE = join(LOG_DIR, 'supervisor-state.json');
+
+function readState() {
+  try {
+    const parsed = JSON.parse(readFileSync(STATE_FILE, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/** 合并写入：备份和桥接共用这个状态文件，谁都不能把别人的键覆盖掉。 */
+function writeState(patch) {
+  try {
+    mkdirSync(LOG_DIR, { recursive: true });
+    writeFileSync(STATE_FILE, `${JSON.stringify({ ...readState(), ...patch }, null, 2)}\n`, 'utf8');
+  } catch {
+    // ignore
+  }
+}
+
 function runNodeScript(script, logName) {
   return new Promise((resolve) => {
     mkdirSync(LOG_DIR, { recursive: true });
@@ -119,7 +156,11 @@ function runNodeScript(script, logName) {
   });
 }
 
-function startMemd() {
+/**
+ * 用隐藏的 powershell 跑一个启动脚本，等它自己退出（启动脚本只负责把服务甩出去，很快返回）。
+ * memd 和桥接共用：两边的日志都追加到 supervisor-start.log，出问题只看一个文件。
+ */
+function spawnPowerShell(scriptPath, extraArgs, cwd) {
   return new Promise((resolve) => {
     mkdirSync(LOG_DIR, { recursive: true });
     const fd = openSync(join(LOG_DIR, 'supervisor-start.log'), 'a');
@@ -133,20 +174,35 @@ function startMemd() {
         // 已经关掉了，忽略
       }
     };
-    const child = spawn(
-      'powershell.exe',
-      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', join(ROOT, 'scripts', 'start.ps1'), '-NoWait'],
-      { cwd: ROOT, windowsHide: true, stdio: ['ignore', fd, fd] },
-    );
+    let child;
+    try {
+      child = spawn(
+        'powershell.exe',
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', scriptPath, ...extraArgs],
+        { cwd, windowsHide: true, stdio: ['ignore', fd, fd] },
+      );
+    } catch (error) {
+      closeFd();
+      resolve({ ok: false, detail: `spawn failed: ${error?.message ?? error}` });
+      return;
+    }
     child.once('error', (error) => {
       closeFd();
       resolve({ ok: false, detail: `spawn error: ${error?.message ?? error}` });
     });
     child.once('exit', (code) => {
       closeFd();
-      resolve({ ok: code === 0, detail: `start.ps1 exit=${code}` });
+      resolve({ ok: code === 0, detail: `exit=${code}` });
     });
   });
+}
+
+function startMemd() {
+  return spawnPowerShell(join(ROOT, 'scripts', 'start.ps1'), ['-NoWait'], ROOT);
+}
+
+function startBridge(dir) {
+  return spawnPowerShell(join(dir, 'start-bridge.ps1'), [], dir);
 }
 
 function minutesSince(date) {
@@ -163,18 +219,11 @@ function backupDue(backupDir) {
   if (now < target) return { due: false, reason: `before ${BACKUP_AT}` };
 
   // 失败保护：同一小时里只尝试一次，避免每分钟重试把磁盘打满。
-  const stateFile = join(LOG_DIR, 'supervisor-state.json');
-  let state = {};
-  try {
-    state = JSON.parse(readFileSync(stateFile, 'utf8'));
-  } catch {
-    state = {};
-  }
-  const lastAttempt = Number(state.lastBackupAttemptAt) || 0;
+  const lastAttempt = Number(readState().lastBackupAttemptAt) || 0;
   if (lastAttempt && minutesSince(new Date(lastAttempt)) < BACKUP_RETRY_MINUTES) {
     return { due: false, reason: `last attempt ${Math.round(minutesSince(new Date(lastAttempt)))} min ago` };
   }
-  return { due: true, reason: 'no snapshot for today', stateFile };
+  return { due: true, reason: 'no snapshot for today' };
 }
 
 function monitorDue(metricsFile) {
@@ -215,7 +264,47 @@ async function main() {
     log(healthy ? `memd healthy again on ${port}` : `memd did NOT come up within 10s`);
   }
 
-  // 2. monitor
+  // 2. bridge（可选，默认关）
+  const bridge = config.bridge;
+  if (bridge.enabled) {
+    if (await bridgeHealthy(bridge.probeUrl)) {
+      actions.push('bridge=up');
+    } else {
+      const startScript = join(bridge.dir, 'start-bridge.ps1');
+      const retryAt = Number(readState().bridgeRetryAt) || 0;
+      if (!existsSync(startScript)) {
+        log(`bridge enabled but ${startScript} is missing -> skipped`);
+        actions.push('bridge=NO-SCRIPT');
+      } else if (retryAt > Date.now()) {
+        actions.push(`bridge=down(retry in ${Math.ceil((retryAt - Date.now()) / 60_000)}min)`);
+      } else {
+        log(`bridge down on ${bridge.probeUrl} -> starting`);
+        const started = DRY_RUN ? { ok: true, detail: 'dry-run' } : await startBridge(bridge.dir);
+        log(`start-bridge.ps1 -> ${started.detail}`);
+        let healthy = false;
+        const deadline = Date.now() + bridge.startTimeoutSeconds * 1000;
+        while (Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          if (await bridgeHealthy(bridge.probeUrl)) {
+            healthy = true;
+            break;
+          }
+        }
+        if (healthy) {
+          actions.push('bridge=restarted');
+          log(`bridge healthy again on ${bridge.probeUrl}`);
+          if (retryAt) writeState({ bridgeRetryAt: 0 });
+        } else {
+          // 起不来（比如 DSH 没开、start-bridge.ps1 找不到端口）就退避，别每分钟刷日志。
+          actions.push('bridge=START-FAILED');
+          log(`bridge did NOT come up within ${bridge.startTimeoutSeconds}s -> retry in ${bridge.retryMinutes}min`);
+          if (!DRY_RUN) writeState({ bridgeRetryAt: Date.now() + bridge.retryMinutes * 60_000 });
+        }
+      }
+    }
+  }
+
+  // 3. monitor
   const monitor = monitorDue(join(config.dataDir, 'metrics.csv'));
   if (monitor.due) {
     const result = DRY_RUN ? { ok: true, detail: 'dry-run' } : await runNodeScript('monitor.mjs', 'monitor.out.log');
@@ -223,19 +312,13 @@ async function main() {
     actions.push(`monitor=${result.ok ? 'ran' : 'FAILED'}`);
   }
 
-  // 3. backup
+  // 4. backup
   const backup = backupDue(config.backup.dir);
   if (backup.due) {
     const result = DRY_RUN ? { ok: true, detail: 'dry-run' } : await runNodeScript('backup.mjs', 'backup.out.log');
     log(`backup (${backup.reason}) -> ${result.detail}`);
     actions.push(`backup=${result.ok ? 'ran' : 'FAILED'}`);
-    if (backup.stateFile && !DRY_RUN) {
-      try {
-        writeFileSync(backup.stateFile, `${JSON.stringify({ lastBackupAttemptAt: Date.now() }, null, 2)}\n`, 'utf8');
-      } catch {
-        // ignore
-      }
-    }
+    if (!DRY_RUN) writeState({ lastBackupAttemptAt: Date.now() });
   }
 
   heartbeat(actions.join(' '));

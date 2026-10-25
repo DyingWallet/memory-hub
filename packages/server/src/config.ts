@@ -67,6 +67,8 @@ export interface ServerConfig {
   archive: ArchiveConfig;
   /** Daily file backup of memories + tokens + config. */
   backup: BackupConfig;
+  /** Optional: let the same watchdog revive the QQ bridge. */
+  bridge: BridgeConfig;
   /** Optional semantic search (local embedding + sqlite-vec hybrid ranking). */
   semantic: SemanticConfig;
   /** Absolute path of the config.json this instance was loaded from. */
@@ -102,6 +104,23 @@ export interface BackupConfig {
   dir: string;
   /** How many daily snapshots to keep. */
   keepDays: number;
+}
+
+/**
+ * 可选：让同一个看护任务顺带盯着 QQ 桥接（默认关）。
+ * 这段配置只被 `scripts/supervisor.mjs` 读，memd 自己不用。
+ */
+export interface BridgeConfig {
+  /** 开不开这条看护。关着的时候 supervisor 完全不碰桥接。 */
+  enabled: boolean;
+  /** qq-bridge 目录（绝对路径，或相对 memory-hub/）。 */
+  dir: string;
+  /** 桥接控制台探活地址；2xx 或 401 都算活着（401 = 控制台在，只是没带 token）。 */
+  probeUrl: string;
+  /** 启动失败后隔多久再试（分钟），免得每分钟刷一次日志。 */
+  retryMinutes: number;
+  /** 启动后最多等几秒确认它真的起来了。桥接冷启动实测 2–5 秒。 */
+  startTimeoutSeconds: number;
 }
 
 /**
@@ -176,6 +195,13 @@ const DEFAULTS: Omit<ServerConfig, 'dataDir' | 'memoriesDir' | 'indexFile' | 'to
   },
   archive: { enabled: false, keepMonths: 12 },
   backup: { enabled: true, dir: resolve(PACKAGE_ROOT, '..', 'backups', 'memory-hub'), keepDays: 14 },
+  bridge: {
+    enabled: false,
+    dir: resolve(PACKAGE_ROOT, '..', 'qq-bridge'),
+    probeUrl: 'http://127.0.0.1:3100/',
+    retryMinutes: 10,
+    startTimeoutSeconds: 20,
+  },
   semantic: {
     enabled: false,
     alpha: 0.5,
@@ -245,10 +271,12 @@ export function loadConfig(overrides: PartialConfig = {}): ServerConfig {
   merged.shortTerm = normalizeShortTerm(merged.shortTerm, fileConfig.shortTerm);
   merged.archive = normalizeArchive(merged.archive, fileConfig.archive);
   merged.backup = normalizeBackup(merged.backup, fileConfig.backup);
+  merged.bridge = normalizeBridge(merged.bridge, fileConfig.bridge);
   merged.semantic = normalizeSemantic(merged.semantic, fileConfig.semantic);
   if (!isAbsolute(merged.semantic.modelDir)) merged.semantic.modelDir = resolve(PACKAGE_ROOT, merged.semantic.modelDir);
   if (process.env.MEMD_SEMANTIC === '1' || process.env.MEMD_SEMANTIC === 'true') merged.semantic.enabled = true;
   if (process.env.MEMD_SEMANTIC === '0' || process.env.MEMD_SEMANTIC === 'false') merged.semantic.enabled = false;
+  if (!isAbsolute(merged.bridge.dir)) merged.bridge.dir = resolve(PACKAGE_ROOT, merged.bridge.dir);
   if (!isAbsolute(merged.backup.dir)) merged.backup.dir = resolve(PACKAGE_ROOT, merged.backup.dir);
   // 短期降权：0（永远最后）到 1（不降权）。非法值退回默认。
   if (typeof merged.searchShortWeight !== 'number' || !Number.isFinite(merged.searchShortWeight)) {
@@ -297,6 +325,28 @@ function normalizeBackup(value: Partial<BackupConfig> | undefined, fromFile: Par
     enabled: base.enabled !== false,
     dir,
     keepDays: Math.min(365, Math.max(1, keep)),
+  };
+}
+
+/**
+ * 桥接看护配置。默认关；字段全部夹到安全区间，手写 config.json 写歪了也不会
+ * 变成「每分钟重启一次桥接」。
+ */
+export function normalizeBridge(value: Partial<BridgeConfig> | undefined, fromFile: Partial<BridgeConfig> | undefined): BridgeConfig {
+  const base = { ...DEFAULTS.bridge, ...(value ?? {}), ...(fromFile ?? {}) };
+  const num = (input: unknown, fallback: number, min: number, max: number): number => {
+    const parsed = typeof input === 'number' && Number.isFinite(input) ? input : fallback;
+    return Math.min(max, Math.max(min, parsed));
+  };
+  const text = (input: unknown, fallback: string): string =>
+    typeof input === 'string' && input.trim().length > 0 ? input.trim() : fallback;
+  return {
+    // 只有明确写 true 才开，避免 "enabled": "yes" 这种手滑把它打开。
+    enabled: base.enabled === true,
+    dir: text(base.dir, DEFAULTS.bridge.dir),
+    probeUrl: text(base.probeUrl, DEFAULTS.bridge.probeUrl),
+    retryMinutes: Math.trunc(num(base.retryMinutes, DEFAULTS.bridge.retryMinutes, 1, 1440)),
+    startTimeoutSeconds: Math.trunc(num(base.startTimeoutSeconds, DEFAULTS.bridge.startTimeoutSeconds, 5, 120)),
   };
 }
 

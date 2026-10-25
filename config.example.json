@@ -42,6 +42,13 @@
     "dir": "../backups/memory-hub",
     "keepDays": 14
   },
+  "bridge": {
+    "enabled": false,
+    "dir": "../qq-bridge",
+    "probeUrl": "http://127.0.0.1:3100/",
+    "retryMinutes": 10,
+    "startTimeoutSeconds": 20
+  },
   "semantic": {
     "enabled": false,
     "alpha": 0.5,
