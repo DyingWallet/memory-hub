@@ -150,6 +150,27 @@ test('timeline normalizes months and passes the window through', async () => {
   assert.equal(result.months[0]?.items[0]?.title, 'memory-hub');
 });
 
+test('search forwards kinds/subject/max_chars and keeps score', async () => {
+  const calls: Captured[] = [];
+  const fake = (async (input: string | URL | Request, init?: RequestInit) => {
+    calls.push({ path: new URL(String(input)).pathname, body: JSON.parse(String(init?.body ?? '{}')) });
+    return new Response(
+      JSON.stringify({
+        results: [{ id: 'a', title: 'A', kind: 'note', render: { text: 'x' }, stage: 'long', score: 0.87123 }],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  }) as typeof fetch;
+
+  const client = createQQMemoryClient({ endpoint: 'http://127.0.0.1:8787', tokenFile, fetchImpl: fake });
+  const items = await client.search('x', 'qq:owner', 5, { kinds: ['note'], subject: 'owner', maxChars: 800 });
+  assert.equal(calls[0]?.path, '/v1/search');
+  assert.deepEqual(calls[0]?.body.kinds, ['note']);
+  assert.equal(calls[0]?.body.subject, 'owner');
+  assert.equal(calls[0]?.body.max_chars, 800);
+  assert.equal(items[0]?.score, 0.8712);
+});
+
 test('a disabled client never calls fetch', async () => {
   const calls: Captured[] = [];
   const client = createQQMemoryClient({ endpoint: 'http://127.0.0.1:8787', tokenFile, enabled: false, fetchImpl: fakeFetch(calls) });

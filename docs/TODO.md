@@ -160,20 +160,23 @@
     - 待做：重启桥接生效（工具可见）。
     - 成本：约 2 小时。
 
-28. ⬜ **统一入口（compact 视图 + 薄透传）**
-    - 现状：QQ 的 `max_chars` 写死 400、没有 `kinds/subject`、返回被裁；主会话默认 600、字段全量。
-    - 做法：memd 定一份 compact 字段，桥接不再裁剪；`kinds/subject` 下放。
-    - 成本：3–4 小时 + 2 小时测试。
+28. 🔶 **统一入口（compact 视图 + 薄透传）**
+    - 已做（2026-10-25）：
+      - `adapter-qq` 的 `search(query, scene, k, { kinds, subject, maxChars })`：`max_chars` 默认 400→600（与主会话一致），`kinds`/`subject` 透传；`normalizeResults` 补 `score`，字段与主会话对齐（`id/title/kind/text/stage/expires_at/score`）。
+      - `memory-bridge.js` 的 `search()` 透传 options；桥接 `/api/socialV2/memory-search` 解析并透传 `kinds/subject/max_chars`（只过滤、不扩权）。
+      - MCP `qq_memory_search` 的 schema 加 `kinds`/`subject`，描述补「问最近先用 timeline」。
+    - 测试：adapter-qq 9 项（新增 kinds/subject/max_chars 透传 + score 归一化）；全量 179 项。
+    - 待做：重启桥接生效。
+    - 成本：约 1.5 小时。
 
 29. ⬜ **排序改造（待评估）**
     - 问题：`709 short vs 90 long`，bm25 天然偏短文档；问句和文档词面重合低。
     - 方向：长期加权 / 短文档惩罚 / 问句改写。
     - 成本：1–2 天 + 评估集，收益不确定，排在最后。
 
-30. ⬜ **QQ 记忆工具面：不合并，定契约**
+30. 🔶 **QQ 记忆工具面：不合并，定契约**
     - 现状：QQ 侧 7 个——`append/query/remove/clear` 是本地轻量记忆（`social-v2.json`），`search/get/recent` 是 memd；加 `timeline` 后 8 个。主会话 10 个（含 `memory_call` 兜底）。两层存储语义不同，不能合成一个工具。
-    - 决定：不合并成一个 `qq_memory(action)`；轻量与长期也不合并。
-    - 要做：① `qq_memory_timeline` 描述照抄主会话口径（「那阵子 / 上个月用 timeline，别拿 search 硬凑」）；② `search/get/recent/timeline` 共用 adapter-qq 的 `normalizeResults`，保证字段一致；③ 以后还要加工具时，加 `qq_memory(op)` 兜底而不是替换。
+    - 已做（2026-10-25）：新增 `qq-bridge/docs/guides/MEMORY_CONTRACT.md`——两层存储的分工、8 个工具的参数与返回字段、与主会话工具的对应关系、不合并的理由、以后加工具用兜底入口而非替换。
     - 成本：0.5 小时。
 
 31. ⬜ **两层记忆保留，补对账**

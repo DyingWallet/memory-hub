@@ -40,6 +40,15 @@ export interface MemoryItem {
   stage?: 'short' | 'long';
   /** 短期记忆的过期时间（ISO）；长期记忆没有这个字段。 */
   expires_at?: string;
+  /** 召回分数（0–1）；主会话也拿得到，QQ 侧保持一致。 */
+  score?: number;
+}
+
+/** 与主会话一致的查询参数（`kinds` / `subject` 只做过滤，不扩权）。 */
+export interface SearchOptions {
+  kinds?: string[];
+  subject?: 'owner' | 'self' | 'other';
+  maxChars?: number;
 }
 
 export interface MirrorEntry {
@@ -87,7 +96,7 @@ export interface QQMemoryClient {
     options?: { scope?: 'scene' | 'groups'; sinceHours?: number },
   ): Promise<string | null>;
   ingest(messages: ChatMessage[]): Promise<boolean>;
-  search(query: string, scene: string, k?: number): Promise<MemoryItem[]>;
+  search(query: string, scene: string, k?: number, options?: SearchOptions): Promise<MemoryItem[]>;
   timeline(scene: string, options?: TimelineOptions): Promise<TimelineResult | null>;
   get(id: string, scene: string): Promise<MemoryItem | null>;
   recent(scene: string, k?: number): Promise<MemoryItem[]>;
@@ -246,9 +255,17 @@ export function createQQMemoryClient(options: QQMemoryOptions): QQMemoryClient {
       }
     },
 
-    async search(query, scene, k = 5) {
+    async search(query, scene, k = 5, options = {}) {
       try {
-        const payload = await call('/v1/search', { query, k: clampInt(k, 1, 10), scene, max_chars: 400 });
+        const payload = await call('/v1/search', {
+          query,
+          k: clampInt(k, 1, 10),
+          scene,
+          // 和主会话对齐：默认 600，不再写死 400。
+          max_chars: clampInt(options.maxChars ?? 600, 40, 2000),
+          ...(options.kinds && options.kinds.length > 0 ? { kinds: options.kinds } : {}),
+          ...(options.subject ? { subject: options.subject } : {}),
+        });
         return normalizeResults(payload?.results);
       } catch {
         return [];
@@ -390,6 +407,7 @@ function normalizeResults(raw: unknown): MemoryItem[] {  if (!Array.isArray(raw)
       // （short，会过期）和长期项目记忆，会把临时聊天当事实引用。
       ...(value.stage === 'short' || value.stage === 'long' ? { stage: value.stage } : {}),
       ...(typeof value.expires_at === 'string' ? { expires_at: value.expires_at } : {}),
+      ...(typeof value.score === 'number' ? { score: Math.round(value.score * 1e4) / 1e4 } : {}),
     });
   }
   return out;
