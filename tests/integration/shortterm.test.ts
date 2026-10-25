@@ -93,7 +93,10 @@ test('recall extends the TTL of a short-term memory (spacing effect)', async () 
     ttl_hours: 0.2,
   });
   const before = await post('/v1/search', fixture.tokens.main.token, { query: '樱花' });
-  const first = before.json().results[0] as { id: string; expires_at: string };
+  // 不能用 results[0]：短期记忆被降权后，同词的长期记忆（fixture 里的群话题）可能排在前面。
+  const results = before.json().results as { id: string; expires_at: string; stage: string; render: { text: string } }[];
+  const first = results.find((item) => item.stage === 'short' && item.render.text.includes('樱花'));
+  assert.ok(first, '刚写入的短期记忆应该被召回');
 
   await post('/v1/recall', fixture.tokens.main.token, {
     messages: [{ role: 'user', text: '樱花那事还去吗' }],

@@ -47,6 +47,11 @@ export interface ServerConfig {
   searchDefaultK: number;
   searchMaxK: number;
   searchDefaultChars: number;
+  /**
+   * 短期记忆在搜索结果里的权重（1 = 不降权，0 = 排到最后）。
+   * bm25 天然偏爱短文档，聊天碎片会挤掉长期文档，所以默认 0.5。
+   */
+  searchShortWeight: number;
   recallMaxMessages: number;
   writeMaxChars: number;
   watch: boolean;
@@ -153,6 +158,7 @@ const DEFAULTS: Omit<ServerConfig, 'dataDir' | 'memoriesDir' | 'indexFile' | 'to
   searchDefaultK: 5,
   searchMaxK: 10,
   searchDefaultChars: 600,
+  searchShortWeight: 0.5,
   recallMaxMessages: 8,
   writeMaxChars: 8000,
   watch: false,
@@ -244,6 +250,11 @@ export function loadConfig(overrides: PartialConfig = {}): ServerConfig {
   if (process.env.MEMD_SEMANTIC === '1' || process.env.MEMD_SEMANTIC === 'true') merged.semantic.enabled = true;
   if (process.env.MEMD_SEMANTIC === '0' || process.env.MEMD_SEMANTIC === 'false') merged.semantic.enabled = false;
   if (!isAbsolute(merged.backup.dir)) merged.backup.dir = resolve(PACKAGE_ROOT, merged.backup.dir);
+  // 短期降权：0（永远最后）到 1（不降权）。非法值退回默认。
+  if (typeof merged.searchShortWeight !== 'number' || !Number.isFinite(merged.searchShortWeight)) {
+    merged.searchShortWeight = DEFAULTS.searchShortWeight;
+  }
+  merged.searchShortWeight = Math.min(1, Math.max(0, merged.searchShortWeight));
   merged.configFile = rootConfigPath;
 
   mkdirSync(merged.dataDir, { recursive: true });

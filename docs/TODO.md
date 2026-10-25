@@ -169,10 +169,14 @@
     - 待做：重启桥接生效。
     - 成本：约 1.5 小时。
 
-29. ⬜ **排序改造（待评估）**
+29. 🔶 **排序改造（短期降权，已实现）**
     - 问题：`709 short vs 90 long`，bm25 天然偏短文档；问句和文档词面重合低。
-    - 方向：长期加权 / 短文档惩罚 / 问句改写。
-    - 成本：1–2 天 + 评估集，收益不确定，排在最后。
+    - 评估（2026-10-25，5 个查询，main 场景 k=10）：
+      - 现状 long@top5 平均 2.4；short×0.5 后平均 4.0（首个 long 从 #2–#3 提到 #1）；
+      - 但「期望命中」5 个里 4 个没中——说明降权只解决「谁排前面」，不解决「问句和文档对不上」。回顾类问题（「昨晚实现了什么」）应走 timeline（27 已补入口）。
+    - 已做：`config.searchShortWeight` 默认 0.5（1 = 关闭），`/v1/search` 返回前按 `score × stage 权重` 重排；返回的 `score` 仍是原始召回分。测试 `tests/integration/search-short-weight.test.ts` 2 项；`shortterm.test.ts` 里依赖 `results[0]` 的断言改成按 stage 找目标条目。
+    - 待做：重启 memd 生效。
+    - 成本：约 2 小时（评估 1 小时 + 实现 1 小时）。
 
 30. 🔶 **QQ 记忆工具面：不合并，定契约**
     - 现状：QQ 侧 7 个——`append/query/remove/clear` 是本地轻量记忆（`social-v2.json`），`search/get/recent` 是 memd；加 `timeline` 后 8 个。主会话 10 个（含 `memory_call` 兜底）。两层存储语义不同，不能合成一个工具。

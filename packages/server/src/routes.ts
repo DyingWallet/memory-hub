@@ -502,9 +502,10 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         ...(body.subject ? { subject: body.subject } : {}),
       }, k);
       finish('search', auth, started, outcome.hits.map((hit) => hit.id), body.query);
+      const ordered = orderByStageWeight(outcome.hits, config.searchShortWeight);
       return {
         query: body.query,
-        results: markSuperseded(db, outcome.hits.map((hit) => toMemoryResult(hit))),
+        results: markSuperseded(db, ordered.map((hit) => toMemoryResult(hit))),
         weak: outcome.weak,
         scanned: outcome.scanned,
       };
@@ -1313,6 +1314,19 @@ function markSuperseded(db: Db, results: MemoryResult[]): MemoryResult[] {
     if (replaced.has(docIdOf(item.id))) item.superseded = true;
   }
   return results;
+}
+
+/**
+ * 短期记忆降权：bm25 天生偏爱短文档，聊天碎片会把长期文档挤出前几名。
+ * 只改顺序、不改返回的 score（score 仍是原始召回分）；权重可配，1 = 关闭。
+ */
+function orderByStageWeight(hits: SearchHit[], shortWeight: number): SearchHit[] {
+  if (!(shortWeight >= 0 && shortWeight < 1)) return hits;
+  return [...hits].sort((a, b) => {
+    const wa = a.score * (a.stage === 'short' ? shortWeight : 1);
+    const wb = b.score * (b.stage === 'short' ? shortWeight : 1);
+    return wb - wa;
+  });
 }
 
 function toMemoryResult(hit: SearchHit, disclosure?: 'owner_initiated'): MemoryResult {
