@@ -296,6 +296,8 @@ function indexFacts(db: Db, config: ServerConfig): number {
   if (!existsSync(config.factsDir)) return 0;
   const liveIds = new Set<string>();
   let changed = 0;
+  const now = Date.now();
+  const stageById = db.prepare('SELECT stage FROM docs WHERE id = ?');
 
   for (const filePath of listFactFiles(config.factsDir)) {
     const relPath = `facts/${relative(config.factsDir, filePath).replaceAll('\\', '/')}`;
@@ -321,6 +323,14 @@ function indexFacts(db: Db, config: ServerConfig): number {
         }
         continue;
       }
+      // 过期短期记录不重新插入：purgeExpired 删掉之后，reindex 不能把它复活。
+      // 但索引里已经是 long 的（persist 过，JSONL 仍留着那条 short 原样）必须保留，
+      // 否则下面的 stale 清理会把这条长期记忆一起删掉。
+      if (isExpiredShort(record, now)) {
+        const row = stageById.get(record.id) as { stage?: string } | undefined;
+        if (row?.stage === 'long') liveIds.add(record.id);
+        continue;
+      }
       liveIds.add(record.id);
       if (upsertFact(db, config, record, relPath)) changed += 1;
     }
@@ -334,6 +344,13 @@ function indexFacts(db: Db, config: ServerConfig): number {
     }
   }
   return changed;
+}
+
+/** 过期短期记录：`stage=short` 且 `expires_at` 已过。长期记录永远不算过期。 */
+function isExpiredShort(record: FactRecord, now: number): boolean {
+  if (record.stage !== 'short' || !record.expires_at) return false;
+  const expiresAt = Date.parse(record.expires_at);
+  return Number.isFinite(expiresAt) && expiresAt <= now;
 }
 
 /** Writes one fact into the monthly JSONL shard and indexes it immediately. */
