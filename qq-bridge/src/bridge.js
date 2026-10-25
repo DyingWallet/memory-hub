@@ -11421,9 +11421,10 @@ async function main() {
     log,
   });
   // 私密语气只给主人私聊；群聊和他人私聊永远读不到这里。
+  // 内容和对外版在同一个 AGENTS.md 里（「七、私密」），桥接按 section 抽。
   const privateReader = createPersonaReader({
-    file: path.join(ROOT, '..', 'memories', 'user', 'private-tone.md'),
-    whole: true,
+    file: path.join(ROOT, '..', 'AGENTS.md'),
+    sections: ['七、私密'],
     log,
   });
 
