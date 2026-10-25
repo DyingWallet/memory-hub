@@ -1,6 +1,6 @@
 # memory-hub
 
-本机记忆服务 `memd` + 两个 DSH 插件 + QQ 桥接 / 桌宠适配器。让 DSH 主会话、QQ 桥接和桌宠读同一份文本记忆：关键词检索（FTS5），可选语义检索（本地 embedding + sqlite-vec），隐私按 scope 在 SQL 层隔离。
+本机记忆服务 `memd` + 两个 DSH 插件 + QQ 桥接 / 桌宠适配器。让 DSH 主会话、QQ 桥接和桌宠读同一份文本记忆：关键词检索（FTS5），可选语义检索（本地 embedding + sqlite-vec），隐私按 scope 在 SQL 层隔离。QQ 桥接的源码也内嵌在本仓库（`qq-bridge/`），clone 后一处拿齐。
 
 - 协议：`/v1` HTTP（JSON），OpenAPI 在 [`packages/protocol/openapi.yaml`](packages/protocol/openapi.yaml)
 - **DSH 版本支持**：**0.2.1-rc.2 / 0.2.1-rc.3 已验证**（MCP server、两个插件的加载契约、`webServer.register`、`session/*` RPC 都在这两个版本上跑通过）；其它版本未验证，升级后先跑 `node scripts\doctor.mjs`。
@@ -50,6 +50,41 @@ node scripts\doctor.mjs --shallow  # 跳过披露探针（只查文件，不发�
 - **启动自检**：`dsh-memory-panel` 加载 8 秒后自动跑一遍 doctor，写 `logs/doctor-boot.log`（每次启动一行）与 `data/doctor-last.json`；`MEMD_BOOT_CHECK=0` 可关。
 - 细节与失败对照表见 [`docs/RUNBOOK.md`](docs/RUNBOOK.md) 与 [`../memories/50-knowledge/2026-10-24-memory-hub-deploy-from-zero.md`](../memories/50-knowledge/2026-10-24-memory-hub-deploy-from-zero.md)。
 
+## QQ 桥接（内嵌）
+
+`qq-bridge/` 是 qq-bridge-enhanced，基于上游 [`Derpyu520/qq-bridge`](https://github.com/Derpyu520/qq-bridge) 的二次开发，**源码直接放在本仓库里**，clone 下来一处拿齐。它有自己的 `package.json`，不参与 memory-hub 的 pnpm workspace。
+
+**依赖**：Node ≥ 22.12（需要 `node:sqlite`）、[SnowLuma](https://github.com/SnowLuma/SnowLuma) 网关、DSH 桌面版。
+
+**安装**：
+
+```powershell
+cd qq-bridge
+npm ci
+copy config.example.json config.json
+copy local-paths.example.ps1 local-paths.ps1   # 填 SnowLuma / DSH 的安装位置
+```
+
+然后按 [`qq-bridge/docs/guides/CONFIGURATION.md`](qq-bridge/docs/guides/CONFIGURATION.md) 填 `ownerQQ` / `allow.groups` / `allow.private`。
+
+**接到记忆服务**：
+
+1. 在 memory-hub 根目录签发场景 token：`node scripts\issue-qq-tokens.mjs`（把 `state/memory-*.token` 写进 `qq-bridge/state/`）。
+2. `qq-bridge/config.json` 的 `memory.enabled` 设为 `true`，`tokens` 映射与签发的场景对应。
+3. 重启桥接。
+
+**启动**：
+
+```powershell
+cd qq-bridge
+start.bat                 # 前台，退出后 5 秒自动重启
+# 或 qq-stack.vbs（隐藏窗口，同时拉起 DSH / SnowLuma / 桥接）
+```
+
+桥接侧的改动记录在 [`docs/QQ-BRIDGE-PATCH.md`](docs/QQ-BRIDGE-PATCH.md) 与 [`docs/TODO.md`](docs/TODO.md)。
+
+**许可**：`qq-bridge/` 是 MIT（Copyright Derpyu520 and qq-bridge / QSH contributors），保留其 `LICENSE` 与 `NOTICE.md`；SnowLuma 本体是专有组件，不随仓库分发。
+
 ## 结构
 
 ```text
@@ -70,6 +105,7 @@ memory-hub/
     dsh-memory/         DSH host 插件：全会话消息 → /v1/ingest（短期记忆）
     dsh-memory-panel/   设置页 + 同源代理（零配置：宿主注入 root 令牌）
   docs/           RUNBOOK.md / PLAN.md / TODO.md / SPIKE-DSH.md / HANDOFF.md …
+  qq-bridge/      QQ 桥接（独立 package.json，不参与 pnpm workspace；MIT，见其 NOTICE.md）
 ```
 
 ## 语义检索（可选）

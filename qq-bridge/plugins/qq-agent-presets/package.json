@@ -1,0 +1,18 @@
+{
+  "name": "qq-agent-presets",
+  "version": "1.0.3",
+  "description": "qq-bridge 的 DSH agent preset bundle：把 qq-chat / qq-chat-v2 / qq-agent-readonly / qq-agent-workspace / qq-agent-full（v0.3.0 L1~L3 运维 Agent）作为 @deepseek-ai/dsh-agent-preset 行插入（DSH 0.1.7+ 的 preset 机制），并携带两个 preset 共用的 qq-tool-restrict 安全守卫",
+  "type": "module",
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./presets/qq-chat.patch.yml",
+        "./presets/qq-chat-v2.patch.yml",
+        "./presets/qq-agent-readonly.patch.yml",
+        "./presets/qq-agent-workspace.patch.yml",
+        "./presets/qq-agent-full.patch.yml"
+      ]
+    }
+  }
+}

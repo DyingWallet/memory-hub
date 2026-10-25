@@ -1,0 +1,13 @@
+# 行尾约定：Windows 批处理必须是 CRLF（cmd 按行解析，LF-only 会让 goto/标签错位）。
+*.bat text eol=crlf
+*.cmd text eol=crlf
+# 其余文本统一 LF 入库
+*.js text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.html text eol=lf
+*.png binary
+
+*.vbs text eol=crlf

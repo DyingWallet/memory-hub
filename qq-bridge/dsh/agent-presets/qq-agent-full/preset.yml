@@ -1,0 +1,3 @@
+name: QQ 运维 Agent（L3 高权限）
+description: qq-bridge 管理通道的 L3 级别：完全访问，但除只读外的每次工具调用都需要 owner 在 QQ 审批。需要确认码 + TOTP 才能启用（Windows）。
+order: 14

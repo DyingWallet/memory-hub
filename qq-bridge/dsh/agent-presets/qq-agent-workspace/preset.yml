@@ -1,0 +1,3 @@
+name: QQ 运维 Agent（L2 工作区读写）
+description: qq-bridge 管理通道的 L2 级别：owner 私聊里的运维 Agent。工作区内可读写，执行命令每次需要 owner 在 QQ 审批。由桥接在 owner 确认后启用（Windows）。
+order: 13

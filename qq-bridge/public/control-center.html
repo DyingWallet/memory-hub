@@ -1,0 +1,1296 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>qq-bridge 控制中心</title>
+<style>
+  :root {
+    --bg: #0f1216; --panel: #161b22; --panel2: #1c232c; --line: #2a333e; --text: #e6edf3; --muted: #8b98a5;
+    --accent: #4c9aff; --ok: #3fb950; --warn: #d29922; --bad: #f85149; --term: #0b0e12; --chip: #212a35;
+    --radius: 10px; --mono: ui-monospace, "Cascadia Mono", Consolas, "Microsoft YaHei Mono", monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f4f6f8; --panel: #ffffff; --panel2: #f7f9fb; --line: #dde3ea; --text: #1f2328; --muted: #5d6b78; --term: #0f1419; --chip: #eef2f6; }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif; display: flex; flex-direction: column; }
+  button { font: inherit; color: inherit; background: var(--chip); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { background: transparent; border-color: var(--bad); color: var(--bad); }
+  button.danger.solid { background: var(--bad); color: #fff; }
+  button.ghost { background: transparent; }
+  input[type=text], input[type=search], input[type=password], select { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-width: 0; }
+  input:focus, select:focus, button:focus-visible, [role=tab]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  label.check { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; user-select: none; }
+  code { font-family: var(--mono); font-size: 12.5px; }
+
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: .3px; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  header .spacer { flex: 1; }
+  .minor-link { font-size: 12px; color: var(--muted); align-self: center; white-space: nowrap; }
+  .minor-link:hover { color: var(--accent, inherit); }
+  .qr-panel { display: flex; gap: 16px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); background: var(--panel2); }
+  .qr-panel[hidden] { display: none; }
+  .qr-panel img { background: #fff; border-radius: 8px; padding: 6px; image-rendering: pixelated; flex: none; }
+  .term .l.img img { display: block; margin: 4px 0 6px; background: #fff; padding: 4px; border-radius: 6px; image-rendering: pixelated; }
+  .term .l.img.expired img { opacity: .3; filter: grayscale(1); }
+  .qr-alert { margin: 6px 0; padding: 6px 10px; border-radius: 8px; background: var(--panel2); border: 1px solid var(--warn); font-size: 13px; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; background: var(--chip); border: 1px solid var(--line); font-size: 12px; color: var(--muted); white-space: nowrap; text-decoration: none; }
+  .badge.level-L0 { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); }
+  .badge.level-L1, .badge.level-L2 { color: var(--warn); border-color: var(--warn); }
+  .badge.level-L3 { color: #fff; background: var(--bad); border-color: var(--bad); }
+
+  /* ── 顶部大标签 ── */
+  .maintabs { display: flex; justify-content: center; gap: 14px; padding: 12px 18px 0; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .bigtab { display: inline-flex; align-items: center; gap: 10px; padding: 12px 26px; font-size: 16px; font-weight: 600; border: 1px solid var(--line); border-bottom: none; border-radius: 12px 12px 0 0; background: var(--panel2); color: var(--muted); position: relative; top: 1px; min-width: 240px; justify-content: center; }
+  .bigtab[aria-selected=true] { background: var(--bg); color: var(--text); border-color: var(--accent); box-shadow: inset 0 3px 0 var(--accent); }
+  .bigtab .st { font-size: 13px; font-weight: 400; color: var(--muted); }
+  .bigtab .alert { font-size: 12px; font-weight: 600; background: var(--bad); color: #fff; border-radius: 999px; padding: 0 8px; }
+  @media (max-width: 640px) { .bigtab { min-width: 0; flex: 1; padding: 10px 12px; font-size: 15px; } .bigtab .st { display: none; } }
+
+  #banners { padding: 0 18px; }
+  .banner { margin-top: 10px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); font-size: 13px; }
+  .banner.bad { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
+  .banner.info { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+
+  main { flex: 1; padding: 14px 18px; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+  .tabpanel { flex: 1; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); display: flex; flex-direction: column; min-width: 0; }
+  .card.tall { flex: 1; min-height: 460px; }
+  .card-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .card-head h2 { font-size: 15px; margin: 0; font-weight: 600; }
+  .card-head h3 { font-size: 14px; margin: 0; font-weight: 600; }
+  .grow { flex: 1; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); display: inline-block; flex: none; }
+  .dot.on { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+  .dot.warn { background: var(--warn); }
+  .dot.off { background: var(--bad); }
+  .toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; background: var(--panel2); }
+  .toolbar input[type=search] { width: 170px; }
+  .term { flex: 1; min-height: 240px; overflow: auto; background: var(--term); color: #d7dde4; font: 12.5px/1.55 var(--mono); padding: 10px 12px; white-space: pre-wrap; word-break: break-all; }
+  .term .l { display: block; }
+  .term .t { color: #5f6b77; margin-right: 8px; user-select: none; }
+  .term .tag { color: #9aa7b4; margin-right: 6px; }
+  .term .stderr, .term .error { color: #ff8a80; }
+  .term .warn { color: #ffd479; }
+  .term .system { color: #7cc4ff; }
+  .term .cmd { color: #c9a7ff; }
+  .term .empty { color: #5f6b77; }
+  .cmdline { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); }
+  .cmdline input { flex: 1; font-family: var(--mono); }
+  .cmdline .prompt { font-family: var(--mono); color: var(--accent); align-self: center; }
+
+  .info { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 13px; margin: 0; }
+  .info dt { color: var(--muted); }
+  .info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .empty-state { padding: 22px 18px; display: flex; flex-direction: column; gap: 12px; }
+  .empty-state p { margin: 0; color: var(--muted); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row input[type=text], .row input[type=password] { flex: 1; min-width: 220px; }
+  .note { font-size: 12px; color: var(--muted); }
+  .panel-sub { padding: 12px 14px; border-bottom: 1px solid var(--line); display: none; flex-direction: column; gap: 10px; background: var(--panel2); }
+  .panel-sub.show { display: flex; }
+  .panel-sub h3 { margin: 0; font-size: 14px; }
+  .panel-sub ol { margin: 0; padding-left: 20px; color: var(--muted); font-size: 13px; }
+  details.notes { font-size: 12.5px; color: var(--muted); }
+  details.notes pre { white-space: pre-wrap; font: 12px/1.5 var(--mono); max-height: 180px; overflow: auto; margin: 6px 0 0; }
+
+  /* ── 接口平台页 ── */
+  .subtabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .subtab { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; padding: 8px 14px; color: var(--muted); }
+  .subtab[aria-selected=true] { color: var(--text); border-bottom-color: var(--accent); }
+  .subtab .alert { margin-left: 6px; font-size: 11px; background: var(--bad); color: #fff; border-radius: 999px; padding: 0 6px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; padding: 14px; }
+  .tile { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .tile .k { color: var(--muted); font-size: 12.5px; }
+  .tile .v { font-size: 20px; font-weight: 600; margin-top: 2px; }
+  .tile .v.small { font-size: 14px; font-weight: 500; }
+  .split { display: grid; grid-template-columns: 280px 1fr; gap: 14px; min-height: 0; }
+  @media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+  .list { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+  .list button { width: 100%; text-align: left; display: flex; gap: 8px; align-items: center; border-color: transparent; background: transparent; }
+  .list button[aria-current=true] { background: var(--panel2); border-color: var(--accent); }
+  .list .meta { color: var(--muted); font-size: 12px; margin-left: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { color: var(--muted); font-weight: 500; }
+  .ladder { display: inline-flex; gap: 4px; align-items: center; }
+  .ladder .dot { width: 8px; height: 8px; }
+  .form { display: grid; grid-template-columns: max-content 1fr; gap: 8px 12px; padding: 12px 14px; align-items: center; }
+  .form label { color: var(--muted); font-size: 13px; }
+  .soon { color: var(--muted); font-style: italic; }
+  .backends { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .bcard { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .bcard.on { border-color: color-mix(in srgb, var(--ok) 60%, var(--line)); box-shadow: inset 0 3px 0 var(--ok); }
+  .bcard .bhead { display: flex; align-items: center; gap: 10px; }
+  .bcard .bhead h3 { margin: 0; font-size: 16px; }
+  .bcard dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; font-size: 13px; }
+  .bcard dt { color: var(--muted); }
+  .bcard dd { margin: 0; overflow-wrap: anywhere; }
+  .bcard .bbtn { font-size: 15px; padding: 9px 16px; }
+
+  footer { display: flex; gap: 8px; flex-wrap: wrap; padding: 8px 18px; border-top: 1px solid var(--line); background: var(--panel); font-size: 12.5px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px; border-radius: 8px; background: var(--chip); border: 1px solid var(--line); white-space: nowrap; }
+  .chip b { font-weight: 600; }
+  .chip span { color: var(--muted); }
+
+  dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text); padding: 18px 20px; max-width: 480px; }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  dialog h3 { margin: 0 0 8px; font-size: 15px; }
+  dialog p { margin: 0 0 14px; color: var(--muted); white-space: pre-wrap; }
+  dialog .row { justify-content: flex-end; }
+  #toast { position: fixed; right: 18px; bottom: 56px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
+  .toast { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent); padding: 8px 12px; border-radius: 8px; max-width: 420px; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+  .toast.bad { border-left-color: var(--bad); }
+  .toast.ok { border-left-color: var(--ok); }
+</style>
+</head>
+<body>
+<header>
+  <h1>项目控制中心</h1>
+  <span class="sub">qq-bridge 控制中心</span>
+  <span class="badge" id="verBadge">v—</span>
+  <span class="badge" id="modeBadge" title="当前运行模式与权限级别">模式 —</span>
+  <span class="badge" id="pendingBadge" title="待审批 / 待确认申请">待审批 0 · 待确认 0</span>
+  <span class="spacer"></span>
+  <span class="badge" id="overallBadge" title="总体状态">总体 —</span>
+  <button class="danger solid" id="panicBtn" title="立即回到安全模式（L0 群友模式），停止运维 Agent">紧急关闭</button>
+  <button class="ghost" id="exitBtn" title="先停止由控制中心启动的桥接、接口平台与 SnowLuma，再退出控制中心">退出控制中心</button>
+</header>
+
+<!-- 顶部大标签：切换只改变显示，不启停、不重连任何模块 -->
+<nav class="maintabs" role="tablist" aria-label="模块">
+  <button class="bigtab" role="tab" id="tab-bridge" aria-controls="panel-bridge" aria-selected="true" tabindex="0">
+    <span class="dot" id="tabBridgeDot"></span>桥接 <span class="st" id="tabBridgeSt">—</span><span class="alert" id="tabBridgeAlert" hidden></span>
+  </button>
+  <button class="bigtab" role="tab" id="tab-platform" aria-controls="panel-platform" aria-selected="false" tabindex="-1">
+    <span class="dot" id="tabPlatformDot"></span>接口平台 <span class="st" id="tabPlatformSt">—</span><span class="alert" id="tabPlatformAlert" hidden></span>
+  </button>
+</nav>
+<div id="banners"></div>
+
+<main>
+  <!-- ── 桥接 ─────────────────────────────────────────────── -->
+  <section class="tabpanel" id="panel-bridge" role="tabpanel" aria-labelledby="tab-bridge">
+    <section class="card tall" aria-labelledby="bridgeTitle">
+      <div class="card-head">
+        <span class="dot" id="bridgeDot"></span>
+        <h2 id="bridgeTitle">桥接</h2>
+        <span class="badge" id="bridgeState">未启动</span>
+        <span class="badge" id="bridgeRoute" title="桥接当前连接 QQ 的路径">路径 —</span>
+        <span class="grow"></span>
+        <button class="primary" id="bridgeStart">启动桥接</button>
+        <button id="consoleOpen" title="桥接控制台（模式、会话、人格、黑话、令牌花费等）：自动带上令牌打开">打开桥接控制台 ↗</button>
+        <a id="consoleManual" class="minor-link" href="#" target="_blank" rel="noopener" title="不自动带令牌，打开后在弹窗里手动输入桥接控制台令牌">手动输入令牌</a>
+        <button id="bridgeRestart">重启</button>
+        <button class="danger" id="bridgeStop">停止桥接</button>
+      </div>
+      <div class="toolbar">
+        <input type="search" id="bridgeFilter" placeholder="过滤日志…" aria-label="过滤桥接日志">
+        <label class="check"><input type="checkbox" id="bridgeErrors"> 只看错误</label>
+        <label class="check"><input type="checkbox" id="bridgePause"> 暂停滚动</label>
+        <label class="check" title="桥接异常退出后 5 秒自动重启"><input type="checkbox" id="bridgeAuto"> 崩溃自动重启</label>
+        <span class="grow"></span>
+        <button class="ghost" id="bridgeDownload">下载日志</button>
+        <button class="ghost" id="bridgeClear">清屏</button>
+      </div>
+      <div class="term" id="bridgeTerm" role="log" aria-live="polite"></div>
+      <form class="cmdline" id="cmdForm" autocomplete="off">
+        <span class="prompt">›</span>
+        <input type="text" id="cmdInput" placeholder="输入命令，例如 status、panic、mode reserved2；help 查看全部" aria-label="控制中心命令">
+        <button class="primary" type="submit">发送</button>
+      </form>
+    </section>
+  </section>
+
+  <!-- ── 接口平台 ─────────────────────────────────────────── -->
+  <section class="tabpanel" id="panel-platform" role="tabpanel" aria-labelledby="tab-platform" hidden>
+    <nav class="subtabs" role="tablist" aria-label="接口平台">
+      <button class="subtab" role="tab" id="ptab-overview" aria-controls="pview-overview" aria-selected="true" tabindex="0">概览</button>
+      <button class="subtab" role="tab" id="ptab-instances" aria-controls="pview-instances" aria-selected="false" tabindex="-1">接入实例</button>
+      <button class="subtab" role="tab" id="ptab-accounts" aria-controls="pview-accounts" aria-selected="false" tabindex="-1">账号</button>
+      <button class="subtab" role="tab" id="ptab-logs" aria-controls="pview-logs" aria-selected="false" tabindex="-1">日志<span class="alert" id="plLogAlert" hidden></span></button>
+      <button class="subtab" role="tab" id="ptab-settings" aria-controls="pview-settings" aria-selected="false" tabindex="-1">设置</button>
+    </nav>
+
+    <!-- 概览 -->
+    <div id="pview-overview" role="tabpanel" aria-labelledby="ptab-overview" style="display:flex;flex-direction:column;gap:14px">
+    <section aria-label="接入后端">
+      <div class="backends" id="backendCards"></div>
+      <p class="note" style="margin:8px 2px 0">点「开启」：确保接口平台在运行 → 启动该后端程序（能启动时）→ 在接口平台里建好并连接它的实例。各后端互相独立，可以同时开启；「关闭」只断开该后端，并停止由控制中心启动的那个程序。</p>
+    </section>
+    <div class="card">
+      <div class="card-head">
+        <span class="dot" id="plDot"></span>
+        <h2>接口平台核心</h2>
+        <span class="badge" id="plState">未启动</span>
+        <span class="grow"></span>
+        <button class="primary" id="plStart">启动接口平台</button>
+        <button id="plRestart">重启</button>
+        <button class="danger" id="plStop">停止接口平台</button>
+      </div>
+      <div class="tiles">
+        <div class="tile"><div class="k">核心状态</div><div class="v small" id="tCore">—</div></div>
+        <div class="tile"><div class="k">就绪账号</div><div class="v" id="tReady">—</div></div>
+        <div class="tile"><div class="k">异常实例</div><div class="v" id="tFaulty">—</div></div>
+        <div class="tile"><div class="k">最近接收</div><div class="v small" id="tRecv">—</div></div>
+        <div class="tile"><div class="k">最近发送</div><div class="v small" id="tSend">—</div></div>
+        <div class="tile"><div class="k">桥接路径</div><div class="v small" id="tLink">—</div></div>
+      </div>
+      <div class="actions">
+        <label class="check" title="接口平台异常退出后自动重启"><input type="checkbox" id="plAuto"> 崩溃自动重启</label>
+        <span class="note" id="plSupport"></span>
+      </div>
+    </div>
+    </div>
+
+    <!-- 接入实例：列表 + 详情 -->
+    <div id="pview-instances" role="tabpanel" aria-labelledby="ptab-instances" class="split" hidden>
+      <section class="card" aria-label="实例列表">
+        <div class="card-head"><h3>接入实例</h3><span class="grow"></span><button id="instAddBtn">添加</button></div>
+        <ul class="list" id="instList"></ul>
+        <div class="note" style="padding:8px 14px" id="instProvidersNote"></div>
+      </section>
+      <section class="card" aria-label="实例详情">
+        <div class="panel-sub" id="instAddPanel">
+          <h3>添加接入实例</h3>
+          <div class="form">
+            <label for="addId">实例 ID</label><input type="text" id="addId" placeholder="例如 snowluma-second">
+            <label for="addProvider">提供方</label><select id="addProvider"></select>
+            <label for="addMgmt">管理方式</label><select id="addMgmt"><option value="external">外部运行（只连接）</option><option value="remote">远程连接</option></select>
+            <label for="addWs">WS 地址</label><input type="text" id="addWs" placeholder="ws://127.0.0.1:3001">
+            <label for="addToken">令牌</label><input type="password" id="addToken" placeholder="WS accessToken（填了目录可留空）" autocomplete="off">
+            <label for="addHome">后端目录</label><input type="text" id="addHome" placeholder="可选：SnowLuma 目录或 NapCat 配置目录，按目录自动发现账号">
+          </div>
+          <div class="row" style="justify-content:flex-end"><button class="ghost" id="addCancel">取消</button><button class="primary" id="addGo">创建</button></div>
+        </div>
+        <div id="instEmpty" class="empty-state"><p>选择左侧的实例查看详情。</p></div>
+        <div id="instDetail" hidden>
+          <div class="card-head">
+            <span class="dot" id="idDot"></span>
+            <h2 id="idTitle">—</h2>
+            <span class="badge" id="idProvider">—</span>
+            <span class="badge" id="idMgmt">—</span>
+            <span class="grow"></span>
+            <button class="primary" id="idConnect">连接</button>
+            <button class="danger" id="idDisconnect">断开</button>
+          </div>
+          <p class="note" id="idLocalNote" style="padding:10px 14px;margin:0" hidden>这是本机程序（不是平台里的实例）：这里只能启停和设置程序本身。接口平台没运行、或平台里还没有对应实例时显示；启动接口平台并在「概览」里开启后端后，会列出平台里的实例。</p>
+          <div class="form platform-only">
+            <label for="idWs">WS 地址</label><input type="text" id="idWs">
+            <label for="idHome">后端目录</label><input type="text" id="idHome" placeholder="SnowLuma 目录 / NapCat 配置目录：填了就按目录发现账号（推荐），留空则用 WS 地址 + 令牌">
+            <label for="idToken">令牌</label><input type="password" id="idToken" autocomplete="off" placeholder="留空 = 不修改">
+          </div>
+          <div class="row platform-only" style="padding:0 14px 12px;justify-content:flex-end"><span class="note" id="idSaveNote"></span><button id="idSave">保存配置</button></div>
+          <div class="platform-only" style="padding:0 14px 12px">
+            <table aria-label="上游链路"><thead><tr><th>链路</th><th>账号</th><th>状态</th><th>原因</th><th>最近收包</th></tr></thead><tbody id="idLinks"></tbody></table>
+          </div>
+
+          <!-- SnowLuma 程序：只有用户亲手点击才启停（不经接口平台、不经桥接/AI） -->
+          <div id="snowSection">
+            <div class="card-head" style="border-top:1px solid var(--line)">
+              <span class="dot" id="snowDot"></span>
+              <h3 id="snowTitle">SnowLuma 程序（由你亲手启停）</h3>
+              <span class="badge" id="snowState">未选择目录</span>
+              <span class="grow"></span>
+              <button class="primary" id="snowStart" disabled>启动 SnowLuma</button>
+              <button class="danger" id="snowStop" disabled>停止 SnowLuma</button>
+            </div>
+            <div id="snowPick" class="empty-state">
+              <p>选择你自己下载并解压的 SnowLuma 目录（含 <code>launcher.bat</code>（Windows）或 <code>launcher.sh</code>（Linux）、<code>index.mjs</code> 的那一层）。SnowLuma 不会放进项目里，也不会被自动启动。选择后会同步给接口平台的 SnowLuma 实例。</p>
+              <div class="row">
+                <input type="text" id="snowDirInput" placeholder="例如 D:\SnowLuma-v2.0.3-win-x64 或 /opt/SnowLuma-v2.0.3-linux-x64" aria-label="SnowLuma 目录">
+                <button id="snowBrowse">浏览…</button>
+                <button class="primary" id="snowUse">使用这个目录</button>
+              </div>
+              <p class="note" id="snowPickMsg"></p>
+            </div>
+            <div id="snowReady" hidden>
+              <dl class="info">
+                <dt>版本</dt><dd id="snowVer">—</dd>
+                <dt>发行版</dt><dd id="snowEdition">—</dd>
+                <dt>目录</dt><dd id="snowDirText">—</dd>
+                <dt>已配置账号</dt><dd id="snowAccounts">—</dd>
+                <dt>WebUI</dt><dd id="snowWebui">—</dd>
+              </dl>
+              <div class="actions">
+                <button id="snowOpenWebui">打开 SnowLuma WebUI ↗</button>
+                <button id="snowCheck">检查更新</button>
+                <button id="snowUpdateHelper">更新助手</button>
+                <button class="ghost" id="snowChange">更换目录</button>
+              </div>
+              <div class="panel-sub" id="updatePanel">
+                <h3 id="updTitle">更新</h3>
+                <div id="updSummary" class="note"></div>
+                <details class="notes" id="updNotesWrap" hidden><summary>更新说明</summary><pre id="updNotes"></pre></details>
+                <ol>
+                  <li>点「打开下载页」，下载 <b id="updAsset">对应本机系统的完整版</b>，解压到一个<b>新的</b>文件夹（不要覆盖当前目录）。</li>
+                  <li>回到这里，先<b>停止 SnowLuma</b>，再选择新文件夹，点「迁移数据并切换」。</li>
+                  <li>迁移会先把当前目录的 <code>config/</code>、<code>data/</code> 备份到 <code>state/snowluma-backups/</code>，再复制到新目录；旧目录原样保留，确认没问题后再自行删除。</li>
+                </ol>
+                <p class="note">AI 的记忆、人物库、会话在桥接的 <code>state\</code> 和 DSH 里，聊天记录在 QQ 客户端里，更新 SnowLuma 不会影响它们。控制中心只搬你的数据，不下载、不安装 SnowLuma 的程序文件。</p>
+                <div class="row">
+                  <button id="updDownload">打开下载页 ↗</button>
+                  <input type="text" id="migrateDir" placeholder="新版本解压后的目录" aria-label="新版本目录">
+                  <button id="migrateBrowse">浏览…</button>
+                </div>
+                <div class="row">
+                  <label class="check"><input type="checkbox" id="migrateLogs"> 同时迁移 logs/</label>
+                  <span class="grow"></span>
+                  <button class="primary" id="migrateGo">迁移数据并切换</button>
+                </div>
+                <div id="migrateResult" class="note"></div>
+              </div>
+            </div>
+            <div class="toolbar">
+              <input type="search" id="snowFilter" placeholder="过滤 SnowLuma 日志…" aria-label="过滤 SnowLuma 日志">
+              <label class="check"><input type="checkbox" id="snowErrors"> 只看错误</label>
+              <label class="check"><input type="checkbox" id="snowPause"> 暂停滚动</label>
+              <span class="grow"></span>
+              <button class="ghost" id="snowDownload">下载日志</button>
+              <button class="ghost" id="snowClear">清屏</button>
+            </div>
+            <div class="term" id="snowTerm" role="log" aria-live="polite" style="max-height:360px"></div>
+          </div>
+
+          <!-- NapCat 程序：只有用户亲手点击才启停（不经接口平台、不经桥接/AI） -->
+          <div id="napSection" hidden>
+            <div class="card-head" style="border-top:1px solid var(--line)">
+              <span class="dot" id="napDot"></span>
+              <h3>NapCat 程序（由你亲手启停）</h3>
+              <span class="badge" id="napState">—</span>
+              <span class="grow"></span>
+              <button class="primary" id="napStart">启动 NapCat</button>
+              <button class="danger" id="napStop">停止 NapCat</button>
+            </div>
+            <p class="note" id="napNote" style="padding:8px 14px;margin:0"></p>
+            <div class="qr-panel" id="napQrPanel" hidden>
+              <img id="napQrImg" alt="NapCat 登录二维码" width="220" height="220">
+              <div>
+                <h3 style="margin:0 0 6px">用手机 QQ 扫码登录机器人账号</h3>
+                <p class="note" style="margin:0">二维码约 2 分钟过期，NapCat 会自动换新的，这里也会跟着刷新。登录成功后这块会自动消失。<br>
+                <span id="napQrTime"></span></p>
+              </div>
+            </div>
+            <dl class="info">
+              <dt>版本</dt><dd id="napVer">—</dd>
+              <dt id="napProgLabel">程序</dt><dd id="napProgText">—</dd>
+              <dt>NapCat 目录</dt><dd id="napHomeText">—</dd>
+            </dl>
+            <div class="actions">
+              <button id="napCheck">检查更新</button>
+              <button id="napOpenDownload">打开下载页 ↗</button>
+              <button class="ghost" id="napSetToggle">NapCat 设置</button>
+            </div>
+            <div class="panel-sub" id="napUpdatePanel">
+              <h3 id="napUpdTitle">更新</h3>
+              <div id="napUpdSummary" class="note"></div>
+              <details class="notes" id="napUpdNotesWrap" hidden><summary>更新说明</summary><pre id="napUpdNotes"></pre></details>
+              <p class="note">控制中心只提示新版本，不下载、不安装 NapCat。AI 的记忆和会话在桥接的 <code>state/</code> 与 DSH 里，更新 NapCat 不会影响它们。</p>
+            </div>
+            <div class="panel-sub" id="napSetPanel">
+              <h3>NapCat 设置</h3>
+              <p class="note">留空 = 用默认位置。改启动方式在下次启动 NapCat 时生效；改 NapCat 目录会同步给接口平台的 NapCat 实例。</p>
+              <div class="row" id="napQQAppRow">
+                <label for="napQQAppInput" style="min-width:110px">QQ.app</label>
+                <input type="text" id="napQQAppInput" placeholder="/Applications/QQ.app" aria-label="QQ.app 位置">
+                <button id="napQQAppBrowse">浏览…</button>
+              </div>
+              <div class="row" id="napCmdRow">
+                <label for="napCmdInput" style="min-width:110px">启动文件</label>
+                <input type="text" id="napCmdInput" placeholder="NapCat.Shell 里的 .bat / .exe" aria-label="NapCat 启动文件">
+                <button id="napCmdBrowse">浏览…</button>
+              </div>
+              <div class="row">
+                <label for="napHomeInput" style="min-width:110px">NapCat 目录</label>
+                <input type="text" id="napHomeInput" aria-label="NapCat 目录（含 config/onebot11_<QQ号>.json）">
+                <button id="napHomeBrowse">浏览…</button>
+              </div>
+              <div class="row">
+                <label for="napQuickInput" style="min-width:110px">快速登录 QQ 号</label>
+                <input type="text" id="napQuickInput" inputmode="numeric" placeholder="可选：机器人 QQ 号，启动时加 -q（NapCat 已设自动登录时不用填）" aria-label="快速登录 QQ 号">
+              </div>
+              <div class="row">
+                <span class="grow"></span>
+                <button class="ghost" id="napSetCancel">取消</button>
+                <button class="primary" id="napSetSave">保存</button>
+              </div>
+              <p class="note" id="napSetMsg"></p>
+            </div>
+            <div class="toolbar">
+              <input type="search" id="napFilter" placeholder="过滤 NapCat 日志…" aria-label="过滤 NapCat 日志">
+              <label class="check"><input type="checkbox" id="napErrors"> 只看错误</label>
+              <label class="check"><input type="checkbox" id="napPause"> 暂停滚动</label>
+              <span class="grow"></span>
+              <button class="ghost" id="napDownload">下载日志</button>
+              <button class="ghost" id="napClear">清屏</button>
+            </div>
+            <div class="term" id="napTerm" role="log" aria-live="polite" style="max-height:420px"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 账号 -->
+    <div id="pview-accounts" role="tabpanel" aria-labelledby="ptab-accounts" class="card" hidden>
+      <div class="card-head"><h2>账号</h2><span class="grow"></span><span class="note">健康阶梯：核心运行 → 后端可连接 → 账号已登录 → 收发就绪 → 桥接已启用</span></div>
+      <div style="padding:0 14px 12px;overflow:auto">
+        <table aria-label="账号"><thead><tr><th>账号</th><th>昵称</th><th>实例</th><th>健康</th><th>原因</th><th>桥接</th><th>收 / 发</th><th>最近收发</th></tr></thead><tbody id="acctRows"></tbody></table>
+        <p class="note" id="acctEmpty"></p>
+      </div>
+    </div>
+
+    <!-- 日志 -->
+    <div id="pview-logs" role="tabpanel" aria-labelledby="ptab-logs" class="card tall" hidden>
+      <div class="toolbar">
+        <select id="plScope" aria-label="日志来源"><option value="">全部来源</option><option value="core">核心</option><option value="compat">兼容入口</option></select>
+        <select id="plLevel" aria-label="最低级别"><option value="">全部级别</option><option value="info">信息及以上</option><option value="warn">警告及以上</option><option value="error">只看错误</option></select>
+        <input type="search" id="plFilter" placeholder="过滤日志…" aria-label="过滤接口平台日志">
+        <label class="check"><input type="checkbox" id="plPause"> 暂停滚动</label>
+        <span class="grow"></span>
+        <button class="ghost" id="plDownload">下载日志</button>
+        <button class="ghost" id="plClear" title="只清除显示，不删除日志文件">清屏</button>
+      </div>
+      <div class="term" id="plTerm" role="log" aria-live="polite"></div>
+    </div>
+
+    <!-- 设置 -->
+    <div id="pview-settings" role="tabpanel" aria-labelledby="ptab-settings" class="card" hidden>
+      <div class="card-head"><h2>桥接接入</h2><span class="badge" id="linkState">—</span><span class="grow"></span><button class="primary" id="linkOn">接入桥接</button><button id="linkOff">恢复直连</button></div>
+      <p class="note" style="padding:10px 14px;margin:0">「接入桥接」把桥接 <code>config.json</code> 的 SnowLuma 端点改为接口平台的 OneBot 兼容入口（原值备份在 <code>state\platform-link-backup.json</code>），重启桥接后生效。「恢复直连」按备份还原。两者都不会启停任何进程。</p>
+      <div class="card-head" style="border-top:1px solid var(--line)"><h2>平台信息</h2></div>
+      <dl class="info">
+        <dt>版本</dt><dd id="sVer">—</dd>
+        <dt>平台目录</dt><dd id="sData">—</dd>
+        <dt>监听端口</dt><dd id="sPort">—</dd>
+        <dt>OneBot 兼容入口</dt><dd id="sCompat">—</dd>
+        <dt>兼容入口目标账号</dt><dd id="sCompatAcct">—</dd>
+        <dt>恢复策略</dt><dd>通信断开自动重连（指数退避）；不自动重启后端、不自动重新登录 —— 三者分开处理</dd>
+        <dt>运行环境</dt><dd id="sEnv">—</dd>
+        <dt>支持范围</dt><dd id="sSupport">—</dd>
+      </dl>
+      <p class="note" style="padding:10px 14px;margin:0">兼容入口目标账号、恢复策略等平台配置在接口平台自己的 <code>interface-platform\state\platform.json</code>；控制中心不读写它。平台端口与目录是控制中心的设置（<code>state\control-center.json</code> 的 <code>platformPort</code> / <code>platformDir</code>），改后重启接口平台。令牌不会显示在页面上。</p>
+    </div>
+  </section>
+</main>
+
+<footer id="statusBar">
+  <span class="chip"><span class="dot" id="sbBridgeDot"></span><b>桥接</b><span id="sbBridge">—</span></span>
+  <span class="chip"><span class="dot" id="sbPlDot"></span><b>接口平台</b><span id="sbPl">—</span></span>
+  <span class="chip" title="经接口平台接入的 QQ 后端实例（NapCat / SnowLuma 等）；桥接直连时显示直连的 SnowLuma"><span class="dot" id="sbBackDot"></span><b>接入后端</b><span id="sbBack">—</span></span>
+  <span class="chip"><span class="dot" id="sbQQDot"></span><b>QQ</b><span id="sbQQ">—</span></span>
+  <span class="chip"><span class="dot" id="sbDshDot"></span><b>DSH</b><span id="sbDsh">—</span></span>
+  <span class="chip"><b>模式</b><span id="sbMode">—</span></span>
+  <span class="chip"><b>版本</b><span id="sbVers">—</span></span>
+</footer>
+
+<dialog id="confirmDlg">
+  <h3 id="dlgTitle">确认</h3>
+  <p id="dlgText"></p>
+  <div class="row"><button id="dlgCancel">取消</button><button class="danger solid" id="dlgOk">确定</button></div>
+</dialog>
+<div id="toast" aria-live="polite"></div>
+
+<script>
+(() => {
+  // ── 令牌：从地址片段 #t=… 取得（片段不会发给服务器），存进 sessionStorage 后从地址栏抹掉 ──
+  //    界面偏好（选中的标签/实例）放 localStorage；令牌与凭据绝不放 localStorage。
+  const m = /[#&]t=([a-f0-9]{48})/.exec(location.hash);
+  if (m) { sessionStorage.setItem('ccToken', m[1]); history.replaceState(null, '', location.pathname); }
+  let token = sessionStorage.getItem('ccToken') || '';
+  const $ = (id) => document.getElementById(id);
+  const pref = {
+    get: (k, d) => { try { return localStorage.getItem(`cc.${k}`) ?? d; } catch { return d; } },
+    set: (k, v) => { try { localStorage.setItem(`cc.${k}`, v); } catch {} },
+  };
+  let authFailed = false;
+  function showTokenBox(reason) {
+    authFailed = true;
+    if ($('tokenBox')) return;
+    const box = document.createElement('div');
+    box.className = 'banner bad';
+    box.id = 'tokenBox';
+    box.append(`${reason}打开项目目录里的 state 文件夹，复制 control-center-token 文件的内容粘贴到这里（或重新双击 control-center.bat，它会带着令牌打开页面）。 `);
+    const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = '粘贴令牌'; inp.style.minWidth = '320px';
+    const btn = document.createElement('button'); btn.className = 'primary'; btn.textContent = '确定';
+    btn.onclick = () => { const v = inp.value.trim(); if (v) { sessionStorage.setItem('ccToken', v); location.reload(); } };
+    box.append(inp, ' ', btn);
+    $('banners').replaceChildren(box);
+  }
+  if (!token) showTokenBox('需要控制中心令牌：');
+
+  async function api(path, body) {
+    if (authFailed) throw new Error('需要控制中心令牌');
+    const res = await fetch(path, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: { 'x-control-token': token, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (res.status === 401) { sessionStorage.removeItem('ccToken'); showTokenBox('令牌无效或已更换：'); throw new Error('需要控制中心令牌'); }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  }
+  function toast(text, kind = '') {
+    const el = document.createElement('div');
+    el.className = `toast ${kind}`;
+    el.textContent = text;
+    $('toast').appendChild(el);
+    setTimeout(() => el.remove(), kind === 'bad' ? 7000 : 3500);
+  }
+  function confirmBox(title, text, okText = '确定') {
+    return new Promise((resolve) => {
+      $('dlgTitle').textContent = title; $('dlgText').textContent = text; $('dlgOk').textContent = okText;
+      const dlg = $('confirmDlg');
+      const done = (v) => { dlg.close(); $('dlgOk').onclick = null; $('dlgCancel').onclick = null; resolve(v); };
+      $('dlgOk').onclick = () => done(true);
+      $('dlgCancel').onclick = () => done(false);
+      dlg.onclose = () => resolve(false);
+      dlg.showModal();
+    });
+  }
+  const fmtDur = (ms) => { if (!ms) return '0 秒'; const s = Math.floor(ms / 1000); const h = Math.floor(s / 3600); const mi = Math.floor((s % 3600) / 60); return h ? `${h} 小时 ${mi} 分` : mi ? `${mi} 分 ${s % 60} 秒` : `${s} 秒`; };
+  const fmtAgo = (t) => { if (!t) return '—'; const s = Math.max(0, Math.round((Date.now() - t) / 1000)); return s < 60 ? `${s} 秒前` : s < 3600 ? `${Math.floor(s / 60)} 分钟前` : new Date(t).toLocaleString(); };
+  const setDot = (el, kind) => { el.className = `dot ${kind || ''}`; };
+  const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); Object.assign(e, props); for (const k of kids) e.append(k); return e; };
+
+  // ── 标签切换（只改变显示：不发请求、不建连接、不启停任何模块）──
+  const alerts = { bridge: 0, platform: 0 };
+  function makeTabs(tabIds, prefKey, onShow) {
+    const tabs = tabIds.map((id) => $(id));
+    function select(id, { focus = false } = {}) {
+      for (const t of tabs) {
+        const on = t.id === id;
+        const panel = $(t.getAttribute('aria-controls'));
+        if (!on && !panel.hidden) panel.dispatchEvent(new CustomEvent('cc-hide'));
+        t.setAttribute('aria-selected', String(on));
+        t.tabIndex = on ? 0 : -1;
+        panel.hidden = !on;
+        if (on) { panel.dispatchEvent(new CustomEvent('cc-show')); if (focus) t.focus(); }
+      }
+      pref.set(prefKey, id);
+      onShow?.(id);
+    }
+    tabs.forEach((t, i) => {
+      t.addEventListener('click', () => select(t.id));
+      t.addEventListener('keydown', (e) => {
+        const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+        if (dir) { e.preventDefault(); select(tabs[(i + dir + tabs.length) % tabs.length].id, { focus: true }); }
+        if (e.key === 'Home') { e.preventDefault(); select(tabs[0].id, { focus: true }); }
+        if (e.key === 'End') { e.preventDefault(); select(tabs[tabs.length - 1].id, { focus: true }); }
+      });
+    });
+    const saved = pref.get(prefKey, tabIds[0]);
+    select(tabIds.includes(saved) ? saved : tabIds[0]);
+    return { select, current: () => tabs.find((t) => t.getAttribute('aria-selected') === 'true')?.id };
+  }
+
+  // ── 日志视图 ──
+  // 隐藏时保留滚动位置；未显示的模块出错时只累计提示，不抢占当前页面。
+  function makeLog(source, termId, { filterId, errorsId = null, pauseId, levelId = null, scopeId = null, structured = false, onError = null } = {}) {
+    const lines = []; let after = 0; let base = 0; let savedScroll = null; let loaded = false;
+    const term = $(termId);
+    const parse = (l) => {
+      if (!structured || l.parsed !== undefined) return l;
+      try { const j = l.text.startsWith('{"pl":1') ? JSON.parse(l.text) : null; l.parsed = j; } catch { l.parsed = null; }
+      return l;
+    };
+    const levelOf = (l) => (l.parsed ? l.parsed.level : (l.stream === 'stderr' ? 'error' : 'info'));
+    const isError = (l) => (structured ? ['error', 'warn'].includes(levelOf(l)) : (l.stream === 'stderr' || /错误|失败|error|fail|⚠|⛔|🚨/i.test(l.text)));
+    const LV = { debug: 10, info: 20, warn: 30, error: 40 };
+    const visible = () => term.offsetParent !== null;
+    const render = () => {
+      if (!visible()) return;
+      const q = $(filterId).value.trim().toLowerCase();
+      const errs = errorsId ? $(errorsId).checked : false;
+      const minLv = levelId ? (LV[$(levelId).value] ?? 0) : 0;
+      const scope = scopeId ? $(scopeId).value : '';
+      const frag = document.createDocumentFragment();
+      const view = lines.filter((l) => {
+        if (l.seq <= base || l.cleared) return false;
+        if (errs && !isError(l)) return false;
+        if (minLv && (LV[levelOf(l)] ?? 20) < minLv) return false;
+        if (scope) {
+          const p = l.parsed;
+          if (!p) return false;
+          const [k, v] = scope.split('=');
+          if (k === 'scope' ? p.scope !== v : p[k] !== v) return false;
+        }
+        const txt = l.parsed ? l.parsed.msg : l.text;
+        return !q || txt.toLowerCase().includes(q);
+      });
+      if (!view.length) frag.appendChild(el('span', { className: 'empty', textContent: q || errs || minLv || scope ? '（没有匹配的日志）' : '（暂无输出）' }));
+      for (const l of view.slice(-2500)) {
+        if (l.kind === 'img') {
+          // 页面自己插入的图片条目（目前只有 NapCat 登录二维码）：小图 + 一行说明；过期后变灰
+          const row = el('span', { className: `l img${l.expired ? ' expired' : ''}` });
+          row.appendChild(el('span', { className: 't', textContent: new Date(l.time).toLocaleTimeString() }));
+          row.appendChild(el('span', { className: 'tag', textContent: '[控制中心]' }));
+          row.appendChild(document.createTextNode(l.expired ? `${l.text}（${l.expired}）` : l.text));
+          row.appendChild(el('img', { src: l.src, alt: l.text, width: 132, height: 132 }));
+          frag.appendChild(row);
+          continue;
+        }
+        const p = l.parsed;
+        const row = el('span', { className: `l ${p ? p.level : l.stream}${l.text.startsWith('> ') ? ' cmd' : ''}` });
+        row.appendChild(el('span', { className: 't', textContent: new Date(p?.time ?? l.time).toLocaleTimeString() }));
+        if (p) row.appendChild(el('span', { className: 'tag', textContent: `[${p.instance ?? p.scope}${p.account ? ` ${p.account}` : ''}]` }));
+        row.appendChild(document.createTextNode(p ? p.msg : l.text));
+        frag.appendChild(row);
+      }
+      term.replaceChildren(frag);
+      if (!$(pauseId).checked) term.scrollTop = term.scrollHeight;
+    };
+    async function poll() {
+      if (authFailed) return;
+      try {
+        const r = await api(`/api/logs?source=${source}&after=${after}`);
+        if (r.lines.length) {
+          const fresh = r.lines.map(parse);
+          lines.push(...fresh);
+          if (lines.length > 4000) lines.splice(0, lines.length - 4000);
+          after = r.lastSeq;
+          // 首次拉取的是历史日志，不算「新异常」
+          if (onError && loaded) { const n = fresh.filter(isError).length; if (n) onError(n, fresh); }
+          render();
+        }
+        loaded = true;
+      } catch {}
+    }
+    for (const id of [filterId, errorsId, levelId, scopeId].filter(Boolean)) $(id).addEventListener('input', render);
+    return {
+      poll, render, lines,
+      saveScroll() { savedScroll = term.scrollTop; },
+      restoreScroll() { render(); if ($(pauseId).checked && savedScroll !== null) term.scrollTop = savedScroll; },
+      clear() { base = after; for (const l of lines) if (l.kind === 'img') l.cleared = true; render(); },
+      // 插入一条图片条目：排在当前最后一行之后（seq 取半格，「清屏」照常生效）；最多保留 5 张
+      addImage({ key, src, text }) {
+        if (lines.some((l) => l.kind === 'img' && l.key === key)) return;
+        lines.push({ kind: 'img', key, src, text, seq: after + 0.5, time: Date.now(), stream: 'stdout', expired: null });
+        const imgs = lines.filter((l) => l.kind === 'img');
+        for (const old of imgs.slice(0, Math.max(0, imgs.length - 5))) lines.splice(lines.indexOf(old), 1);
+        render();
+      },
+      // 把图片条目标成过期（除了 keepKey 那张）
+      expireImages(reason, keepKey = null) {
+        let changed = false;
+        for (const l of lines) if (l.kind === 'img' && l.key !== keepKey && !l.expired) { l.expired = reason; changed = true; }
+        if (changed) render();
+      },
+      download() {
+        const blob = new Blob([lines.map((l) => (l.kind === 'img' ? `[${new Date(l.time).toISOString()}] [控制中心] ${l.text}${l.expired ? `（${l.expired}）` : ''}（图片不写入日志文件）` : l.parsed ? `[${new Date(l.parsed.time).toISOString()}] ${l.parsed.level.toUpperCase()} [${l.parsed.instance ?? l.parsed.scope}${l.parsed.account ? ` ${l.parsed.account}` : ''}] ${l.parsed.msg}` : `[${new Date(l.time).toISOString()}] ${l.stream === 'stderr' ? 'ERR ' : ''}${l.text}`)).join('\n')], { type: 'text/plain;charset=utf-8' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${source}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.log`; a.click(); URL.revokeObjectURL(a.href);
+      },
+    };
+  }
+
+  let mainTabs = null;
+  let platformTabs = null;
+  const tabVisible = (panelId) => !$(panelId).hidden;
+  function bump(tab, n) {
+    if (tab === 'bridge' && tabVisible('panel-bridge')) return;
+    if (tab === 'platform' && tabVisible('panel-platform')) return;
+    alerts[tab] += n;
+    renderAlerts();
+  }
+  let plLogUnseen = 0;
+  function renderAlerts() {
+    $('tabBridgeAlert').hidden = !alerts.bridge; $('tabBridgeAlert').textContent = `⚠ ${alerts.bridge}`;
+    $('tabPlatformAlert').hidden = !alerts.platform; $('tabPlatformAlert').textContent = `⚠ ${alerts.platform}`;
+    $('plLogAlert').hidden = !plLogUnseen; $('plLogAlert').textContent = String(plLogUnseen);
+  }
+
+  const bridgeLog = makeLog('bridge', 'bridgeTerm', { filterId: 'bridgeFilter', errorsId: 'bridgeErrors', pauseId: 'bridgePause', onError: (n) => bump('bridge', n) });
+  const snowLog = makeLog('snowluma', 'snowTerm', { filterId: 'snowFilter', errorsId: 'snowErrors', pauseId: 'snowPause', onError: (n) => bump('platform', n) });
+  const napLog = makeLog('napcat', 'napTerm', { filterId: 'napFilter', errorsId: 'napErrors', pauseId: 'napPause' });
+  $('napClear').onclick = () => napLog.clear();
+  $('napDownload').onclick = () => napLog.download();
+  const plLog = makeLog('platform', 'plTerm', { filterId: 'plFilter', pauseId: 'plPause', levelId: 'plLevel', scopeId: 'plScope', structured: true, onError: (n, fresh) => {
+    const errs = fresh.filter((l) => l.parsed?.level === 'error' || l.stream === 'stderr').length;
+    if (!errs) return;
+    bump('platform', errs);
+    if (!tabVisible('pview-logs')) { plLogUnseen += errs; renderAlerts(); }
+  } });
+  $('bridgeClear').onclick = () => bridgeLog.clear();
+  $('snowClear').onclick = () => snowLog.clear();
+  $('plClear').onclick = () => plLog.clear();
+  $('bridgeDownload').onclick = () => bridgeLog.download();
+  $('snowDownload').onclick = () => snowLog.download();
+  $('plDownload').onclick = () => plLog.download();
+  for (const [panel, logs] of [['panel-bridge', [bridgeLog]], ['panel-platform', [snowLog, plLog]], ['pview-logs', [plLog]], ['pview-instances', [snowLog, napLog]]]) {
+    $(panel).addEventListener('cc-hide', () => logs.forEach((l) => l.saveScroll()));
+    $(panel).addEventListener('cc-show', () => requestAnimationFrame(() => logs.forEach((l) => l.restoreScroll())));
+  }
+  mainTabs = makeTabs(['tab-bridge', 'tab-platform'], 'tab', (id) => { alerts[id === 'tab-bridge' ? 'bridge' : 'platform'] = 0; renderAlerts(); });
+  platformTabs = makeTabs(['ptab-overview', 'ptab-instances', 'ptab-accounts', 'ptab-logs', 'ptab-settings'], 'ptab', (id) => { if (id === 'ptab-logs') { plLogUnseen = 0; renderAlerts(); } });
+
+  // ── 状态 ──
+  let S = null;
+  let selectedInst = pref.get('inst', '');
+  let renderedInst = null;
+  const reasonText = {
+    connecting: '连接中', reconnecting: '重连中', connect_failed: '连不上上游', connect_failed_no_token: '连不上上游（没有令牌，也没有目录可发现）',
+    disconnected_by_user: '已手动断开', awaiting_login: '等待登录 / 账号离线', receive_unhealthy: '接收异常', receive_stale: '上游心跳超时',
+    awaiting_heartbeat: '等待首个心跳', identifying: '识别账号中', no_route: '没有承接的实例', upstream_closed: '上游已断开',
+  };
+  const rt = (r) => (r ? (reasonText[r] ?? r) : '正常');
+
+  async function refresh() {
+    if (authFailed) return;
+    try { S = await api('/api/state'); } catch { return; }
+    renderBridge();
+    renderPlatform();
+    renderSnow();
+    renderNapcat();
+    renderBackends();
+    renderFooter();
+  }
+
+  function renderBridge() {
+    const b = S.bridge; const h = S.health; const st = h.bridgeApi; const sl = S.snowluma; const pl = S.platform;
+    $('verBadge').textContent = `v${S.version}`;
+    const banners = [];
+    if (!h.config.valid) banners.push({ bad: h.config.exists, text: h.config.error });
+    if (h.bridgeExternal) banners.push({ bad: false, text: '检测到桥接已经在别处运行（例如你双击了 start.bat）。控制中心不会接管它；要在这里管理，请先关掉那个窗口再点「启动桥接」。' });
+    if (sl.info?.ok && !sl.running && h.snowlumaPort) banners.push({ bad: false, text: `SnowLuma 的 WebUI 端口 ${sl.info.webui.port} 正在被使用：SnowLuma 可能已经在别处运行（不是由控制中心启动的，这里无法停止它）。` });
+    if (pl.external) banners.push({ bad: false, text: `接口平台已经在别处运行（端口 ${pl.port}），不是由控制中心启动的，这里不会接管它的进程。${pl.overviewError ? `控制中心无法管理它：${pl.overviewError}。要在这里管理，启动它时把环境变量 INTERFACE_PLATFORM_ADMIN_TOKEN 设为桥接 state\\platform-admin-token 的内容，或改由控制中心启动。` : ''}` });
+    if (!pl.installed && !pl.running) banners.push({ bad: false, text: `找不到接口平台（${pl.dir}）。它应放在桥接目录的同级 interface-platform/；也可以在 state/control-center.json 里设 "platformDir"。` });
+    if (pl.link.viaPlatform && !pl.reachable) banners.push({ bad: true, text: '桥接已设为经接口平台连接，但接口平台没有运行：机器人收不到也发不出消息。请启动接口平台，或在「接口平台 → 设置」恢复直连。' });
+    if (st?.level && st.level !== 'L0') banners.push({ bad: true, text: `当前处于 ${st.level} 高权限（运维 Agent）。不用时请点「紧急关闭」，或在 QQ 私聊发 /panic。` });
+    if (!$('tokenBox')) $('banners').replaceChildren(...banners.map((x) => el('div', { className: `banner ${x.bad ? 'bad' : ''}`, textContent: x.text })));
+    const bRun = b.running;
+    setDot($('bridgeDot'), bRun ? (st ? 'on' : 'warn') : (h.bridgeExternal ? 'warn' : ''));
+    const bText = bRun ? `运行中 · PID ${b.pid} · ${fmtDur(b.uptimeMs)}${b.restarts ? ` · 已自动重启 ${b.restarts} 次` : ''}` : (b.restartPending ? '等待自动重启…' : (h.bridgeExternal ? '外部运行中' : (b.lastExit ? `已停止（退出码 ${b.lastExit.code ?? '—'}）` : '未启动')));
+    $('bridgeState').textContent = bText;
+    $('bridgeRoute').textContent = pl.link.viaPlatform ? '路径：经接口平台' : '路径：直连 SnowLuma';
+    $('bridgeStart').disabled = bRun || h.bridgeExternal;
+    $('bridgeStop').disabled = !bRun && !b.restartPending;
+    $('bridgeRestart').disabled = !bRun;
+    $('bridgeAuto').checked = !!b.autoRestart;
+    setDot($('tabBridgeDot'), bRun ? (st ? 'on' : 'warn') : (h.bridgeExternal ? 'warn' : 'off'));
+    $('tabBridgeSt').textContent = bRun ? (st ? '运行中' : '启动中') : (h.bridgeExternal ? '外部运行' : '未运行');
+    const level = st?.level || 'L0';
+    $('modeBadge').textContent = st ? `模式 ${st.mode} · ${level}` : '模式 —（桥接未运行）';
+    $('modeBadge').className = `badge level-${st ? level : ''}`;
+    $('pendingBadge').textContent = `待审批 ${st?.pendingApprovals ?? 0} · 待确认 ${st?.adminPendingRequests ?? 0}`;
+    $('panicBtn').disabled = !st;
+    $('consoleManual').href = `http://127.0.0.1:${h.consolePort || 3100}/?manual=1`;
+  }
+
+  // 平台没运行时，控制中心读不到平台的实例（它不读平台的文件），只列出本机 SnowLuma 程序，保证仍能亲手启停 SnowLuma
+  const LOCAL_SNOW = { id: '本机 SnowLuma 程序', provider: 'snowluma', providerName: 'SnowLuma（本机程序）', management: 'hosted', local: true, upstream: {}, links: [] };
+  const LOCAL_NAP = { id: '本机 NapCat 程序', provider: 'napcat', providerName: 'NapCat（本机程序）', management: 'hosted', local: true, upstream: {}, links: [] };
+  // SnowLuma 有 Windows 与 Linux 版（2.0 起正式支持 Linux）：macOS 不列本机 SnowLuma 占位项。
+  const SNOW_OS = ['win32', 'linux'];
+  // NapCat 程序区要始终找得到：平台没运行、或平台里还没有 NapCat 实例时，列一个「本机 NapCat 程序」占位项。
+  function instancesOf(pl) {
+    const list = [...(pl.overview?.instances ?? (SNOW_OS.includes(S?.os) ? [LOCAL_SNOW] : []))];
+    if ((S?.os === 'darwin' || S?.napcat?.info?.ok || S?.napcat?.running) && !list.some((i) => i.provider === 'napcat')) list.push(LOCAL_NAP);
+    return list;
+  }
+  // 从任何地方跳到 NapCat 程序区（接口平台 → 接入实例 → NapCat 实例）
+  function goToNapcat() {
+    mainTabs.select('tab-platform');
+    platformTabs.select('ptab-instances');
+    const inst = instancesOf(S.platform).find((i) => i.provider === 'napcat');
+    if (inst) { selectedInst = inst.id; pref.set('inst', inst.id); }
+    renderPlatform(); renderSnow();
+    requestAnimationFrame(() => $('napSection').scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+
+  function renderPlatform() {
+    const pl = S.platform; const ov = pl.overview;
+    const run = pl.running; const up = pl.reachable;
+    setDot($('plDot'), up ? 'on' : run ? 'warn' : '');
+    $('plState').textContent = run ? `运行中 · PID ${pl.pid} · ${fmtDur(pl.uptimeMs)}${pl.restarts ? ` · 已自动重启 ${pl.restarts} 次` : ''}${up ? '' : ' · 接口未就绪'}` : (pl.restartPending ? '等待自动重启…' : pl.external ? '外部运行中' : (pl.lastExit ? `已停止（退出码 ${pl.lastExit.code ?? '—'}）` : '未启动'));
+    $('plStart').disabled = run || pl.external;
+    $('plStop').disabled = !run && !pl.restartPending;
+    $('plRestart').disabled = !run;
+    $('plAuto').checked = !!pl.autoRestart;
+    const ready = ov?.counts.accountsReady ?? 0;
+    const faulty = ov?.counts.instancesFaulty ?? 0;
+    setDot($('tabPlatformDot'), !up ? (run ? 'warn' : 'off') : faulty ? 'warn' : ready ? 'on' : 'warn');
+    $('tabPlatformSt').textContent = !up ? (run ? '启动中' : pl.external ? '外部运行' : '未运行') : `${ready} 账号就绪${faulty ? ` · ${faulty} 实例异常` : ''}`;
+    $('tCore').textContent = up ? `运行中（v${ov?.version ?? '?'}）` : run ? '启动中' : '未运行';
+    $('tReady').textContent = up ? `${ready} / ${ov.counts.accounts}` : '—';
+    $('tFaulty').textContent = up ? String(faulty) : '—';
+    $('tRecv').textContent = up ? fmtAgo(ov.lastReceiveAt) : '—';
+    $('tSend').textContent = up ? fmtAgo(ov.lastSendAt) : '—';
+    $('tLink').textContent = pl.link.viaPlatform ? '经接口平台' : '直连 SnowLuma（未接入）';
+    $('plSupport').textContent = ov?.support?.note ?? 'M1：QQ 经 SnowLuma（Windows / Linux）或 NapCat（macOS / Windows / Linux）接入。自研 Mac 原生 QQ（M3）与其他平台尚未提供。';
+
+    // 实例列表
+    const insts = instancesOf(pl);
+    if (!insts.find((i) => i.id === selectedInst)) selectedInst = insts[0]?.id ?? '';
+    const list = $('instList');
+    const items = insts.map((i) => {
+      const okLinks = (i.links ?? []).filter((l) => l.state === 'open').length;
+      const btn = el('button', { type: 'button' });
+      btn.setAttribute('aria-current', String(i.id === selectedInst));
+      const dot = el('span', { className: 'dot' });
+      setDot(dot, !up ? '' : !i.connected ? '' : (i.links ?? []).length && okLinks === i.links.length ? 'on' : 'warn');
+      btn.append(dot, el('span', { textContent: i.id }), el('span', { className: 'meta', textContent: `${i.provider}${up ? ` · ${okLinks}/${(i.links ?? []).length}` : ''}` }));
+      btn.onclick = () => { selectedInst = i.id; pref.set('inst', i.id); renderPlatform(); renderSnow(); };
+      return el('li', {}, btn);
+    });
+    list.replaceChildren(...items);
+    if (!insts.length) list.replaceChildren(el('li', { className: 'note', textContent: up ? '还没有实例' : (SNOW_OS.includes(S.os) ? '接口平台未运行' : '接口平台未运行。macOS 上 QQ 经 NapCat 接入：先自己安装并启动 NapCat（开启 WebSocket 服务端），再启动接口平台。') }));
+    $('instProvidersNote').textContent = '可用：SnowLuma（Windows / Linux）、NapCat（macOS / Windows / Linux）。尚未提供：macOS 原生 QQ 接入、Discord、KOOK、WeChat。';
+    renderInstDetail(insts.find((i) => i.id === selectedInst), up);
+    renderAccounts(ov, up);
+    renderSettings(pl, ov);
+  }
+
+  function renderInstDetail(inst, up) {
+    $('instEmpty').hidden = !!inst;
+    $('instDetail').hidden = !inst;
+    if (!inst) return;
+    // 本机 SnowLuma 占位项：只显示 SnowLuma 程序区，不显示平台实例的配置与链路
+    for (const id of ['idConnect', 'idDisconnect', 'idSave']) $(id).hidden = !!inst.local;
+    for (const n of document.querySelectorAll('#instDetail .platform-only')) n.hidden = !!inst.local;
+    $('idLocalNote').hidden = !inst.local;
+    $('idTitle').textContent = inst.id;
+    $('idProvider').textContent = inst.providerName ?? inst.provider;
+    $('idMgmt').textContent = inst.local ? '由你亲手启停' : ({ external: '外部运行', hosted: '平台托管', remote: '远程连接' }[inst.management] ?? inst.management);
+    const links = inst.links ?? [];
+    setDot($('idDot'), !up || !inst.connected ? '' : links.length && links.every((l) => l.state === 'open') ? 'on' : 'warn');
+    $('idConnect').disabled = !up || inst.connected;
+    $('idDisconnect').disabled = !up || !inst.connected;
+    $('idSave').disabled = false;
+    // 只在切换实例时填表，避免覆盖正在编辑、尚未提交的输入
+    if (renderedInst !== inst.id) {
+      renderedInst = inst.id;
+      $('idWs').value = inst.upstream.wsUrl ?? '';
+      $('idHome').value = inst.upstream.homeDir ?? '';
+      $('idToken').value = '';
+    }
+    $('idToken').placeholder = inst.upstream.hasToken ? '已设置（留空 = 不修改）' : '未设置';
+    const rows = links.map((l) => el('tr', {},
+      el('td', { textContent: l.key }),
+      el('td', { textContent: l.account ? `${l.account}${l.nickname ? `（${l.nickname}）` : ''}` : '—' }),
+      el('td', { textContent: l.state === 'open' ? '已连接' : l.state === 'connecting' ? '连接中' : '未连接' }),
+      el('td', { textContent: rt(l.reason ?? (l.online === false ? 'awaiting_login' : l.good === false ? 'receive_unhealthy' : l.stale ? 'receive_stale' : null)) }),
+      el('td', { textContent: fmtAgo(l.lastPacketAt) })));
+    $('idLinks').replaceChildren(...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: 5, className: 'note', textContent: up ? (inst.connected ? '没有链路：如果填了 SnowLuma 目录，说明目录里还没有账号配置（先在 SnowLuma WebUI 扫码登录）' : '实例已断开') : '接口平台未运行' }))]));
+    $('snowSection').hidden = inst.provider !== 'snowluma';
+    $('napSection').hidden = inst.provider !== 'napcat';
+  }
+
+  function renderAccounts(ov, up) {
+    const accs = ov?.accounts ?? [];
+    $('acctEmpty').textContent = !up ? '接口平台未运行。' : accs.length ? '' : '还没有账号。SnowLuma 登录后，实例连上即会出现。';
+    const L = ['coreRunning', 'backendReachable', 'loggedIn', 'ioReady', 'bridgeEnabled'];
+    const names = { coreRunning: '核心运行', backendReachable: '后端可连接', loggedIn: '账号已登录', ioReady: '收发就绪', bridgeEnabled: '桥接已启用' };
+    $('acctRows').replaceChildren(...accs.map((a) => {
+      const ladder = el('span', { className: 'ladder' });
+      for (const k of L) { const d = el('span', { className: 'dot', title: `${names[k]}：${a.health[k] ? '是' : '否'}` }); setDot(d, a.health[k] ? 'on' : 'off'); ladder.append(d); }
+      const box = el('input', { type: 'checkbox', checked: a.bridge.enabled, title: '停用后账号仍在线，但消息不再进入 AI 处理' });
+      box.setAttribute('aria-label', `${a.account} 桥接开关`);
+      box.onchange = async () => {
+        if (!box.checked && !await confirmBox('停用桥接', `停用后 ${a.account} 仍然在线，但它的消息不再进入 AI 处理，AI 也不能用它发消息。`, '停用')) { box.checked = true; return; }
+        act(() => api(`/api/platform/accounts/${encodeURIComponent(a.account)}/bridge`, { enabled: box.checked }), box.checked ? '已启用桥接' : '已停用桥接');
+      };
+      return el('tr', {},
+        el('td', { textContent: a.account }),
+        el('td', { textContent: a.nickname ?? '—' }),
+        el('td', { textContent: a.instance ?? '—' }),
+        el('td', {}, ladder),
+        el('td', { textContent: rt(a.health.reason) }),
+        el('td', {}, el('label', { className: 'check' }, box, a.bridge.attached ? ` 已接入 ${a.bridge.attached}` : ' 未接入')),
+        el('td', { textContent: `${a.received} / ${a.sent}` }),
+        el('td', { textContent: `${fmtAgo(a.lastReceiveAt)} / ${fmtAgo(a.lastSendAt)}` }));
+    }));
+    // 日志来源选项：实例/账号随状态更新，但不打断当前选择
+    const sel = $('plScope'); const cur = sel.value;
+    const want = [['', '全部来源'], ['scope=core', '核心'], ['scope=compat', '兼容入口'], ...instancesOf(S.platform).map((i) => [`instance=${i.id}`, `实例 ${i.id}`]), ...accs.map((a) => [`account=${a.account}`, `账号 ${a.account}`])];
+    if (sel.options.length !== want.length || want.some(([v], i) => sel.options[i]?.value !== v)) {
+      sel.replaceChildren(...want.map(([v, t]) => el('option', { value: v, textContent: t })));
+      sel.value = want.some(([v]) => v === cur) ? cur : '';
+    }
+  }
+
+  function renderSettings(pl, ov) {
+    const link = pl.link;
+    $('linkState').textContent = link.viaPlatform ? '已接入（经接口平台）' : '未接入（直连 SnowLuma）';
+    $('linkOn').disabled = link.viaPlatform || !S.health.config.valid;
+    $('linkOff').disabled = !link.viaPlatform;
+    $('sVer').textContent = ov ? `v${ov.version}` : '—（未运行）';
+    $('sData').textContent = `${pl.dir}${pl.installed ? '' : '（找不到：接口平台应放在桥接目录的同级 interface-platform/，或在 state/control-center.json 设 platformDir）'}`;
+    $('sPort').textContent = String(pl.port);
+    $('sCompat').textContent = `ws://127.0.0.1:${pl.port}/onebot/v11/ws ，http://127.0.0.1:${pl.port}/onebot/v11`;
+    const c = ov?.compat?.onebot;
+    $('sCompatAcct').textContent = c ? `${c.account}${c.account === 'auto' ? (c.resolved.account ? ` → ${c.resolved.account}` : `（${c.resolved.reason}）`) : ''}` : '—';
+    $('sEnv').textContent = ov ? `${ov.platform}/${ov.arch} · Node ${ov.node}` : '—';
+    $('sSupport').textContent = ov?.support?.note ?? '—';
+  }
+
+  function renderSnow() {
+    const sl = S.snowluma; const h = S.health;
+    const hasDir = !!sl.info?.ok;
+    $('snowPick').hidden = hasDir && !$('snowPick').dataset.forceShow;
+    $('snowReady').hidden = !hasDir || !!$('snowPick').dataset.forceShow;
+    if (!hasDir && sl.dir) $('snowPickMsg').textContent = `之前选择的目录不可用：${sl.info?.error || ''}`;
+    const sRun = sl.running;
+    setDot($('snowDot'), sRun ? (h.snowlumaPort ? 'on' : 'warn') : (h.snowlumaPort ? 'warn' : ''));
+    $('snowState').textContent = !hasDir ? '未选择目录' : sRun ? `运行中 · PID ${sl.pid} · ${fmtDur(sl.uptimeMs)}` : (h.snowlumaPort ? '外部运行中' : (sl.lastExit ? `已停止（退出码 ${sl.lastExit.code ?? '—'}）` : '未启动'));
+    $('snowStart').disabled = !hasDir || sRun || h.snowlumaPort;
+    $('snowStop').disabled = !sRun;
+    if (hasDir) {
+      const i = sl.info;
+      $('snowVer').textContent = i.version + (sl.update?.latest ? (sl.update.updateAvailable ? `（有新版本 ${sl.update.latest}）` : '（已是最新）') : '');
+      // Node 要求按发行包的 engines.node 显示（2.0 起是 >=24）；平台不符、本机 Node 不够时直接写出原因
+      $('snowEdition').textContent = (i.edition === 'full' ? '完整版（自带 Node 运行时）' : `Lite 版（使用本机 Node，需要 ${i.nodeRequirement ?? '22.13+'}${i.nodeOk === false ? `，本机是 ${S.node}，不够` : ''}）`)
+        + (i.targetOk === false ? ` · ⚠️ 这是 ${i.target} 版发行包，本机需要 ${i.expectedTarget} 版` : '');
+      $('snowDirText').textContent = i.dir;
+      $('snowAccounts').textContent = i.accounts?.length ? i.accounts.join('、') : '还没有（首次在 SnowLuma WebUI 里扫码登录后生成）';
+      $('snowWebui').textContent = i.webui.url;
+    }
+  }
+
+  function renderNapcat() {
+    const n = S.napcat;
+    setDot($('napDot'), n.running ? 'on' : n.external ? 'warn' : '');
+    $('napState').textContent = n.running ? `运行中 · PID ${n.pid} · ${fmtDur(n.uptimeMs)}` : n.external ? '外部运行中' : (n.lastExit ? `已停止（退出码 ${n.lastExit.code ?? '—'}）` : '未启动');
+    $('napStart').disabled = n.running || n.external || !n.info.ok;
+    $('napStop').disabled = !n.running;
+    const mac = S.os === 'darwin';
+    const ver = n.version?.runtime || n.version?.file;
+    $('napVer').textContent = !ver ? (n.running ? '启动中，登录后显示' : '启动并登录后显示（由 NapCat 自报）')
+      : ver + (n.version?.runtime ? '' : '（来自安装文件）') + (n.update?.latest ? (n.update.updateAvailable ? `（有新版本 ${n.update.latest}）` : '（已是最新）') : '');
+    $('napProgLabel').textContent = mac ? 'QQ 程序' : '启动文件';
+    $('napProgText').textContent = mac ? (n.settings?.qqApp || '/Applications/QQ.app（默认）') : (n.settings?.command || '未设置（点「NapCat 设置」选择）');
+    $('napHomeText').textContent = n.home ? n.home + (n.settings?.home ? '' : '（默认）') : '未设置';
+    $('napQQAppRow').hidden = !mac; $('napCmdRow').hidden = mac;
+    renderNapQr(n.qr);
+    if (!$('napSetPanel').classList.contains('show')) $('napHomeInput').placeholder = n.home || 'NapCat 目录';
+    $('napCmdInput').placeholder = S.os === 'linux' ? 'NapCat 的 .sh 启动脚本或可执行文件' : 'NapCat.Shell 里的 .bat / .exe';
+    if (S.os === 'linux' && !n.home) $('napHomeText').textContent = '未设置（Linux 没有默认位置：在「NapCat 设置」里选 NapCat 目录，接口平台才能自动发现账号和令牌）';
+    $('napNote').textContent = !n.info.ok ? n.info.error : n.external ? 'NapCat（QQ）已在别处运行，控制中心不会接管它；要在这里启停，先完全退出那个 QQ。' : (n.info.quickLogin ? '已设置自动登录（NapCat 的 autoLoginAccount 或 napcatQuickLogin）：启动时用保存的登录态，不用扫码；登录态失效时仍会要求扫码，二维码在 NapCat 的 cache/qrcode.png。' : '首次启动或登录过期时需要扫码：二维码保存在 NapCat 的 cache/qrcode.png（网页日志里的字符二维码可能扫不出来）。要免扫码，在「NapCat 设置」里填快速登录 QQ 号，或在 NapCat 里开启自动登录。');
+  }
+
+  // 接入后端开启卡：每个可用的提供方一张，互相独立
+  const BACKENDS = [
+    { id: 'snowluma', name: 'SnowLuma', os: 'Windows / Linux' },
+    { id: 'napcat', name: 'NapCat', os: 'macOS / Windows / Linux' },
+  ];
+  function renderBackends() {
+    const pl = S.platform; const insts = pl.overview?.instances ?? []; const accs = pl.overview?.accounts ?? [];
+    const cards = BACKENDS.map((b) => {
+      const inst = insts.find((i) => i.provider === b.id);
+      const links = inst?.links ?? [];
+      const okLinks = links.filter((l) => l.state === 'open' && l.reason !== 'auth_failed').length;
+      const ready = accs.filter((a) => inst && a.instance === inst.id && a.health.ioReady);
+      let prog; let progKind = ''; let unavailable = null;
+      if (b.id === 'snowluma') {
+        const sl = S.snowluma;
+        if (!SNOW_OS.includes(S.os)) { prog = 'SnowLuma 只有 Windows / Linux 版，本机不能运行（可以连接别处运行的 SnowLuma）'; unavailable = true; }
+        else if (sl.running) { prog = '运行中（控制中心启动）'; progKind = 'on'; }
+        else if (S.health.snowlumaPort) { prog = '外部运行中'; progKind = 'warn'; }
+        else prog = sl.info?.ok ? '未运行' : '未选择目录';
+      } else {
+        const n = S.napcat;
+        if (n.running) { prog = '运行中（控制中心启动）'; progKind = 'on'; }
+        else if (n.external) { prog = '外部运行中'; progKind = 'warn'; }
+        else prog = n.info.ok ? '未运行' : `不能启动：${n.info.error}`;
+      }
+      const on = !!inst?.connected || (b.id === 'napcat' ? S.napcat.running : S.snowluma.running);
+      const card = el('div', { className: `bcard${on ? ' on' : ''}` });
+      const d = el('span', { className: 'dot' }); setDot(d, ready.length ? 'on' : on ? 'warn' : '');
+      card.append(el('div', { className: 'bhead' }, d, el('h3', { textContent: b.name }), el('span', { className: 'badge', textContent: b.os })));
+      const dl = el('dl');
+      const row = (k, v) => dl.append(el('dt', { textContent: k }), el('dd', { textContent: v }));
+      row('程序', prog);
+      row('平台实例', !pl.reachable ? '接口平台未运行' : !inst ? '还没有（点开启自动建立）' : !inst.connected ? `${inst.id}：已断开` : `${inst.id}：${okLinks}/${links.length} 条链路在线${links.some((l) => l.reason === 'auth_failed') ? '（令牌被拒）' : ''}`);
+      row('账号', ready.length ? ready.map((a) => `${a.account}${a.nickname ? `（${a.nickname}）` : ''}`).join('、') + ' 收发就绪' : (links.find((l) => l.account) ? `${links.filter((l) => l.account).map((l) => l.account).join('、')}：${rt(links[0].reason)}` : '—'));
+      if (inst?.discoveryError) row('目录', `${inst.discoveryError} —— 已连上的账号不受影响；macOS 上多半是「访问其他 App 的数据」被拒：在 系统设置 › 隐私与安全性 › App 管理/其他 App 的数据 里允许启动控制中心的程序（终端）`);
+      card.append(dl);
+      const btn = el('button', { className: `bbtn ${on ? 'danger' : 'primary'}`, textContent: on ? `关闭 ${b.name}` : `开启 ${b.name}` });
+      // 本机不能运行的后端不提供一键开启（默认端口会撞上本机其他后端）；要连别处的实例，到「接入实例」里添加并填地址
+      if (unavailable && !on) { btn.disabled = true; btn.title = '要连接别处运行的 SnowLuma：在「接入实例」里添加实例并填写 WS 地址和令牌'; }
+      btn.onclick = async () => {
+        if (on && !await confirmBox(`关闭 ${b.name}`, `断开接口平台里 ${b.name} 的实例${(b.id === 'napcat' ? S.napcat.running : S.snowluma.running) ? `，并停止由控制中心启动的 ${b.name}（机器人 QQ 会下线）` : ''}。其他后端不受影响。`, '关闭')) return;
+        const r = await act(() => api(`/api/backends/${b.id}/${on ? 'off' : 'on'}`, {}));
+        if (r?.steps) toast(r.steps.join('；'), 'ok');
+      };
+      const rowEl = el('div', { className: 'row' }, btn);
+      if (b.id === 'napcat') {
+        // NapCat 等扫码时在卡片上直接提示；任何时候都能一键跳到 NapCat 程序区
+        if (S.napcat.qr?.waiting) card.append(el('div', { className: 'qr-alert', textContent: '📱 NapCat 正在等你扫码登录' }));
+        const go = el('button', { className: 'bbtn', textContent: S.napcat.qr?.waiting ? '查看登录二维码 →' : '管理 NapCat 程序 →' });
+        go.onclick = goToNapcat;
+        rowEl.append(go);
+      }
+      card.append(rowEl);
+      return card;
+    });
+    $('backendCards').replaceChildren(...cards);
+  }
+
+  function renderFooter() {
+    const b = S.bridge; const h = S.health; const st = h.bridgeApi; const sl = S.snowluma; const pl = S.platform;
+    const bRun = b.running; const sRun = sl.running; const hasDir = !!sl.info?.ok;
+    setDot($('sbBridgeDot'), bRun ? 'on' : (h.bridgeExternal ? 'warn' : 'off'));
+    $('sbBridge').textContent = bRun ? `运行 ${fmtDur(b.uptimeMs)}` : (h.bridgeExternal ? '外部运行' : '未运行');
+    setDot($('sbPlDot'), pl.reachable ? ((pl.overview?.counts.accountsReady ?? 0) ? 'on' : 'warn') : 'off');
+    $('sbPl').textContent = pl.reachable ? `${pl.overview?.counts.accountsReady ?? 0} 账号就绪${pl.link.viaPlatform ? ' · 桥接已接入' : ''}` : (pl.running ? '启动中' : '未运行');
+    // 接入后端：桥接走接口平台时，看平台里各实例的连接情况（与具体后端无关）；直连时才看 SnowLuma 程序本身
+    if (pl.link.viaPlatform) {
+      const inst = (pl.overview?.instances ?? []).filter((i) => i.enabled !== false);
+      const name = (i) => String(i.providerName || i.provider || i.id).split('（')[0];
+      // 实例的 connected 只表示「已开启」；真正连上看链路是否 open
+      const linked = (i) => (i.links ?? []).some((l) => l.state === 'open');
+      const up = inst.filter(linked);
+      setDot($('sbBackDot'), !pl.reachable || !inst.length ? 'off' : up.length === inst.length && !inst.some((i) => i.discoveryError) ? 'on' : up.length ? 'warn' : 'off');
+      $('sbBack').textContent = !pl.reachable ? '平台未运行' : !inst.length ? '未添加实例'
+        : inst.map((i) => `${name(i)} ${linked(i) ? '已连接' : i.discoveryError ? '读不到账号目录' : i.connected ? '未连上' : '未开启'}`).join('、');
+    } else {
+      setDot($('sbBackDot'), sRun || h.snowlumaPort ? (st?.snowluma?.connected ? 'on' : 'warn') : 'off');
+      $('sbBack').textContent = !hasDir ? 'SnowLuma 直连 · 未选择' : (sRun || h.snowlumaPort) ? (st?.snowluma?.connected ? 'SnowLuma 直连 · 已连接' : 'SnowLuma 直连 · 运行中（桥接未连上）') : 'SnowLuma 直连 · 未运行';
+    }
+    const sh = st?.snowluma;
+    const qqOk = sh && sh.accountOnline !== false && sh.good !== false && sh.connected;
+    setDot($('sbQQDot'), !st ? '' : qqOk ? 'on' : (sh?.connected ? 'warn' : 'off'));
+    const acct = st?.botAccount ? `${st.botAccount.nickname || ''}（${st.botAccount.userId || '?'}）` : '';
+    $('sbQQ').textContent = !st ? '—' : !sh?.connected ? '未连接' : sh.good === false ? `接收异常 ${acct}` : sh.accountOnline === false ? `账号离线 ${acct}` : `在线 ${acct}`;
+    // DSH：以桥接自己的连通结论为准（它跟随 DSH 的随机端口）；桥接不在时才看控制中心的端口探测
+    const dshOk = st ? !!st.dshReady : !!h.dsh?.reachable;
+    setDot($('sbDshDot'), dshOk ? 'on' : h.dsh?.reachable ? 'warn' : 'off');
+    $('sbDsh').textContent = st ? (st.dshReady ? '已就绪' : h.dsh?.reachable ? '可达，桥接未就绪' : '不可达') : (h.dsh?.reachable ? '可达' : '不可达');
+    const level = st?.level || 'L0';
+    $('sbMode').textContent = st ? `${st.mode} / ${level}` : '—';
+    $('sbVers').textContent = `控制中心 ${S.version} · 桥接 ${st?.version ?? '—'} · 接口平台 ${pl.overview?.version ?? '—'}${hasDir ? ` · SnowLuma ${sl.info.version}` : ''} · DSH ${h.dsh?.version ?? '—'} · Node ${S.node}`;
+    // 总体状态：只汇总，不替代各模块的状态
+    const issues = [];
+    if (!bRun && !h.bridgeExternal) issues.push('桥接未运行');
+    if (pl.link.viaPlatform && !pl.reachable) issues.push('平台未运行');
+    if (st && !qqOk) issues.push('QQ 异常');
+    if (!dshOk) issues.push(st && h.dsh?.reachable ? 'DSH 桥接未就绪' : 'DSH 不可达');
+    $('overallBadge').textContent = issues.length ? `总体：${issues.join(' · ')}` : '总体：正常';
+    $('overallBadge').style.color = issues.length ? 'var(--warn)' : 'var(--ok)';
+  }
+
+  async function act(fn, okMsg) {
+    if (authFailed) return null;
+    try { const r = await fn(); if (okMsg) toast(okMsg, 'ok'); await refresh(); return r; }
+    catch (e) { toast(e.message, 'bad'); await refresh(); return null; }
+  }
+
+  // ── 桥接按钮 ──
+  // 先同步开出空白窗口（Safari 只放行点击当下的弹窗），拿到带令牌的地址后再跳过去；令牌不写进本页任何存储
+  $('consoleOpen').onclick = async () => {
+    const w = window.open('about:blank', '_blank');
+    try {
+      const r = await api('/api/bridge/console-link', {});
+      if (!r.auto && r.note) toast(r.note);
+      if (w) { w.opener = null; w.location.replace(r.url); } else location.assign(r.url);
+    } catch (e) { if (w) w.close(); toast(e.message, 'bad'); }
+  };
+  $('bridgeStart').onclick = () => act(() => api('/api/bridge/start', {}), '桥接已启动');
+  $('bridgeRestart').onclick = async () => { if (await confirmBox('重启桥接', '重启期间群里不会有回复，正在进行的 AI 回合会被中断。', '重启')) act(() => api('/api/bridge/restart', {}), '已重启'); };
+  $('bridgeStop').onclick = async () => { if (await confirmBox('停止桥接', '停止后机器人在群里和私聊里都不会再回复（QQ 和接口平台仍然在线）。', '停止桥接')) act(() => api('/api/bridge/stop', {}), '桥接已停止'); };
+  $('bridgeAuto').onchange = (e) => act(() => api('/api/bridge/auto-restart', { enabled: e.target.checked }));
+  $('panicBtn').onclick = async () => { if (await confirmBox('紧急关闭', '立即回到安全模式（L0 群友模式），停止运维 Agent，作废所有待审批与待确认申请。', '紧急关闭')) act(() => api('/api/command', { text: 'panic' })); };
+  $('exitBtn').onclick = async () => {
+    const pl = S?.platform;
+    const extra = pl?.external ? '\n外部运行的接口平台不受影响。' : '';
+    if (!await confirmBox('退出控制中心', `会先停止由控制中心启动的桥接、接口平台和 SnowLuma（机器人将离线），然后关闭控制中心。不是由控制中心启动的进程不会被停止。${extra}`, '全部退出')) return;
+    try { await api('/api/exit', {}); } catch {}
+    document.body.innerHTML = '<div style="padding:40px;font-size:15px">控制中心已退出，可以关闭这个页面。</div>';
+  };
+
+  // ── 命令行（固定命令集）──
+  const cmdHistory = []; let hi = 0;
+  $('cmdForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const text = $('cmdInput').value.trim(); if (!text) return;
+    cmdHistory.push(text); hi = cmdHistory.length; $('cmdInput').value = '';
+    if (/^(bridge|snowluma|platform)\s+stop$|^panic$/i.test(text) && !await confirmBox('确认命令', `确定执行「${text}」？`, '执行')) return;
+    try { const r = await api('/api/command', { text }); if (r.result?.clear) bridgeLog.clear(); } catch (err) { toast(err.message, 'bad'); }
+    setTimeout(() => { bridgeLog.poll(); refresh(); }, 300);
+  };
+  $('cmdInput').onkeydown = (e) => {
+    if (e.key === 'ArrowUp' && hi > 0) { hi -= 1; $('cmdInput').value = cmdHistory[hi]; e.preventDefault(); }
+    if (e.key === 'ArrowDown') { hi = Math.min(cmdHistory.length, hi + 1); $('cmdInput').value = cmdHistory[hi] ?? ''; e.preventDefault(); }
+  };
+
+  // ── 接口平台按钮 ──
+  // NapCat 登录二维码：图片要带令牌请求，取回后转成 data: 地址显示（页面的 CSP 只允许 data: 图片）
+  let napQrShown = null;
+  async function renderNapQr(q) {
+    $('napQrPanel').hidden = !q?.waiting;
+    if (!q?.waiting) {
+      if (napQrShown !== null) napLog.expireImages(S?.napcat?.running ? '已登录或已失效' : 'NapCat 已停止');
+      napQrShown = null;
+      return;
+    }
+    $('napQrTime').textContent = q.updatedAt ? `二维码生成于 ${new Date(q.updatedAt).toLocaleTimeString()}` : '';
+    if (napQrShown === q.updatedAt) return;
+    napQrShown = q.updatedAt;
+    try {
+      const res = await fetch('/api/napcat/qrcode', { headers: { 'x-control-token': token } });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = await new Promise((resolve) => { const fr = new FileReader(); fr.onload = () => resolve(fr.result); fr.readAsDataURL(blob); });
+      if (napQrShown === q.updatedAt) {
+        $('napQrImg').src = url;
+        // 日志里也插一张小图（只有最新这张能扫，旧的标成已过期）
+        napLog.addImage({ key: q.updatedAt, src: url, text: '已生成登录二维码（约 2 分钟有效）：用手机 QQ 扫码登录。日志上方的字符二维码可能扫不出来，扫这张' });
+        napLog.expireImages('已过期，已换新二维码', q.updatedAt);
+      }
+    } catch { napQrShown = null; }
+  }
+
+  // NapCat：检查更新 / 下载页 / 设置
+  function showNapUpdate(u) {
+    $('napUpdatePanel').classList.add('show');
+    $('napUpdTitle').textContent = !u ? '更新' : !u.current ? `最新版本 ${u.latest}（当前版本未知：启动并登录 NapCat 后再检查可比较）` : u.updateAvailable ? `有新版本：${u.current} → ${u.latest}` : `当前 ${u.current}，最新 ${u.latest}`;
+    $('napUpdSummary').textContent = u ? `${u.publishedAt ? `发布时间：${new Date(u.publishedAt).toLocaleString()}。` : ''}${u.suggestedAsset ? `建议下载：${u.suggestedAsset}。` : ''}${u.howTo || ''}` : '';
+    $('napUpdNotesWrap').hidden = !u?.notes; $('napUpdNotes').textContent = u?.notes || '';
+  }
+  $('napCheck').onclick = async () => {
+    const r = await act(() => api('/api/napcat/check-update', {}));
+    if (r?.update) { showNapUpdate(r.update); toast(!r.update.current ? `最新版本 ${r.update.latest}` : r.update.updateAvailable ? `有新版本 ${r.update.latest}` : `已是最新（${r.update.latest}）`, r.update.updateAvailable ? '' : 'ok'); }
+  };
+  $('napOpenDownload').onclick = () => act(() => api('/api/napcat/open-download', {}));
+  function fillNapSettings() {
+    const st = S?.napcat?.settings || {};
+    $('napQQAppInput').value = st.qqApp || ''; $('napCmdInput').value = st.command || '';
+    $('napHomeInput').value = st.home || ''; $('napQuickInput').value = st.quickLogin || '';
+    $('napSetMsg').textContent = '';
+  }
+  $('napSetToggle').onclick = () => { const p = $('napSetPanel'); if (p.classList.toggle('show')) fillNapSettings(); };
+  $('napSetCancel').onclick = () => $('napSetPanel').classList.remove('show');
+  async function pickInto(purpose, inputId) {
+    toast('已打开选择窗口（可能在浏览器后面）');
+    const r = await act(() => api('/api/pick', { purpose }));
+    if (r?.path) $(inputId).value = r.path;
+  }
+  $('napQQAppBrowse').onclick = () => pickInto('napcat-qqapp', 'napQQAppInput');
+  $('napCmdBrowse').onclick = () => pickInto('napcat-command', 'napCmdInput');
+  $('napHomeBrowse').onclick = () => pickInto('napcat-home', 'napHomeInput');
+  $('napSetSave').onclick = async () => {
+    const mac = S?.os === 'darwin';
+    const body = { home: $('napHomeInput').value.trim(), quickLogin: $('napQuickInput').value.trim(), ...(mac ? { qqApp: $('napQQAppInput').value.trim() } : { command: $('napCmdInput').value.trim() }) };
+    try {
+      const r = await api('/api/napcat/settings', body);
+      $('napSetMsg').textContent = r.steps?.length ? r.steps.join('；') : '';
+      toast('NapCat 设置已保存', 'ok');
+      if (!r.steps?.length) $('napSetPanel').classList.remove('show');
+      refresh();
+    } catch (e) { $('napSetMsg').textContent = e.message; toast(e.message, 'bad'); }
+  };
+  $('napStart').onclick = () => act(() => api('/api/napcat/start', {}), 'NapCat 已启动。需要扫码时二维码在 NapCat 日志里');
+  $('napStop').onclick = async () => { if (await confirmBox('停止 NapCat', '停止后机器人 QQ 会立刻下线，收不到也发不出消息。', '停止 NapCat')) act(() => api('/api/napcat/stop', {}), 'NapCat 已停止'); };
+  $('plStart').onclick = () => act(() => api('/api/platform/start', {}), '接口平台已启动');
+  $('plRestart').onclick = async () => { if (await confirmBox('重启接口平台', S?.platform?.link?.viaPlatform ? '桥接经接口平台收发，重启期间机器人收不到也发不出消息。' : '重启期间平台接口不可用（桥接当前直连 SnowLuma，不受影响）。', '重启')) act(() => api('/api/platform/restart', {}), '已重启'); };
+  $('plStop').onclick = async () => { if (await confirmBox('停止接口平台', `${S?.platform?.link?.viaPlatform ? '桥接经接口平台收发，停止后机器人收不到也发不出消息。' : '桥接当前直连 SnowLuma，不受影响。'}\n外部运行的 SnowLuma 不会被停止。`, '停止')) act(() => api('/api/platform/stop', {}), '接口平台已停止'); };
+  $('plAuto').onchange = (e) => act(() => api('/api/platform/auto-restart', { enabled: e.target.checked }));
+  $('idConnect').onclick = () => act(() => api(`/api/platform/instances/${selectedInst}/connect`, {}), '已连接');
+  $('idDisconnect').onclick = async () => { if (await confirmBox('断开实例', `只断开 ${selectedInst} 及其账号的通信连接，其他实例不受影响；不会停止 SnowLuma 进程。`, '断开')) act(() => api(`/api/platform/instances/${selectedInst}/disconnect`, {}), '已断开'); };
+  $('idSave').onclick = async () => {
+    const up = { wsUrl: $('idWs').value.trim(), homeDir: $('idHome').value.trim() };
+    if ($('idToken').value) up.accessToken = $('idToken').value;
+    if (!S?.platform?.reachable) { toast('接口平台未运行：请先启动接口平台再修改实例配置', 'bad'); return; }
+    const r = await act(() => api(`/api/platform/instances/${selectedInst}`, { upstream: up }), '已保存，实例已按新配置重连');
+    if (r) { $('idToken').value = ''; renderedInst = null; }
+  };
+  $('instAddBtn').onclick = async () => {
+    const panel = $('instAddPanel');
+    panel.classList.toggle('show');
+    if (!panel.classList.contains('show')) return;
+    try {
+      const r = await api('/api/platform/providers');
+      $('addProvider').replaceChildren(...r.providers.map((p) => el('option', { value: p.id, disabled: !p.available, textContent: `${p.name}${p.available ? '' : '（尚未提供）'}` })));
+    } catch (e) { $('addProvider').replaceChildren(el('option', { value: 'snowluma', textContent: 'SnowLuma（OneBot v11）' })); toast(e.message, 'bad'); }
+  };
+  $('addCancel').onclick = () => $('instAddPanel').classList.remove('show');
+  $('addGo').onclick = async () => {
+    const body = { id: $('addId').value.trim(), provider: $('addProvider').value, management: $('addMgmt').value, upstream: { wsUrl: $('addWs').value.trim() || 'ws://127.0.0.1:3001', accessToken: $('addToken').value, homeDir: $('addHome').value.trim() } };
+    const r = await act(() => api('/api/platform/instances', body), `已添加实例 ${body.id}`);
+    if (r) { $('instAddPanel').classList.remove('show'); for (const id of ['addId', 'addWs', 'addToken', 'addHome']) $(id).value = ''; selectedInst = body.id; pref.set('inst', body.id); }
+  };
+  $('linkOn').onclick = async () => {
+    if (!await confirmBox('接入桥接', '把桥接 config.json 的 SnowLuma 端点改为接口平台的兼容入口（原值会备份）。\n重启桥接后生效；之后接口平台必须保持运行，机器人才能收发。', '接入')) return;
+    const r = await act(() => api('/api/platform/link-bridge', { enabled: true }), '已接入。重启桥接后生效');
+    if (r?.restartNeeded && await confirmBox('现在重启桥接？', '配置要在桥接重启后才生效。', '重启桥接')) act(() => api('/api/bridge/restart', {}), '已重启桥接');
+  };
+  $('linkOff').onclick = async () => {
+    if (!await confirmBox('恢复直连', '按备份还原桥接直连 SnowLuma 的配置，重启桥接后生效。', '恢复')) return;
+    const r = await act(() => api('/api/platform/link-bridge', { enabled: false }), '已恢复直连。重启桥接后生效');
+    if (r?.restartNeeded && await confirmBox('现在重启桥接？', '配置要在桥接重启后才生效。', '重启桥接')) act(() => api('/api/bridge/restart', {}), '已重启桥接');
+  };
+
+  // ── SnowLuma 按钮（只由用户亲手点击）──
+  async function browse(targetId) {
+    toast('已打开文件夹选择窗口（可能在浏览器后面）');
+    const r = await act(() => api('/api/snowluma/pick', {}));
+    if (r?.dir) $(targetId).value = r.dir;
+  }
+  $('snowBrowse').onclick = () => browse('snowDirInput');
+  $('migrateBrowse').onclick = () => browse('migrateDir');
+  $('snowDirInput').oninput = async () => {
+    const dir = $('snowDirInput').value.trim(); if (!dir) { $('snowPickMsg').textContent = ''; return; }
+    try { const r = await api('/api/snowluma/inspect', { dir }); $('snowPickMsg').textContent = r.info.ok ? `✓ SnowLuma ${r.info.version}（${r.info.edition === 'full' ? '完整版' : 'Lite 版'}）` : r.info.error; } catch {}
+  };
+  $('snowUse').onclick = async () => {
+    const dir = $('snowDirInput').value.trim(); if (!dir) { toast('请先填写或浏览选择目录', 'bad'); return; }
+    let r = await act(() => api('/api/snowluma/select', { dir }));
+    // 新目录缺账号配置和 WebUI 密码、旧目录有：先建议用「更新助手」迁移；不迁移的话再确认一次才切换
+    if (r?.needMigrate) {
+      if (await confirmBox('新目录还没有你的数据', `${r.warning}\n\n旧目录：${r.oldDir}\n新目录：${r.newDir}`, '去迁移（推荐）')) {
+        delete $('snowPick').dataset.forceShow;
+        showUpdate(S?.snowluma?.update);
+        $('migrateDir').value = r.newDir;
+        refresh();
+        requestAnimationFrame(() => $('updatePanel').scrollIntoView({ behavior: 'smooth', block: 'start' }));
+        toast('已填好新目录：先停止 SnowLuma，再点「迁移数据并切换」');
+        return;
+      }
+      if (!await confirmBox('仍然直接切换？', '不迁移就切换：SnowLuma 会生成新的随机 WebUI 密码（旧密码失效），需要重新扫码登录、重新开启 OneBot WebSocket。旧目录的数据不会被删除，之后仍然可以迁移。', '仍然切换')) return;
+      r = await act(() => api('/api/snowluma/select', { dir, force: true }));
+    }
+    if (r?.ok && r.switched !== false) { delete $('snowPick').dataset.forceShow; renderedInst = null; toast(`已选择 SnowLuma ${r.info.version}${r.platformSynced ? '，并同步给接口平台' : (S?.platform?.reachable ? '' : '（接口平台没运行，未同步；启动后在实例详情里填 SnowLuma 目录）')}${r.homeDirSynced ? '，并同步了 config.json 的 snowluma.homeDir' : ''}`, 'ok'); refresh(); }
+  };
+  $('snowChange').onclick = () => { $('snowPick').dataset.forceShow = '1'; $('snowDirInput').value = S?.snowluma?.dir || ''; refresh(); };
+  $('snowStart').onclick = () => act(() => api('/api/snowluma/start', {}), 'SnowLuma 已启动。首次使用请打开它的 WebUI 扫码登录机器人 QQ');
+  $('snowStop').onclick = async () => { if (await confirmBox('停止 SnowLuma', '停止后机器人 QQ 会立刻收不到、也发不出消息。', '停止 SnowLuma')) act(() => api('/api/snowluma/stop', {}), 'SnowLuma 已停止'); };
+  $('snowOpenWebui').onclick = () => act(() => api('/api/snowluma/open-webui', {}));
+  $('snowCheck').onclick = async () => {
+    const r = await act(() => api('/api/snowluma/check-update', {}));
+    if (r?.update) { showUpdate(r.update); toast(r.update.updateAvailable ? `有新版本 ${r.update.latest}` : `已是最新（${r.update.latest}）`, r.update.updateAvailable ? '' : 'ok'); }
+  };
+  function showUpdate(u) {
+    $('updatePanel').classList.add('show');
+    $('updTitle').textContent = u ? (u.updateAvailable ? `有新版本：${u.current} → ${u.latest}` : `当前 ${u.current}，最新 ${u.latest}`) : '更新助手';
+    $('updSummary').textContent = u?.publishedAt ? `发布时间：${new Date(u.publishedAt).toLocaleString()}` : '可以先点「检查更新」。';
+    $('updAsset').textContent = u?.suggestedAsset || (S?.os === 'linux' ? 'SnowLuma-v<版本>-linux-x64.tar.gz（arm64 机器选 linux-arm64；完整版，不要选 Lite）' : 'SnowLuma-v<版本>-win-x64.zip（完整版，不要选 Lite）');
+    $('updNotesWrap').hidden = !u?.notes; $('updNotes').textContent = u?.notes || '';
+  }
+  $('snowUpdateHelper').onclick = () => { if ($('updatePanel').classList.contains('show')) $('updatePanel').classList.remove('show'); else showUpdate(S?.snowluma?.update); };
+  $('updDownload').onclick = () => act(() => api('/api/snowluma/open-download', {}));
+  $('migrateGo').onclick = async () => {
+    const toDir = $('migrateDir').value.trim(); if (!toDir) { toast('请选择新版本解压后的目录', 'bad'); return; }
+    if (!await confirmBox('迁移数据并切换', `把当前目录的 config/、data/${$('migrateLogs').checked ? '、logs/' : ''} 备份后复制到：\n${toDir}\n并把控制中心切换到新目录。旧目录不会被删除。`, '开始迁移')) return;
+    try {
+      const r = await api('/api/snowluma/migrate', { toDir, includeLogs: $('migrateLogs').checked });
+      $('migrateResult').textContent = `✓ 已从 ${r.from} 迁移到 ${r.to}；备份在 ${r.backupDir}。现在可以点「启动 SnowLuma」试一下，确认账号正常后再删除旧目录。`;
+      toast('迁移完成', 'ok');
+    } catch (e) { $('migrateResult').textContent = `✗ ${e.message}`; toast(e.message, 'bad'); }
+    refresh();
+  };
+
+  // ── 轮询：全页只有这一组定时器，切换标签不会新增请求或连接 ──
+  refresh(); bridgeLog.poll(); snowLog.poll(); plLog.poll(); napLog.poll();
+  setInterval(refresh, 2500);
+  setInterval(() => { bridgeLog.poll(); snowLog.poll(); plLog.poll(); napLog.poll(); }, 1000);
+})();
+</script>
+</body>
+</html>
