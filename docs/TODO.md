@@ -117,32 +117,32 @@
 
 > 来源：QQ 私聊里问「昨晚一起实现了什么」，答成了 10-23 的旧状态。排查出若干独立问题（检索质量、生命周期、披露、工具面），按性价比排。编号接 21。
 
-22. 🔶 **QQ search 透传 stage**
+22. ✅ **QQ search 透传 stage**
     - 现状：`adapter-qq` 的 `normalizeResults` 只留 `id/title/kind/text`，把服务端一直返回的 `stage` / `expires_at` 裁掉了。
-    - 已做：`MemoryItem` 加字段 + 透传 + 单测（7/7 过）+ `dist` 已构建；**等重启桥接生效**。
+    - 已做：`MemoryItem` 加字段 + 透传 + 单测（7/7 过）+ `dist` 已构建；桥接 17:49 重启后生效。
     - 成本：已完成（~40 分钟）。
 
-23. 🔶 **ingest 去噪（源头）**
+23. ✅ **ingest 去噪（源头）**
     - 数据：短期 709 条里 114 条是噪音（16%）——`[图片]` 46、桌宠系统提示 24、`[表情N]` 17、`[卡片消息]` 11、黑话学习器 prompt 8、工具报错 8；另有 287 条 ≤10 字。
     - 已做（2026-10-25）：新增 `packages/server/src/ingest-filter.ts`（占位符剥离 / 内部 prompt 前缀 / 最短 2 字 / 空白折叠），`/v1/ingest` 循环里接入，过滤掉的计入 `skipped`（协议不变）；9 项单测 + 全量 171 项通过；真实库回放覆盖 125/732（17%：占位 71、过短 18、内部 prompt 36）。
-    - 待做：**重启 memd 生效**；上游根因仍要修（桌宠别把 system prompt 当 user message、黑话学习器 prompt 不该进 main 短期）——入口过滤只是兜底，改上游能让 JSONL 也干净。
+    - 已生效：memd 17:45 重启后实测 `written=1 skipped=3`；上游根因仍要修（桌宠别把 system prompt 当 user message、黑话学习器 prompt 不该进 main 短期）——入口过滤只是兜底，改上游能让 JSONL 也干净。
     - 成本：已完成（约 1 小时）。
 
-24. 🔶 **过期短期记忆不再复活**
+24. ✅ **过期短期记忆不再复活**
     - 数据：`chunks_fts` 1180 行里 324 行是已过期短期（27.5%），仍参与 bm25 统计。
     - 根因：`purgeExpired` 每小时删索引，但 `indexFacts` 无过期判断，任何一次 reindex（ingest 写 JSONL 就触发）都把过期记录插回来。
     - 已做（2026-10-25）：`indexFacts` 跳过 `stage=short && expires_at <= now` 的记录；如果索引里该 id 已经是 `long`（persist 过，JSONL 仍留原 short 行）则加进 `liveIds` 保住，不被 stale 清理误删。新增 `tests/integration/indexer-expiry.test.ts` 3 项（purge 后不复活 / persist 的 long 幸存 / 未过期短期正常）；全量 174 项通过。
     - 顺手补上（同日）：`/v1/persist` 现在会往 JSONL 追加一行同 id 的 `stage=long`（无 `expires_at`），reindex 后行覆盖前行——索引终于可以从 `memories/` 完整重建（备份不含 `index.db`，在此之前从备份恢复会把长期记忆变回短期并在 TTL 后删掉）。只对原本是 short 的记录写，多 chunk 文档不会被截断。测试 `tests/integration/persist-jsonl.test.ts` 2 项；存量缺标记的 1 条已手工补齐。全量 176 项通过。
-    - 待做：**重启 memd 生效**；生效后再做 25（否则清完又被 reindex 加回来）。
+    - 已生效：memd 17:45 重启后 `chunks` 1180 → 743；25 已完成。
     - 成本：约 1 小时。
 
-25. 🔶 **存量噪音清理**
+25. ✅ **存量噪音清理**
     - 已做（2026-10-25）：干跑 746 条短期 chat → 噪音 126（占位 71 / 内部 prompt 36 / 过短 19），其中 68 条还没过期；先把 `memories/facts/` 备份到 `backups/facts-before-cleanup-2026-10-25T09-18-05-181Z/`，再逐条 `/v1/forget` 写 tombstone：**126/126 成功，0 失败**。验证：short chat 746 → 620，噪音 0。
     - 剩余：304 条「已过期但索引里还在」的短期记录没有 tombstone——等 24 上线后由 purge 处理（只删索引、保留 JSONL），不需要永久删除。
     - 没重启也能生效：tombstone 是 JSONL 里的 `deleted:true` 行，旧版 indexFacts 同样会跳过。
     - 成本：0.5 小时。
 
-26. 🔶 **跨场景披露放开（在群全量 / 退群拒绝）**
+26. ✅ **跨场景披露放开（在群全量 / 退群拒绝）**
     - 口径：当前在群的成员，披露该群全部历史（不限时间）；已退群/非成员拒绝；不做 `joinedAt`、不做入群时间判断。
     - 已做（2026-10-25）：
       - memd `/v1/disclose`：`since_hours` 改为可选，不传 = 不限时间（响应用 `since_hours: 0` 表示）；`k` 默认 8→20、上限 20→50。
@@ -150,35 +150,35 @@
       - 桥接 `bridge.js`：`fetchDisclose` 不再传 `since_hours`。
       - 保留：实时成员校验（防退群事件丢失）、`chat/note`、`normal/personal`、60 秒限流、审计。
     - 测试：桥接 `test-group-disclosure.mjs` 22 项全过；memd 新增「不传 since_hours 不限时间」用例，`disclose.test.ts` 5 项全过；全量 178 项。
-    - 待做：重启 memd + 桥接生效。
+    - 已生效：memd 与桥接均已重启，`/v1/disclose` 实测不传 `since_hours` 返回 `since_hours=0`、`count=20`。
     - 成本：约 1 小时。
 
-27. 🔶 **QQ 加 timeline 入口**
+27. ✅ **QQ 加 timeline 入口**
     - 依据：实测同一个「昨晚」问题，`/v1/timeline` 直接给出 `memory-hub.md`、`live-context.md`，`search` 给的全是聊天碎片。
     - 已做（2026-10-25）：`adapter-qq` 加 `timeline()`（from/to/limit/subject/kinds，归一化 months）；`memory-bridge.js` 加 `timeline()`；桥接加 `POST /api/socialV2/memory-timeline`（鉴权同 memory-search）；MCP 注册 `qq_memory_timeline`（描述照抄主会话口径：问「那阵子/上个月」用它，别拿 search 硬凑）；`TOOL_FEATURES` 映射到 `memory`。
     - 测试：adapter-qq 8 项（新增 timeline 归一化 + 参数透传）；桥接三个文件 `node --check` 通过；全量 178 项。
-    - 待做：重启桥接生效（工具可见）。
+    - 已生效：桥接 + DSH 重启后，`qq_memory_timeline` 实测调用成功（total=341、带 next_before 分页）。
     - 成本：约 2 小时。
 
-28. 🔶 **统一入口（compact 视图 + 薄透传）**
+28. ✅ **统一入口（compact 视图 + 薄透传）**
     - 已做（2026-10-25）：
       - `adapter-qq` 的 `search(query, scene, k, { kinds, subject, maxChars })`：`max_chars` 默认 400→600（与主会话一致），`kinds`/`subject` 透传；`normalizeResults` 补 `score`，字段与主会话对齐（`id/title/kind/text/stage/expires_at/score`）。
       - `memory-bridge.js` 的 `search()` 透传 options；桥接 `/api/socialV2/memory-search` 解析并透传 `kinds/subject/max_chars`（只过滤、不扩权）。
       - MCP `qq_memory_search` 的 schema 加 `kinds`/`subject`，描述补「问最近先用 timeline」。
     - 测试：adapter-qq 9 项（新增 kinds/subject/max_chars 透传 + score 归一化）；全量 179 项。
-    - 待做：重启桥接生效。
+    - 已生效：桥接重启后 `kinds`/`subject`/`score` 实测可用。
     - 成本：约 1.5 小时。
 
-29. 🔶 **排序改造（短期降权，已实现）**
+29. ✅ **排序改造（短期降权，已实现）**
     - 问题：`709 short vs 90 long`，bm25 天然偏短文档；问句和文档词面重合低。
     - 评估（2026-10-25，5 个查询，main 场景 k=10）：
       - 现状 long@top5 平均 2.4；short×0.5 后平均 4.0（首个 long 从 #2–#3 提到 #1）；
       - 但「期望命中」5 个里 4 个没中——说明降权只解决「谁排前面」，不解决「问句和文档对不上」。回顾类问题（「昨晚实现了什么」）应走 timeline（27 已补入口）。
     - 已做：`config.searchShortWeight` 默认 0.5（1 = 关闭），`/v1/search` 返回前按 `score × stage 权重` 重排；返回的 `score` 仍是原始召回分。测试 `tests/integration/search-short-weight.test.ts` 2 项；`shortterm.test.ts` 里依赖 `results[0]` 的断言改成按 stage 找目标条目。
-    - 待做：重启 memd 生效。
+    - 已生效：memd 重启后实测 long 在 top6 里占 4 条、short 掉到第 3/6 位。
     - 成本：约 2 小时（评估 1 小时 + 实现 1 小时）。
 
-30. 🔶 **QQ 记忆工具面：不合并，定契约**
+30. ✅ **QQ 记忆工具面：不合并，定契约**
     - 现状：QQ 侧 7 个——`append/query/remove/clear` 是本地轻量记忆（`social-v2.json`），`search/get/recent` 是 memd；加 `timeline` 后 8 个。主会话 10 个（含 `memory_call` 兜底）。两层存储语义不同，不能合成一个工具。
     - 已做（2026-10-25）：新增 `qq-bridge/docs/guides/MEMORY_CONTRACT.md`——两层存储的分工、8 个工具的参数与返回字段、与主会话工具的对应关系、不合并的理由、以后加工具用兜底入口而非替换。
     - 成本：0.5 小时。
