@@ -55,6 +55,10 @@
     "./metrics": {
       "types": "./dist/metrics.d.ts",
       "import": "./dist/metrics.js"
+    },
+    "./ingest-filter": {
+      "types": "./dist/ingest-filter.d.ts",
+      "import": "./dist/ingest-filter.js"
     }
   },
   "scripts": {

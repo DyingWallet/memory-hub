@@ -63,6 +63,7 @@ import { getMeta, readStats, setMeta, type Db } from './db.js';
 import { errors } from './errors.js';
 import { appendFact, forgetFact, loadAudienceCard, loadIdentity, type FactRecord } from './indexer.js';
 import { getChunkOrDoc, liveMessages, recentDocs, reviewCandidates, searchChunks, timelineDocs, type SearchHit } from './search.js';
+import { cleanIngestText } from './ingest-filter.js';
 import { lastReviewAt, markReviewSeen, reminderSince, shouldReview } from './review.js';
 import { visibilityClause } from './visibility.js';
 import { dedupeKey, isNearDuplicate, normalizeForDedupe } from './dedupe.js';
@@ -965,11 +966,14 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       let skipped = 0;
 
       for (const message of body.messages) {
-        const text = String(message.text ?? '').trim();
-        if (text.length === 0) {
+        // 入库前清洗：占位符、内部 prompt、工具报错不进短期记忆。
+        // 过滤掉的计入 skipped（协议只有 written/skipped 两个字段，不新增）。
+        const cleaned = cleanIngestText(String(message.text ?? ''));
+        if (cleaned.drop) {
           skipped += 1;
           continue;
         }
+        const text = cleaned.text;
         const id = message.message_id
           ? `chat:${auth.scene}:${sha256Hex(String(message.message_id)).slice(0, 16)}`
           : `chat:${auth.scene}:${sha256Hex(`${text}\u0000${now}\u0000${Math.random()}`).slice(0, 16)}`;
