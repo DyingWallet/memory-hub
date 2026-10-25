@@ -59,6 +59,30 @@ test('disclose 只返回目标群的消息，不串私聊', async () => {
   );
 });
 
+test('不传 since_hours 时不限时间窗：成员看得到全部历史', async () => {
+  // 把群消息的时间推到 30 天前，模拟「很久以前的历史」。
+  const old = Date.now() - 30 * 24 * 3_600_000;
+  fixture.built.db.prepare('UPDATE chunks SET updated_at = ? WHERE scene = ?').run(old, `qq:group:${GROUP_ID}`);
+  fixture.built.db.prepare('UPDATE docs SET updated_at = ? WHERE scene = ?').run(old, `qq:group:${GROUP_ID}`);
+
+  const response = await disclose(fixture.tokens.disclose.token, {
+    requester: '10002',
+    group: `qq:group:${GROUP_ID}`,
+  });
+  assert.equal(response.statusCode, 200, JSON.stringify(response.json()));
+  const body = response.json() as { since_hours: number; count: number };
+  assert.equal(body.since_hours, 0, '0 表示不限时间');
+  assert.ok(body.count > 0, '30 天前的消息也应该披露');
+
+  // 带时间窗时仍然遵守：24 小时以内没有消息。
+  const bounded = await disclose(fixture.tokens.disclose.token, {
+    requester: '10002',
+    group: `qq:group:${GROUP_ID}`,
+    since_hours: 24,
+  });
+  assert.equal((bounded.json() as { count: number }).count, 0);
+});
+
 test('没有 disclose:group 的令牌被拒绝', async () => {
   for (const token of [fixture.tokens.group.token, fixture.tokens.owner.token, fixture.tokens.privateB.token]) {
     const response = await disclose(token, { requester: '10002', group: `qq:group:${GROUP_ID}` });

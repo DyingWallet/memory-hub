@@ -111,6 +111,45 @@ test('search passes stage/expires_at through so QQ can tell short from long', as
   assert.equal(items[1]?.expires_at, '2026-10-26T00:00:00.000Z');
 });
 
+test('timeline normalizes months and passes the window through', async () => {
+  const captured: Record<string, unknown>[] = [];
+  const fake = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.pathname !== '/v1/timeline') throw new Error(`unexpected ${url.pathname}`);
+    captured.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>);
+    return new Response(
+      JSON.stringify({
+        from: '2026-10',
+        to: '2026-11',
+        total: 2,
+        returned: 1,
+        next_before: '2026-10-01T00:00:00.000Z',
+        months: [
+          {
+            month: '2026-10',
+            count: 1,
+            items: [
+              { id: 'doc:30-projects/memory-hub.md', title: 'memory-hub', kind: 'project', subject: 'owner', stage: 'long', updated_at: '2026-10-25T06:53:43.275Z', text: 'v1 已上线' },
+            ],
+          },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  }) as typeof fetch;
+
+  const client = createQQMemoryClient({ endpoint: 'http://127.0.0.1:8787', tokenFile, fetchImpl: fake });
+  const result = await client.timeline('qq:owner', { from: '2026-10', to: '2026-11', limit: 50 });
+  assert.ok(result);
+  assert.equal(captured[0]?.scene, 'qq:owner');
+  assert.equal(captured[0]?.from, '2026-10');
+  assert.equal(captured[0]?.limit, 50);
+  assert.equal(result.total, 2);
+  assert.equal(result.next_before, '2026-10-01T00:00:00.000Z');
+  assert.equal(result.months[0]?.items[0]?.stage, 'long');
+  assert.equal(result.months[0]?.items[0]?.title, 'memory-hub');
+});
+
 test('a disabled client never calls fetch', async () => {
   const calls: Captured[] = [];
   const client = createQQMemoryClient({ endpoint: 'http://127.0.0.1:8787', tokenFile, enabled: false, fetchImpl: fakeFetch(calls) });

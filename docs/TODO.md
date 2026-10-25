@@ -142,17 +142,23 @@
     - 没重启也能生效：tombstone 是 JSONL 里的 `deleted:true` 行，旧版 indexFacts 同样会跳过。
     - 成本：0.5 小时。
 
-26. ⬜ **跨场景披露放开（在群全量 / 退群拒绝）**
+26. 🔶 **跨场景披露放开（在群全量 / 退群拒绝）**
     - 口径：当前在群的成员，披露该群全部历史（不限时间）；已退群/非成员拒绝；不做 `joinedAt`、不做入群时间判断。
-    - 现状限制：`group-disclosure.js` 按 24h/48h/7d 截断、最多 12 条、每条 160 字。
-    - 做法：去掉时间下界（最近 20 条分页），保留实时成员校验（防退群事件丢失）、`chat/note` + `normal/personal`、60 秒限流、审计。
-    - 成本：约 1 天（含四种用例测试）。
-    - 依据：qq-owner 与主会话读范围实测一致；群/他人私聊被 scene + scope 隔开。
+    - 已做（2026-10-25）：
+      - memd `/v1/disclose`：`since_hours` 改为可选，不传 = 不限时间（响应用 `since_hours: 0` 表示）；`k` 默认 8→20、上限 20→50。
+      - 桥接 `group-disclosure.js`：去掉时间窗（`detectDisclosureIntent` 不再推断 sinceHours）、条数 12→20、单条 160→300 字；文案改成「历史消息」。
+      - 桥接 `bridge.js`：`fetchDisclose` 不再传 `since_hours`。
+      - 保留：实时成员校验（防退群事件丢失）、`chat/note`、`normal/personal`、60 秒限流、审计。
+    - 测试：桥接 `test-group-disclosure.mjs` 22 项全过；memd 新增「不传 since_hours 不限时间」用例，`disclose.test.ts` 5 项全过；全量 178 项。
+    - 待做：重启 memd + 桥接生效。
+    - 成本：约 1 小时。
 
-27. ⬜ **QQ 加 timeline 入口**
+27. 🔶 **QQ 加 timeline 入口**
     - 依据：实测同一个「昨晚」问题，`/v1/timeline` 直接给出 `memory-hub.md`、`live-context.md`，`search` 给的全是聊天碎片。
-    - 做法：复用 `memory_timeline`，桥接加端点 + MCP 工具。
-    - 成本：2–3 小时。
+    - 已做（2026-10-25）：`adapter-qq` 加 `timeline()`（from/to/limit/subject/kinds，归一化 months）；`memory-bridge.js` 加 `timeline()`；桥接加 `POST /api/socialV2/memory-timeline`（鉴权同 memory-search）；MCP 注册 `qq_memory_timeline`（描述照抄主会话口径：问「那阵子/上个月」用它，别拿 search 硬凑）；`TOOL_FEATURES` 映射到 `memory`。
+    - 测试：adapter-qq 8 项（新增 timeline 归一化 + 参数透传）；桥接三个文件 `node --check` 通过；全量 178 项。
+    - 待做：重启桥接生效（工具可见）。
+    - 成本：约 2 小时。
 
 28. ⬜ **统一入口（compact 视图 + 薄透传）**
     - 现状：QQ 的 `max_chars` 写死 400、没有 `kinds/subject`、返回被裁；主会话默认 600、字段全量。

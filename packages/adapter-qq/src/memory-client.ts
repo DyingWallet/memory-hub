@@ -51,6 +51,33 @@ export interface MirrorEntry {
   idempotencyKey?: string;
 }
 
+export interface TimelineOptions {
+  from?: string;
+  to?: string;
+  limit?: number;
+  subject?: 'owner' | 'self' | 'other';
+  kinds?: string[];
+}
+
+export interface TimelineItem {
+  id: string;
+  title: string;
+  kind: string;
+  updated_at: string;
+  text: string;
+  stage?: 'short' | 'long';
+  subject?: string;
+}
+
+export interface TimelineResult {
+  from: string;
+  to: string;
+  total: number;
+  returned: number;
+  next_before?: string;
+  months: { month: string; count: number; items: TimelineItem[] }[];
+}
+
 export interface QQMemoryClient {
   sceneForConvKey(convKey: string, ownerQQ: string | number): string;
   recallBlock(
@@ -61,6 +88,7 @@ export interface QQMemoryClient {
   ): Promise<string | null>;
   ingest(messages: ChatMessage[]): Promise<boolean>;
   search(query: string, scene: string, k?: number): Promise<MemoryItem[]>;
+  timeline(scene: string, options?: TimelineOptions): Promise<TimelineResult | null>;
   get(id: string, scene: string): Promise<MemoryItem | null>;
   recent(scene: string, k?: number): Promise<MemoryItem[]>;
   mirrorWrite(entry: MirrorEntry): Promise<boolean>;
@@ -227,6 +255,25 @@ export function createQQMemoryClient(options: QQMemoryOptions): QQMemoryClient {
       }
     },
 
+    async timeline(scene, options = {}) {
+      try {
+        const payload = await call('/v1/timeline', {
+          scene,
+          ...(options.from ? { from: options.from } : {}),
+          ...(options.to ? { to: options.to } : {}),
+          ...(options.limit ? { limit: clampInt(options.limit, 1, 1000) } : {}),
+          ...(options.subject ? { subject: options.subject } : {}),
+          ...(options.kinds ? { kinds: options.kinds } : {}),
+          max_chars: 200,
+        });
+        const out = normalizeTimeline(payload);
+        if (out.total === 0 && out.months.length === 0) return null;
+        return out;
+      } catch {
+        return null;
+      }
+    },
+
     async get(id, scene) {
       try {
         const payload = await call('/v1/get', { id, scene, max_chars: 4000 });
@@ -300,8 +347,34 @@ export function createQQMemoryClient(options: QQMemoryOptions): QQMemoryClient {
   };
 }
 
-function normalizeResults(raw: unknown): MemoryItem[] {
-  if (!Array.isArray(raw)) return [];
+function normalizeTimeline(raw: unknown): TimelineResult {
+  const value = (raw ?? {}) as Record<string, any>;
+  const months = Array.isArray(value.months)
+    ? value.months.map((month: any) => ({
+        month: String(month?.month ?? ''),
+        count: Number(month?.count ?? 0),
+        items: (Array.isArray(month?.items) ? month.items : []).map((item: any) => ({
+          id: String(item?.id ?? ''),
+          title: String(item?.title ?? ''),
+          kind: String(item?.kind ?? ''),
+          updated_at: String(item?.updated_at ?? ''),
+          text: String(item?.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 200),
+          ...(item?.stage === 'short' || item?.stage === 'long' ? { stage: item.stage } : {}),
+          ...(item?.subject ? { subject: String(item.subject) } : {}),
+        })),
+      }))
+    : [];
+  return {
+    from: String(value.from ?? ''),
+    to: String(value.to ?? ''),
+    total: Number(value.total ?? 0),
+    returned: Number(value.returned ?? 0),
+    ...(value.next_before ? { next_before: String(value.next_before) } : {}),
+    months,
+  };
+}
+
+function normalizeResults(raw: unknown): MemoryItem[] {  if (!Array.isArray(raw)) return [];
   const out: MemoryItem[] = [];
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;

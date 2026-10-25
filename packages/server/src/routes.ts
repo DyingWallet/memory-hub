@@ -157,23 +157,35 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       if (!/^\d{4,20}$/.test(groupId)) throw errors.invalid('group must be a QQ group id');
       const requester = String(body.requester).trim();
       if (!/^\d{4,20}$/.test(requester)) throw errors.invalid('requester must be a QQ number');
-      const sinceHours = clamp(body.since_hours ?? 24, 1, 24 * 7);
-      const k = clamp(body.k ?? 8, 1, 20);
-      const since = Date.now() - sinceHours * 3_600_000;
+      // 时间窗可选：不传 = 该群全部历史。成员资格由桥接实时校验（并负责退群拒绝），
+      // memd 只守「只给这个群、只给 chat/note、只给 normal/personal」。
+      const sinceHours =
+        body.since_hours === undefined || body.since_hours === null ? null : clamp(body.since_hours, 1, 24 * 365);
+      const k = clamp(body.k ?? 20, 1, 50);
+      const since = sinceHours === null ? null : Date.now() - sinceHours * 3_600_000;
+
+      const clauses = [
+        'c.scene = ?',
+        "c.kind IN ('chat', 'note')",
+        "c.privacy IN ('normal', 'personal')",
+        '(c.expires_at IS NULL OR c.expires_at > ?)',
+      ];
+      const params: (string | number)[] = [`qq:group:${groupId}`, Date.now()];
+      if (since !== null) {
+        clauses.push('c.updated_at >= ?');
+        params.push(since);
+      }
+      params.push(k);
 
       const rows = db
         .prepare(
           `SELECT c.id, c.path, c.title, c.heading, c.text, c.kind, c.updated_at, c.stage, c.expires_at
              FROM chunks c
-            WHERE c.scene = ?
-              AND c.kind IN ('chat', 'note')
-              AND c.privacy IN ('normal', 'personal')
-              AND (c.expires_at IS NULL OR c.expires_at > ?)
-              AND c.updated_at >= ?
+            WHERE ${clauses.join(' AND ')}
             ORDER BY c.updated_at DESC
             LIMIT ?`,
         )
-        .all(`qq:group:${groupId}`, Date.now(), since, k) as {
+        .all(...params) as {
         id: string;
         path: string;
         title: string;
@@ -201,7 +213,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         group: `qq:group:${groupId}`,
         requester_hash: sha256Hex(requester).slice(0, 16),
       });
-      return { group: `qq:group:${groupId}`, since_hours: sinceHours, count: results.length, results };
+      // since_hours=0 表示「不限时间」——响应 schema 要求 number，用 0 不用 null。
+      return { group: `qq:group:${groupId}`, since_hours: sinceHours ?? 0, count: results.length, results };
     },
   );
 
