@@ -22,20 +22,12 @@
  *    There is deliberately no fallback: an unmapped scene gets no memory at all
  *    (falling back to another scene's token would leak a wider view).
  */
-import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { idemKey } from './idem.js';
+import { createMirrorJournal } from './mirror-journal.js';
 
 const RECALL_CACHE_MS = 5000;
-
-/** Stable idempotency key for one QQ memory entry (write/forget must agree). */
-function idemKey(scene, category, extra, text) {
-  const digest = createHash('sha256')
-    .update(`${scene}\u0000${category}\u0000${extra?.target ?? ''}\u0000${text}`)
-    .digest('hex')
-    .slice(0, 16);
-  return `${scene}:${category}:${digest}`;
-}
 
 /**
  * @param {object} options
@@ -62,6 +54,10 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
   let modulePromise = null;
   let broken = false;
   const recallCache = new Map();
+  // 失败流水 + 遗忘队列。journal 关掉等于回到「失败只打一行日志」的旧行为，
+  // 只留给排障用；默认开。
+  const journal = memoryConfig.journal === false ? null : createMirrorJournal({ root, log });
+  const forgetRetryMs = clampInt(memoryConfig.forgetQueueRetryMs ?? 300_000, 60_000, 24 * 3_600_000);
 
   const abs = (file) => resolve(root, file);
 
@@ -117,8 +113,46 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
     return `qq:private:${id}`;
   }
 
+  /**
+   * 重试遗忘队列：每条都按 scene 取对应令牌重算键，再忘一次。
+   * 只在 enabled 且有 journal 时轮转；`unref()` 保证不会把桥接进程吊住不退出。
+   */
+  async function drainForgetQueue() {
+    if (!enabled || !journal) return { drained: 0, left: 0, gaveUp: 0 };
+    const result = await journal.drain(async (item) => {
+      const api = await getClient(item.scene);
+      if (!api) throw new Error('no memory client (token not mapped)');
+      const key = item.dedupeKey ?? idemKey(item.scene, item.category, { target: item.target }, item.text);
+      await api.forget({ idempotencyKey: key });
+      return true;
+    });
+    if (result.drained > 0 || result.gaveUp > 0) {
+      log.warn?.(`[memory] forget queue: drained=${result.drained} left=${result.left} gaveUp=${result.gaveUp}`);
+    }
+    return result;
+  }
+
+  let forgetTimer = null;
+  if (enabled && journal) {
+    // 启动 30 秒后先跑一次（补上次停机期间没忘掉的），之后按配置轮转。
+    const kick = setTimeout(() => {
+      void drainForgetQueue().catch(() => {});
+    }, 30_000);
+    kick.unref?.();
+    forgetTimer = setInterval(() => {
+      void drainForgetQueue().catch(() => {});
+    }, forgetRetryMs);
+    forgetTimer.unref?.();
+  }
+
   return {
     enabled,
+    journal,
+    drainForgetQueue,
+    stopForgetQueue() {
+      if (forgetTimer) clearInterval(forgetTimer);
+      forgetTimer = null;
+    },
 
     /** `【长期记忆】/【相关记忆】` block, or '' when unavailable. Never throws. */
     async recallBlock(key, messages, options = {}) {
@@ -190,14 +224,18 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
     /** Fire-and-forget mirror into facts/. Never awaited on the reply path. */
     mirrorWrite(key, category, content, extra = {}) {
       if (!enabled || memoryConfig.writeMirror === false) return;
+      const text = String(content ?? '').trim();
+      if (text.length === 0) return;
+      const scene = sceneOf(key, cfg?.ownerQQ);
       void (async () => {
         try {
-          const scene = sceneOf(key, cfg?.ownerQQ);
           const api = await getClient(scene);
-          if (!api) return;
+          if (!api) {
+            // 没有客户端也要留痕：否则「场景没配令牌」会伪装成「一切正常」。
+            journal?.recordFailure({ op: 'write', scene, category, target: extra?.target, error: 'no memory client (token not mapped)', missing: true });
+            return;
+          }
           const kind = category === 'memberImpression' ? 'qq-impression' : 'qq-topic';
-          const text = String(content ?? '').trim();
-          if (text.length === 0) return;
           await api.mirrorWrite({
             kind,
             text,
@@ -208,6 +246,7 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
           });
         } catch (error) {
           log.warn?.(`[memory] mirror write failed: ${error?.message ?? error}`);
+          journal?.recordFailure({ op: 'write', scene, category, target: extra?.target, error });
         }
       })();
     },
@@ -217,14 +256,20 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
       if (!enabled || memoryConfig.writeMirror === false) return;
       const text = String(content ?? '').trim();
       if (text.length === 0) return;
+      const scene = sceneOf(key, cfg?.ownerQQ);
       void (async () => {
         try {
-          const scene = sceneOf(key, cfg?.ownerQQ);
           const api = await getClient(scene);
-          if (!api) return;
+          if (!api) {
+            journal?.recordFailure({ op: 'forget', scene, category, target: extra?.target, error: 'no memory client (token not mapped)' });
+            return;
+          }
           await api.forget({ idempotencyKey: idemKey(scene, category, extra, text) });
         } catch (error) {
           log.warn?.(`[memory] mirror forget failed: ${error?.message ?? error}`);
+          journal?.recordFailure({ op: 'forget', scene, category, target: extra?.target, error });
+          // 该忘而没忘掉：进队列，由 drainForgetQueue 重试（不静默丢弃）。
+          journal?.enqueueForget({ scene, category, target: extra?.target, text, error }, idemKey(scene, category, extra, text));
         }
       })();
     },

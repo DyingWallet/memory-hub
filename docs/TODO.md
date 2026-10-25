@@ -183,11 +183,20 @@
     - 已做（2026-10-25）：新增 `qq-bridge/docs/guides/MEMORY_CONTRACT.md`——两层存储的分工、8 个工具的参数与返回字段、与主会话工具的对应关系、不合并的理由、以后加工具用兜底入口而非替换。
     - 成本：0.5 小时。
 
-31. ⬜ **两层记忆保留，补对账**
+31. 🔶 **两层记忆保留，补对账**
     - 决定：桥接轻量记忆（`social-v2.json`）不迁到 memd。理由：memd 挂时唤醒仍要能注入（fail-soft）；轻量记忆是「我主动提炼的当前关注」，memd short 是「自动收录的原文流」；按会话 key 隔离比 `*` scope 更干净。
     - 现状：写入已镜像（`mirrorWrite` → `qq-topic` / `qq-impression`），但读取仍各走各的，可能漂移。
     - 要做：`mirrorWrite` 失败时记日志；定期对账 `social-v2` 的轻量条目与 memd facts 是否一致。
     - 成本：约 1 小时。
+    - **进展（2026-10-26 01:15）：包 A（可观测性）已落地**，B（稳定身份）与 C（定时）未做。
+      - 新增 `qq-bridge/src/memory/{idem,mirror-journal,reconcile}.js` + `scripts/reconcile-memory.mjs`；
+        `memory-bridge.js` 的 `mirrorWrite`/`mirrorForget` 失败落 `logs/mirror-failures.jsonl`，
+        `mirrorForget` 失败进 `state/forget-queue.jsonl`，桥接每 5 分钟自己重试（`forgetQueueRetryMs`，默认 300000）。
+      - 对账只读打开 `index.db`（校验 `meta.schema_version=3`），分五桶：`present / legacy / partial / missing / staleDocs`；
+        **只补不删**，`--fix missing` 与 `--fix forget` 需显式调用，且报告过期（size/mtime 变了）直接拒跑。
+      - 实测（真数据）：live 4 → present 0 / legacy 2 / partial 1 / missing 1；孤儿 idem 键 37；长期层多出 26 条（只报不删）。
+      - 测试 7 项（`npm run test:memory`），覆盖 key 稳定性、失败流水、队列去重与上限、摊平映射、五桶判定、截断副本、schema 断言。
+        RUNBOOK §2.6 已写。第 2 步（`entryId` 稳定键 + legacy 认领）待决。
 
 32. ✅ **QQ 桥接看护并入 `memd-watchdog`**（2026-10-25 夜）
     - 起因：桥接原本只有登录时的 `Startup\qq-stack.vbs` 一条链，会话里手动关掉后没人补；沙箱身份也起不了它（`qq-bridge\state\` 与 `config.json` 做过 ACL 收紧）。

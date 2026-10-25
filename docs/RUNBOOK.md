@@ -110,6 +110,47 @@ powershell -ExecutionPolicy Bypass -File scripts\stop.ps1
 - `schtasks /TR` 有 **261 字符上限**：动作串更长时（隐藏启动器就接近上限）先用 `schtasks` 建出无限期重复的触发器，再用 `Set-ScheduledTask -Action` 换动作。
 - **dsh-pet-configurable-llm 没有登录任务**：它只服务 DSH 的 `pet-chat` preset，跟着 DSH 生命周期——`qq-bridge\start-stack.ps1` 第 2.7 步在 DSH 起来后拉起它，DSH 关闭/崩溃后它自己退出（每 20 秒探一次，连续 3 次不可达约 60 秒退出，见 `dsh-pet-configurable-llm/src/guard.mjs`）。调试时可 `PET_LLM_ORPHAN_GUARD=0` 关掉。
 
+## 2.6 两层记忆对账（QQ 轻量层 ↔ memd 长期层）
+
+QQ 侧的记忆分两层：`qq-bridge/state/social-v2.json` 里的轻量条目，和它们镜像到 memd 的长期副本。
+镜像写入是 fire-and-forget（`mirrorWrite`，800ms 超时），所以会出现三种接缝问题：
+**该有却没有**（写失败静默丢失）、**改了但旧副本还在**、**删了但没删掉**。
+
+```powershell
+cd D:\deepseek_workspace\qq-bridge
+
+# 只读对账：算完写报告，不动任何数据
+node scripts\reconcile-memory.mjs
+
+# 补写「该有却没有」的那些（会先校验报告是否过期）
+node scripts\reconcile-memory.mjs --fix missing
+
+# 重试遗忘队列（该忘而没忘掉的）
+node scripts\reconcile-memory.mjs --fix forget
+
+# 单测
+npm run test:memory
+```
+
+| 桶 | 含义 | 会不会被修 |
+|---|---|---|
+| `present` | 有 idem 键且文档在 | — |
+| `legacy` | 有完整文本副本，但没有 idem 键（2026-10-23 迁移进来的那批） | 否，人工认领（第 2 步） |
+| `partial` | 只有被截断的副本（迁移时截过） | 否，`--fix` 特意跳过，否则会造近似重复 |
+| `missing` | 完全没有 | `--fix missing` 补写（幂等） |
+| `staleDocs` | 长期层有、轻量层已没有（摘要/退役话题） | **永不删**，两层语义不同，见 `40-decisions/2026-10-25-0012` |
+| `forgetQueue` | `state/forget-queue.jsonl` 里还没忘干净的 | `--fix forget`，或让桥接每 5 分钟自己重试 |
+
+约束（写在代码里，不是口头约定）：
+
+- 索引**只读**打开（`readOnly: true`），并校验 `meta.schema_version`；对不上就报错退出，不拿错结构算一份「看起来正常」的报告。
+- `--fix` 前核对 `social-v2.json` 的 size/mtime 与报告生成时是否一致，不一致直接拒跑（退出码 3），避免拿过期清单改库。
+- 报告正文截断 120 字；落在 `qq-bridge/logs/reconcile/`（`latest.json` + `history/<日期>.json`），不进 git、不进备份。
+- 修复动作另记 `logs/reconcile/applied-<日期>.jsonl`——「当时看到什么」和「后来做了什么」分开留痕。
+
+失败痕迹：`logs/mirror-failures.jsonl`（只追加，给人看）；遗忘待办：`state/forget-queue.jsonl`
+（会被消掉，成功即出队，重试 5 次仍失败就留在队列里等人工——**不静默丢弃**）。
+
 ## 3. 令牌
 
 签发（明文只显示一次）：
