@@ -126,7 +126,8 @@ export function indexDocFile(db: Db, config: ServerConfig, absPath: string, relP
   const rel = relPath ?? toPosix(relative(config.memoriesDir, absPath));
   const raw = readFileSync(absPath, 'utf8');
   const hash = sha256Hex(raw);
-  const docId = `doc:${rel}`;
+  // 文档 id 用路径 hash，重命名文件不会换 id；统一成 doc-<hash8> 规则。
+  const docId = `doc-${sha256Hex(rel).slice(0, 8)}`;
 
   const existing = db.prepare('SELECT hash FROM docs WHERE id = ?').get(docId) as { hash?: string } | undefined;
   if (existing?.hash === hash) return false;
