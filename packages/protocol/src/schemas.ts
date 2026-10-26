@@ -378,7 +378,7 @@ export const TRecallRequest = Type.Object(
     messages: Type.Array(TRecallMessage, { maxItems: 8 }),
     k: Type.Optional(Type.Integer({ minimum: 1, maximum: 5 })),
     scene: Type.Optional(Type.String({ maxLength: 120 })),
-    max_chars: Type.Optional(Type.Integer({ minimum: 40, maximum: 1000 })),
+    max_chars: Type.Optional(Type.Integer({ minimum: 40, maximum: 2000 })),
     /** Ask for the newest chat messages as well (see `TRecallLive`). */
     live: Type.Optional(TRecallLive),
     /** Only memories about this subject (`owner` / `self` / `other`). */
@@ -387,6 +387,8 @@ export const TRecallRequest = Type.Object(
     scope: Type.Optional(Type.Union([Type.Literal('scene'), Type.Literal('groups')])),
     /** Time window for `scope=groups` (hours, default 24). */
     since_hours: Type.Optional(Type.Integer({ minimum: 1, maximum: 24 * 30 })),
+    /** Render a ready-to-inject prompt block in `block` (same results, pre-formatted). */
+    format: Type.Optional(Type.Union([Type.Literal('block')])),
   },
   { additionalProperties: false },
 );
@@ -409,6 +411,8 @@ export const TRecallResponse = Type.Object(
         { additionalProperties: false },
       ),
     ),
+    /** Ready-to-inject prompt block, only when the request asked for `format: "block"`. */
+    block: Type.Optional(Type.String()),
   },
   { additionalProperties: false },
 );

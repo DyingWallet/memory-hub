@@ -44,6 +44,10 @@
       "types": "./dist/review.d.ts",
       "import": "./dist/review.js"
     },
+    "./recall-format": {
+      "types": "./dist/recall-format.d.ts",
+      "import": "./dist/recall-format.js"
+    },
     "./archive": {
       "types": "./dist/archive.d.ts",
       "import": "./dist/archive.js"

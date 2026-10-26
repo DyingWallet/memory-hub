@@ -67,6 +67,7 @@ import { getChunkOrDoc, liveMessages, recentDocs, reviewCandidates, searchChunks
 import { cleanIngestText } from './ingest-filter.js';
 import { lastReviewAt, markReviewSeen, reminderSince, shouldReview } from './review.js';
 import { visibilityClause } from './visibility.js';
+import { renderRecallBlock } from './recall-format.js';
 import { dedupeKey, isNearDuplicate, normalizeForDedupe } from './dedupe.js';
 import type { SemanticManager } from './semantic.js';
 import type { TokenStore } from './tokens.js';
@@ -581,6 +582,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       since_hours?: number;
       live?: { k?: number; minutes?: number; scenes?: string[] };
       subject?: 'owner' | 'self' | 'other';
+      format?: 'block';
     };
     Reply: RecallResponse;
   }>(
@@ -727,6 +729,14 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         keywords,
         results,
         ...(liveResults ? { live: liveResults } : {}),
+        ...(body.format === 'block'
+          ? {
+              block: renderRecallBlock(results, liveResults, {
+                maxChars: body.max_chars ?? 1500,
+                liveMinutes: body.live?.minutes ?? 30,
+              }),
+            }
+          : {}),
         review: {
           should_review: shouldReviewNow,
           ...(reminder ? { reminder_since: reminder } : {}),
