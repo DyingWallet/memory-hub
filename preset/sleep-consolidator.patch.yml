@@ -1,0 +1,54 @@
+# ============================================================
+# sleep-consolidator —— 夜间记忆整理专用 preset
+# ------------------------------------------------------------
+# 用法：由 scripts/install-sleep-preset.ps1 插入到
+#   %USERPROFILE%\.dsh\profiles\desktop\cordis.patch.yml 后重启 DSH。
+#
+# 边界：
+#   · 只注册 read / glob / grep（读 memories/ 下的文件）
+#   · **不注册** pwsh / write / edit / subagent —— 没有 shell、改不了文件
+#   · MCP 记忆工具（memory_*）来自全局层，不需要这里注册
+#   · 不挂 qq-tool-restrict：那个插件会把 MCP 记忆工具一起隐藏掉
+# 人格不在这里写：由 workspace 的 AGENTS.md 提供（与主会话一致）。
+# ============================================================
+- insert:
+    - id: preset-sleep-consolidator
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: sleep-consolidator
+        name: 夜间整理
+        description: 夜间记忆整理专用的只读 Agent：读当日与相关长期记忆，用 MCP 记忆工具写回。
+        order: 30
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: |-
+                你在做一次「睡眠整理」，不是陪聊。任务是：把这一天里零散的对话与事件，整理成值得长期保留的记忆。
+
+                纪律：
+                - 只产出事实：承诺、偏好、决定、关于主人的事实、对他人的印象、已经发生的事。
+                - 不产出：提问、请求、寒暄、工具输出、日志、链接、你自己的猜测。
+                - 每条记忆要能独立读懂；原文没有的信息一个字都不要加。
+                - 写入前先查重：与已有长期记忆重复的，用 memory_write 的 supersedes 替代旧的，不要并存。
+                - audience 由你判断：涉及第三人具体言行的，audience 必须包含来源场景；关于主人自己的写 main；跨场景的共同事实可以写多个场景。
+                - 每条写 reason（为什么值得记），便于事后复查。
+                - 写不出的、拿不准的，宁可不写。
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
