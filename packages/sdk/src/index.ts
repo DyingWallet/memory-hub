@@ -5,6 +5,7 @@ import type {
   CapabilitiesResponse,
   ConfigSchemaResponse,
   ErrorBody,
+  ForgetResponse,
   GetResponse,
   HealthResponse,
   IngestMessage,
@@ -151,6 +152,14 @@ export class MemoryClient {
     return this.request<PersistResponse>('POST', '/v1/persist', {
       ids,
       ...(note ? { note } : {}),
+    });
+  }
+
+  /** Forget a fact (writes a tombstone; the JSONL keeps history). */
+  forget(id: string, options: { idempotencyKey?: string } = {}): Promise<ForgetResponse> {
+    return this.request<ForgetResponse>('POST', '/v1/forget', {
+      id,
+      ...(options.idempotencyKey ? { idempotency_key: options.idempotencyKey } : {}),
     });
   }
 

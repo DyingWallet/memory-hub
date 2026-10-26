@@ -33,7 +33,8 @@ export function visibilityClause(
   const params: (string | number)[] = [];
   const restriction = options.restriction ?? restrictionFor(token.scopes, scene);
 
-  parts.push(`${alias}.privacy <> 'secret'`);
+  // secret 不再硬过滤：是否可见由 allowedPrivacy 里的 scope 决定
+  // （只有 root / secret:read 的令牌才含 secret）。
   // Short-term memories are invisible once their TTL passes, even before purge.
   parts.push(`(${alias}.expires_at IS NULL OR ${alias}.expires_at > ?)`);
   params.push(Date.now());

@@ -71,8 +71,10 @@ test('the owner view sees private chats (single star topology)', async () => {
   assert.ok(response.json().results.length >= 1);
 });
 
-test('secret memories never leave the database', async () => {
-  for (const token of [fixture.tokens.main.token, fixture.tokens.owner.token, fixture.tokens.group.token]) {
+test('secret is visible only to root / secret:read tokens', async () => {
+  const root = await post('/v1/search', fixture.tokens.main.token, { query: 'secret' });
+  assert.ok(root.json().results.length >= 1, 'root should see secret');
+  for (const token of [fixture.tokens.group.token, fixture.tokens.privateA.token]) {
     const response = await post('/v1/search', token, { query: 'secret' });
     assert.equal(response.json().results.length, 0, 'secret leaked');
   }

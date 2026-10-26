@@ -401,6 +401,7 @@ function normalizePrivacyPolicy(
   return {
     sensitiveScope,
     sensitiveAudiences: cleanList(base.sensitiveAudiences, DEFAULT_POLICY.sensitiveAudiences),
+    secretAudiences: cleanList(base.secretAudiences, DEFAULT_POLICY.secretAudiences),
     ownerAudiences: cleanList(base.ownerAudiences, DEFAULT_POLICY.ownerAudiences),
   };
 }

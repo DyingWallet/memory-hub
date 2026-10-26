@@ -48,10 +48,10 @@ test('default privacy: work source becomes sensitive', () => {
   assert.equal(defaultPrivacy('event', 'work'), 'sensitive');
 });
 
-test('root tokens read everything except secret', () => {
+test('root tokens read everything including secret', () => {
   assert.equal(canRead(memory({ audience: ['main'] }), mainToken, 'main'), true);
   assert.equal(canRead(memory({ privacy: 'sensitive', audience: ['main', 'qq:owner'] }), mainToken, 'main'), true);
-  assert.equal(canRead(memory({ privacy: 'secret', audience: ['main'] }), mainToken, 'main'), false);
+  assert.equal(canRead(memory({ privacy: 'secret', audience: ['main'] }), mainToken, 'main'), true);
 });
 
 test('sensitive needs the scope even for root tokens', () => {
@@ -89,6 +89,7 @@ test('custom sensitive/owner audiences are honored', () => {
   const policy: PrivacyPolicy = {
     sensitiveScope: 'sensitive:read',
     sensitiveAudiences: ['main', 'wx:owner'],
+    secretAudiences: ['main'],
     ownerAudiences: ['main', 'wx:owner'],
   };
   const wxOwner: TokenView = { surface: 'wx:owner', scopes: ['*', 'sensitive:read'], scenes: ['wx:owner'] };

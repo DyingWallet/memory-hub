@@ -45,7 +45,7 @@ test('timeline 按月分组、按时间正序，且不做相似度筛选', async
   const ids = month.items.map((item) => item.id);
   assert.ok(ids.includes('f_group_1'), JSON.stringify(ids));
   assert.ok(ids.includes('f_work_1'), 'root token sees the sensitive row');
-  assert.equal(ids.includes('f_secret_1'), false, 'secret never shows up');
+  assert.ok(ids.includes('f_secret_1'), 'root token sees secret too');
 
   const times = month.items.map((item) => item.updated_at);
   assert.deepEqual(times, [...times].sort(), 'oldest first');

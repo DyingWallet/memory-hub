@@ -15,6 +15,7 @@ import { MemoryClient, MemoryServiceError } from '@memsvc/sdk';
 import type {
   BootstrapResponse,
   CapabilitiesResponse,
+  ForgetResponse,
   GetResponse,
   MemoryKind,
   PersistResponse,
@@ -63,6 +64,7 @@ export interface MemoryApi {
     maxChars?: number;
   }): Promise<TimelineResponse>;
   write(record: WriteRequest): Promise<WriteResponse>;
+  forget(id: string, options?: { idempotencyKey?: string }): Promise<ForgetResponse>;
   review(options?: { scene?: string; lookbackHours?: number; limit?: number; dueOnly?: boolean }): Promise<ReviewResponse>;
   persist(ids: string[], note?: { kind?: MemoryKind; text: string; tags?: string[] }): Promise<PersistResponse>;
   capabilities(): Promise<CapabilitiesResponse>;
@@ -269,17 +271,23 @@ export function createMemoryMcpServer(client: MemoryApi, options: McpServerOptio
           .describe('类型；拿不准用 note'),
         text: z.string().min(1).max(8000),
         tags: z.array(z.string().max(64)).max(24).optional(),
-        privacy: z.enum(['normal', 'personal', 'work', 'financial']).optional(),
+        privacy: z
+          .enum(['normal', 'personal', 'sensitive', 'secret', 'work', 'financial'])
+          .optional()
+          .describe(
+            '隐私级别：normal / personal / sensitive / secret（secret 需要 root 或 secret:write）；work、financial 是旧别名，按 sensitive 处理',
+          ),
         audience: z.array(z.string().max(120)).max(32).optional().describe('可见范围；省略按类型默认'),
         subject: z
           .enum(['owner', 'self', 'other'])
           .optional()
           .describe('这是关于谁的：owner=主人（默认）、self=我自己的判断、other=第三方'),
         idempotency_key: z.string().max(200).optional().describe('重试时用来去重'),
+        supersedes: z.string().max(200).optional().describe('这条记忆替代的旧记忆 id（改主意/更新时用）'),
         scene: sceneArg,
       },
     },
-    async ({ kind, text, tags, privacy, audience, subject, idempotency_key, scene }) => {
+    async ({ kind, text, tags, privacy, audience, subject, idempotency_key, supersedes, scene }) => {
       if (!writeEnabled) {
         return fail(new Error('write is disabled in the plugin config'));
       }
@@ -293,9 +301,29 @@ export function createMemoryMcpServer(client: MemoryApi, options: McpServerOptio
             ...(audience ? { audience } : {}),
             ...(subject ? { subject } : {}),
             ...(idempotency_key ? { idempotency_key } : {}),
+            ...(supersedes ? { supersedes } : {}),
             ...(scene ? { scene } : {}),
           }),
         );
+      } catch (error) {
+        return fail(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'memory_forget',
+    {
+      title: '忘记记忆',
+      description:
+        '按 id 忘掉一条记忆（写 tombstone，原文仍留在 JSONL）。用于确认过时或错误的记忆；拿不准就别删。',
+      inputSchema: {
+        id: z.string().min(1).max(200).describe('要忘记的记忆 id'),
+      },
+    },
+    async ({ id }) => {
+      try {
+        return ok(await client.forget(id));
       } catch (error) {
         return fail(error);
       }

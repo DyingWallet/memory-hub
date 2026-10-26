@@ -11,6 +11,7 @@ import type { PrivacyPolicy } from '@memsvc/core';
 const customPolicy: PrivacyPolicy = {
   sensitiveScope: 'private:read',
   sensitiveAudiences: ['main'],
+  secretAudiences: ['main'],
   ownerAudiences: ['main'],
 };
 

@@ -9,6 +9,7 @@ import {
   extractKeywords,
   hasCapability,
   hasRootScope,
+  hasSecretWrite,
   isRestricted,
   isSensitive,
   newFactId,
@@ -835,8 +836,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       if (body.text.length > config.writeMaxChars) {
         throw errors.tooLarge(`text exceeds ${config.writeMaxChars} characters`);
       }
-      if (body.privacy === 'secret') {
-        throw errors.forbidden('secret memories are not written through the API in v1');
+      if (body.privacy === 'secret' && !hasSecretWrite(auth.view.scopes)) {
+        throw errors.forbidden('writing secret memories requires the secret:write scope');
       }
 
       const idempotencyKey = body.idempotency_key ?? null;

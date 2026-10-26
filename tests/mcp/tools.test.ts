@@ -76,6 +76,9 @@ const fakeApi: MemoryApi = {
   async write(record) {
     return { id: `f_test_${record.kind}`, indexed: true, duplicate: false };
   },
+  async forget(id) {
+    return { forgotten: [id], missing: [] };
+  },
   async review() {
     return { should_review: false, counts: { short: 0, reviewable: 0 }, results: [] };
   },
@@ -123,6 +126,7 @@ test('all v1 tools are registered with descriptions', async () => {
   assert.deepEqual(names, [
     'memory_bootstrap',
     'memory_call',
+    'memory_forget',
     'memory_get',
     'memory_persist',
     'memory_recall',
@@ -133,6 +137,15 @@ test('all v1 tools are registered with descriptions', async () => {
     'memory_write',
   ]);
   for (const tool of tools) assert.ok((tool.description ?? '').length > 5, tool.name);
+});
+
+test('memory_forget delegates to the service', async () => {
+  const result = await client.callTool({ name: 'memory_forget', arguments: { id: 'f_test_1' } });
+  const content = (result.content as { type: string; text: string }[])[0];
+  assert.equal(content?.type, 'text');
+  const payload = JSON.parse(content?.text ?? '{}') as { forgotten: string[]; missing: string[] };
+  assert.deepEqual(payload.forgotten, ['f_test_1']);
+  assert.deepEqual(payload.missing, []);
 });
 
 test('memory_search forwards the query and returns JSON text', async () => {

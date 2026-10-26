@@ -23,11 +23,17 @@ export const PERSONAL_LABEL = 'personal';
 export const SENSITIVE_LABEL = 'sensitive';
 export const SECRET_LABEL = 'secret';
 
+/** `secret` 的读写各要一个 scope；root（`*`）同时具备两者。 */
+export const SECRET_READ_SCOPE = 'secret:read';
+export const SECRET_WRITE_SCOPE = 'secret:write';
+
 export interface PrivacyPolicy {
   /** Token scope required to read/write `sensitive` memories. */
   sensitiveScope: string;
   /** Audiences `sensitive` memories are pinned to (owner's own rooms). */
   sensitiveAudiences: string[];
+  /** Audiences `secret` memories are pinned to. */
+  secretAudiences: string[];
   /** Audiences that count as "the owner" for recall disclosure. */
   ownerAudiences: string[];
 }
@@ -35,6 +41,7 @@ export interface PrivacyPolicy {
 export const DEFAULT_POLICY: PrivacyPolicy = {
   sensitiveScope: 'sensitive:read',
   sensitiveAudiences: ['main', 'qq:owner'],
+  secretAudiences: ['main'],
   ownerAudiences: ['main', 'qq:owner'],
 };
 
@@ -70,6 +77,16 @@ export function hasCapability(scopes: readonly string[], policy: PrivacyPolicy =
   return scopes.includes(policy.sensitiveScope) || scopes.includes('work:read');
 }
 
+/** `secret` 的读：root 或显式 `secret:read`。群、私聊、pet 都不带这个 scope。 */
+export function hasSecretRead(scopes: readonly string[]): boolean {
+  return scopes.includes(ROOT_SCOPE) || scopes.includes(SECRET_READ_SCOPE);
+}
+
+/** `secret` 的写：root 或显式 `secret:write`。 */
+export function hasSecretWrite(scopes: readonly string[]): boolean {
+  return scopes.includes(ROOT_SCOPE) || scopes.includes(SECRET_WRITE_SCOPE);
+}
+
 export function isSceneAllowed(token: TokenView, scene: string): boolean {
   if (token.scenes.includes(ROOT_SCOPE)) return true;
   return token.scenes.includes(scene);
@@ -89,6 +106,7 @@ export function isRestricted(privacy: Privacy, _policy: PrivacyPolicy = DEFAULT_
 export function allowedPrivacy(scopes: readonly string[], policy: PrivacyPolicy = DEFAULT_POLICY): string[] {
   const allowed = [NORMAL_LABEL, PERSONAL_LABEL];
   if (hasCapability(scopes, policy)) allowed.push(SENSITIVE_LABEL);
+  if (hasSecretRead(scopes)) allowed.push(SECRET_LABEL);
   return allowed;
 }
 
@@ -124,7 +142,12 @@ export function canRead(
   policy: PrivacyPolicy = DEFAULT_POLICY,
 ): boolean {
   if (!isSceneAllowed(token, scene)) return false;
-  if (memory.privacy === SECRET_LABEL) return false;
+  if (memory.privacy === SECRET_LABEL) {
+    // secret 只对 root / 显式 secret:read 开放；其余令牌当作不存在。
+    if (!hasSecretRead(token.scopes)) return false;
+    if (hasRootScope(token.scopes)) return true;
+    return memory.audience.some((scope) => token.scopes.includes(scope) || scope === SHARED_SCOPE);
+  }
   if (isSensitive(memory.privacy) && !hasCapability(token.scopes, policy)) return false;
   if (hasRootScope(token.scopes)) return true;
   if (memory.audience.includes(SHARED_SCOPE)) return true;
@@ -177,6 +200,8 @@ export function audienceForWrite(
   policy: PrivacyPolicy = DEFAULT_POLICY,
 ): ScopeList {
   const base = normalizeAudience(requestedAudience, kind, scene);
+  // secret 只钉在 secretAudiences，不随请求来的 audience 扩散。
+  if (privacy === SECRET_LABEL) return [...policy.secretAudiences];
   if (!isSensitive(privacy)) return base;
   const pinned = base.filter((scope) => policy.sensitiveAudiences.includes(scope));
   return Array.from(new Set(pinned.length > 0 ? pinned : policy.sensitiveAudiences));
