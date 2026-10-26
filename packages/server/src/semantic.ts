@@ -41,8 +41,12 @@ export function normalizeScores(scores: readonly number[]): number[] {
 }
 
 /**
- * 混合排序：`alpha·norm(bm25) + (1-alpha)·cos`。
- * 两边都出现的 chunk 两项相加；只出现在一边的，另一项记 0。
+ * 混合排序：RRF（倒数排名融合），只吃排名、不吃裸分。
+ *
+ * 旧实现是 `alpha·norm(bm25) + (1-alpha)·cos`：FTS 的分数被 min-max 压到
+ * [0,1] 后 top1 恒等于 1.0，语义候选最高只有 (1-alpha)·cos。只要 FTS 回满
+ * k 条，纯语义候选就永远翻不上来——语义通道形同虚设。RRF 让两路各自按
+ * 名次贡献，语义独有候选（例如只在向量空间里排第 11 的长决策记忆）才有机会。
  */
 export function mergeHybrid(
   ftsHits: readonly SearchHit[],
@@ -51,18 +55,18 @@ export function mergeHybrid(
   k: number,
 ): SearchHit[] {
   const weight = Math.max(0, Math.min(1, alpha));
-  const ftsNorm = normalizeScores(ftsHits.map((hit) => hit.score));
+  const RRF_K = 60;
   const merged = new Map<string, { hit: SearchHit; score: number }>();
 
   ftsHits.forEach((hit, index) => {
-    merged.set(hit.id, { hit, score: weight * (ftsNorm[index] ?? 1) });
+    merged.set(hit.id, { hit, score: weight / (RRF_K + index + 1) });
   });
-  for (const hit of semanticHits) {
-    const cosine = Math.max(0, Math.min(1, hit.score));
+  semanticHits.forEach((hit, index) => {
+    const contribution = (1 - weight) / (RRF_K + index + 1);
     const existing = merged.get(hit.id);
-    if (existing) existing.score += (1 - weight) * cosine;
-    else merged.set(hit.id, { hit, score: (1 - weight) * cosine });
-  }
+    if (existing) existing.score += contribution;
+    else merged.set(hit.id, { hit, score: contribution });
+  });
 
   return [...merged.values()]
     .sort((a, b) => b.score - a.score || b.hit.updated_at - a.hit.updated_at)

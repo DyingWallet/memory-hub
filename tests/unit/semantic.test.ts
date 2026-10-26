@@ -56,18 +56,21 @@ test('normalizeScores 压到 [0,1]；全相等给 1；空数组给空', () => {
   assert.deepEqual(normalizeScores([]), []);
 });
 
-test('mergeHybrid：alpha 控制 FTS 与余弦的权重，两边都有的项相加', () => {
+test('mergeHybrid：RRF 按排名融合，两边都命中的项排最前', () => {
   const fts = [hit('a', 10), hit('b', 5)];
   const semantic = [hit('b', 0.9), hit('c', 0.6)];
   const ids = (list: SearchHit[]): string[] => list.map((entry) => entry.id);
   const scoreAt = (list: SearchHit[], index: number): number => list[index]?.score ?? -1;
 
-  assert.deepEqual(ids(mergeHybrid(fts, semantic, 1, 3)), ['a', 'b', 'c'], 'alpha=1 时按 FTS 排序，语义独有的 c 垫底');
-  assert.deepEqual(ids(mergeHybrid(fts, semantic, 0, 3)), ['b', 'c', 'a'], 'alpha=0 时按余弦排序，FTS 独有的 a 垫底');
+  // alpha 只剩「两路各自贡献多少」的比例，不再和裸分混算（RRF 只吃排名）。
+  assert.deepEqual(ids(mergeHybrid(fts, semantic, 1, 3)), ['a', 'b', 'c'], 'alpha=1 时只有 FTS 排名生效，语义独有的 c 垫底');
+  assert.deepEqual(ids(mergeHybrid(fts, semantic, 0, 3)), ['b', 'c', 'a'], 'alpha=0 时只有语义排名生效，FTS 独有的 a 垫底');
 
   const balanced = mergeHybrid(fts, semantic, 0.5, 3);
-  assert.deepEqual(ids(balanced), ['a', 'b', 'c'], '两边都命中的 b 拿到两项之和，但仍排在满分的 a 之后');
-  assert.ok(scoreAt(balanced, 1) > scoreAt(balanced, 2), 'b（两端命中）应高于只看语义的 c');
+  // RRF_K=60：b 两边都进前二 → 0.5/62 + 0.5/61；a 只 FTS 第一 → 0.5/61；c 只语义第二 → 0.5/62。
+  assert.deepEqual(ids(balanced), ['b', 'a', 'c'], '两边都命中的 b 拿到两份贡献，反超只在单边第一的 a');
+  assert.ok(scoreAt(balanced, 0) > scoreAt(balanced, 1), 'b（两端命中）应高于只看 FTS 的 a');
+  assert.ok(scoreAt(balanced, 1) > scoreAt(balanced, 2), 'a 应高于只看语义的 c');
 });
 
 test('mergeHybrid 只出现在一边的项不会被丢掉，且 k 生效', () => {

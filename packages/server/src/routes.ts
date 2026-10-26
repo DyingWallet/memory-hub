@@ -676,10 +676,15 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         finish('recall', auth, started, []);
         return { keywords: [], results: [], ...(liveResults ? { live: liveResults } : {}) };
       }
+      // FTS 的 query 用完整原句，而不是关键词串。关键词串是 extractKeywords 按
+      // bigram 切出来的碎片（「阿汐」「才的」「的记」），AND 必然全灭；OR 降级后
+      // bm25 偏爱短文本，长决策记忆会被闲聊挤掉。原句交给 searchChunks 的
+      // 覆盖度重排，才能把「记忆对账」这类信号词捞回来。
+      const queryText = messages.map((message) => message.text).join(' ');
       const searchParams = {
-        query: keywords.join(' '),
+        query: queryText,
         // 语义那边用原话更准：关键词串适合 FTS，句向量更适合完整句子。
-        semanticQuery: messages.map((message) => message.text).join('\n'),
+        semanticQuery: queryText,
         k,
         maxChars: clamp(body.max_chars ?? 300, 40, 1000),
         token: auth.view,

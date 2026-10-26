@@ -64,6 +64,23 @@ export interface SearchOutcome {
 const RECENT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
+ * 中文口语里没有信号的字：人称、语气、结构助词、程度副词。
+ * 用来把「才的 / 的记 / 你写 / 能你」这类 bigram 从覆盖度分母里剔掉——
+ * 它们在任何记忆文档里都不会同时出现，却会压低真正信号词（记忆 / 对账）的权重。
+ */
+const LOW_SIGNAL_CHAR = /[的了着过才就都也还很真太吗呢吧啊呀哦嗯唔诶我你他她它的]/;
+
+/**
+ * 覆盖度加分上限。只对「长查询」生效（token > 6，AND 必然失败的那类整句口语），
+ * 短查询（「记忆对账」这种）行为完全不变，避免把精确检索改坏。
+ *
+ * 量级说明：整句口语里「阿汐」「刚才」会让 bm25 冲到 60–100，而真正相关的长决策
+ * 记忆（只命中「记忆 / 忆对 / 对账」）bm25 约 6.5。加分必须能跨过这个量级差，
+ * 否则覆盖度只是噪声上的一层毛。实测 2.0 不够（目标排第 7），6.0 才推得进前 5。
+ */
+const COVERAGE_BOOST = 6.0;
+
+/**
  * Two-pass keyword search: AND first (precise), OR when recall is weak.
  * Results are re-scored in JS because bm25 knows nothing about titles,
  * freshness, or scene proximity.
@@ -101,6 +118,17 @@ export function searchChunks(db: Db, params: SearchParams): SearchOutcome {
     if (heading && tokens.some((token) => heading.toLowerCase().includes(token))) score += 0.35;
     else if (title && tokens.some((token) => title.toLowerCase().includes(token))) score += 0.2;
     if (now - row.updated_at <= RECENT_WINDOW_MS) score += 0.08;
+    // 长口语查询的补救：AND 打不过、OR 之后 bm25 按字面密度偏爱短文本，
+    // 641 个字的长决策记忆天然吃亏。这里按「高信号 token 命中比例」补一刀，
+    // 让「记忆 / 忆对 / 对账」这种真正命中 3 个的文档压过只命中 1 个的闲聊。
+    if (weak && tokens.length > 6) {
+      const haystack = `${row.text}\n${title}\n${heading}`.toLowerCase();
+      const signal = tokens.filter((token) => !LOW_SIGNAL_CHAR.test(token));
+      if (signal.length > 0) {
+        const covered = signal.filter((token) => haystack.includes(token)).length / signal.length;
+        score += covered * COVERAGE_BOOST;
+      }
+    }
     return {
       id: row.id,
       path: row.path,
