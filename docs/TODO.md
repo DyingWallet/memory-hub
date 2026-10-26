@@ -3,8 +3,8 @@
 > 单一待办来源。计划背景见 `PLAN.md`，操作见 `RUNBOOK.md`。
 > 状态：✅ 完成 / 🔶 部分 / ⬜ 未开始 / ✖ 明确不做
 >
-> **当前顺序（2026-10-26 夜更新）**：原排的 `20 → 19 → 9` 已全部完成（见 P6 / 19 / 9 条）；16 的两项加固（离机备份加密、密钥轮换）当晚决定不做，口径是「等公网部署需求出现再设计」；17（MCP 场景感知）同日评估后也决定不做——现在**没有在办项**，只剩 `14 / 15` 两条挂起。
-> 分档理由：20+19 是「定义我」、9 是欠账，都已还完；16/17 已明确不做；14/15 没有真实需求，先不动。
+> **当前顺序（2026-10-26 夜更新）**：原排的 `20 → 19 → 9` 已全部完成（见 P6 / 19 / 9 条）；16 的两项加固（离机备份加密、密钥轮换）、17（MCP 场景感知）当晚评估后都决定不做；随后新增 **33 每轮记忆条**（借鉴 dsh-mnemon），它是当前唯一在办项，`14 / 15` 仍挂起。
+> 分档理由：20+19 是「定义我」、9 是欠账，都已还完；16/17 已明确不做；33 是可观测性改进，优先级高于 14/15；14/15 没有真实需求，先不动。
 > 七条「待决策」不算待办，是边界没定，其中「pet 是否看群聊」单独聊。
 
 ## 已完成（v1.0 – v1.1）
@@ -241,6 +241,15 @@
     - 配置面：`ServerConfig.bridge`（`enabled/dir/probeUrl/retryMinutes/startTimeoutSeconds`）+ `normalizeBridge` 夹紧；`config.example.json` / `RUNBOOK.md` §2.5 有样例。
     - 实测：手动 `Stop-Process` 掉桥接 → `22:43:01 bridge down -> starting`、`22:43:13 exit=0`、`22:43:14 bridge healthy again`，13 秒补回；心跳 `memd=up bridge=up`。
     - 测试 184 项（+2 `normalizeBridge`）；commit `71eb617`。没单开任务：临时建的 `qq-bridge-manual` 与 `run-bridge-hidden.cmd` 已删，全机仍只有 `memd-watchdog` / `pet-revive`。
+
+33. ⬜ **每轮记忆条**（2026-10-26 加，借鉴 dsh-mnemon）
+    - 目标：回复下方展示「这轮读了哪些记忆、写了哪些」，点开能看原文。解决的是「记忆到底用没用、为什么没想起来」不可见的问题——现在只有 `data/audit.jsonl` 事后能查 route + ids，且这些 ids 没有和 `session / turn` 绑定。
+    - 现状：`dsh-memory` 插件只挂 `agent/pre-step`，把用户消息 fire-and-forget 上报 ingest（`plugins/dsh-memory/lib/index.js:71`）；recall / search 完全不经它手，memd 的 audit 也没有轮次归属。
+    - 分两步走：
+      - **最小版（≈1 天）**：拿到 `mcp__memory__*` 工具调用的返回 ids，按 `sessionId + turn` 落一条 view（memd 新表，或 facts 里一个 kind）；MCP 加只读 `memory_turn_view` 查询。先不做 UI，终端能查即可。
+      - **完整版（再 +1–2 天）**：接 DSH 回复下方区域渲染记忆条、点击跳转。dsh-mnemon 的 turn memory bar 证明这个位置存在，但我们要自己摸 DSH 的 UI 槽位 API。
+    - 前置调研（≈2 小时）：DSH 插件有没有工具调用前后的钩子、UI 有没有 turn bar 槽位。没有工具钩子就改成「MCP server 自己落 view」（在 `adapter-dsh` 里记），反而更简单。
+    - 明确不做：图视图、Ask Agent、Skills 自进化——那属于另一条产品线，不掺进来。
 
 ### 明确不做（已实测负收益）
 
