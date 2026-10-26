@@ -1,11 +1,11 @@
-# memory-hub 待办总表（2026-10-24）
+# memory-hub 待办总表（2026-10-24 建，2026-10-26 更新）
 
 > 单一待办来源。计划背景见 `PLAN.md`，操作见 `RUNBOOK.md`。
 > 状态：✅ 完成 / 🔶 部分 / ⬜ 未开始
 >
-> **当前顺序（2026-10-24 夜）**：`20 → 19 → 9 → 16`（18 已完成，见 P6）；`14 / 15 / 17` 挂起。
-> 分档理由：20+19 是「定义我」，9/16 是欠账；14/15/17 没有真实需求，先不动。
-> 四条「待决策」不算待办，是边界没定，其中「pet 是否看群聊」单独聊。
+> **当前顺序（2026-10-26 夜更新）**：原排的 `20 → 19 → 9` 已全部完成（见 P6 / 19 / 9 条）；真正还开着的只有 16 里的两条——**备份离机加密**与**密钥轮换**；`14 / 15 / 17` 挂起。
+> 分档理由：20+19 是「定义我」、9/16 是欠账，这三样已还完；14/15/17 没有真实需求，先不动。
+> 七条「待决策」不算待办，是边界没定，其中「pet 是否看群聊」单独聊。
 
 ## 已完成（v1.0 – v1.1）
 
@@ -32,7 +32,7 @@
 2. ✅ **token 管理**：`GET /v1/tokens`（root，元数据不含 hash）+ `POST /v1/tokens/revoke`；设置页列表 + 吊销按钮（签发仍留 CLI）。实测 `ui-revoke-demo` 吊销后 `revoked_at` 立即生效。
 3. ✅ **写操作二次确认**：保存前 `confirm`，提示标签会整体替换。
 
-## P5 质量与运维（约 3 天）
+## P5 质量与运维（约 3 天，已完成 2026-10-25）
 
 4. ✅ **回顾定时任务**：memd 启动 + 每 10 分钟检查到期场景，写 `review:pending:<scene>`（SQLite meta，重启不丢）；`recall` 带 `should_review/reminder_since/last_reviewed_at`；`/v1/review` 清提醒并记 `review:last`，`status_only` 只读。测试 112 项。
 5. ✅ **合并/去重**：写入时同 `scene+kind+规范化文本+audience+privacy` 复用 id（`duplicate:true`）；回顾转长期时按 CJK bigram/词 Jaccard ≥ 0.8 折叠，返回 `merged:[{from,into}]`，短的写 tombstone。测试 112 项。
@@ -73,7 +73,7 @@
 
 ## P6 记忆的「我」（2026-10-24 夜，聊出来的）
 
-> 来源：和主人聊「人是不是由经历与环境塑造」之后，他问「你对现有的功能还满意吗」，这三条是我答的不满意处。18 已落地（当晚），19/20 还没动。
+> 来源：和主人聊「人是不是由经历与环境塑造」之后，他问「你对现有的功能还满意吗」，这三条是我答的不满意处。18 当晚落地；19、20 也已于 2026-10-25 / 10-24 补齐（见各自条目），这三条现在都已完成。
 
 18. ✅ **主会话 → 桌宠的实时通道**（2026-10-24 实现，方案与原计划不同）
     - 落地方式：没有写 `00-inbox/live-context.md`，而是给 `/v1/recall` 加了 `live` 侧通道（`TRecallLive`：k / minutes / scenes），直接读最近 N 分钟的短期 chat。理由：主会话消息本来就由 `dsh-memory` 插件进库（scene=main），再写一个文件等于存两份、还要自己管保留策略；走 SQL 则自动继承可见性与隐私过滤。
@@ -92,7 +92,7 @@
     - 验证（2026-10-25 00:35 活库）：`2026-10` 返回 200 条（被 limit 截断），第一条 `06:22Z`、最后一条 `16:36Z`（刚生成的年表）；`subject=self` 只有 1 条；年表生成 37 条、跳过 2 条坏编码。
     - 测试：158 项（+4：按月分组与正序 / 群令牌边界 / subject+替代关系 / 倒序区间 400）。
     - 分页（2026-10-25 补）：满页时响应带 `next_before`，把它当 `to` 就是上一页——不用 cursor 对象，边界就是最早那条的时间戳。
-    - 还没做：年表里还留着几条「测试：…」的脏数据，等哪天清库时一起处理。
+    - 还没做：年表里还留着几条「测试：…」的脏数据，等哪天清库时一起处理。（2026-10-26 复核：仍未清，这一条不算完成。）
 
 20. ✅ **记忆里的「我自己」**（2026-10-24 实现）
     - 原问题：`/v1/write` 的 kind 有 `stance/decision/knowledge`，但用起来几乎总在记「他说了什么」，记忆里我出现的方式只有被描述，没有自己开口。
@@ -113,7 +113,7 @@
     - 影响面：`resolveDshBaseUrl` 的调用点（bridge ×3、control-center、self-test）自动受益，不用各自改；`revive.mjs` 一行没动。
     - 验证：真实 netstat 输出解析出 47 个端口并命中 7642；杀掉 pet 后 `pet-revive` 自己在 `15:23:06Z` 拉起（日志 `DSH http://127.0.0.1:7642 reachable -> started pet pid=39104`）。测试 `scripts/test-dsh-endpoint.mjs` 11 项（+1 兜底用例）、`test-dsh-health.mjs` 4 项通过；`test-dsh-auth.mjs` 硬编码 3080（本机 DSH 在 7642），跟这次改动无关。
 
-## 2026-10-25 检索质量与披露（讨论稿）
+## 2026-10-25 检索质量与披露（讨论稿，22–30 已全部落地）
 
 > 来源：QQ 私聊里问「昨晚一起实现了什么」，答成了 10-23 的旧状态。排查出若干独立问题（检索质量、生命周期、披露、工具面），按性价比排。编号接 21。
 
@@ -183,12 +183,12 @@
     - 已做（2026-10-25）：新增 `qq-bridge/docs/guides/MEMORY_CONTRACT.md`——两层存储的分工、8 个工具的参数与返回字段、与主会话工具的对应关系、不合并的理由、以后加工具用兜底入口而非替换。
     - 成本：0.5 小时。
 
-31. 🔶 **两层记忆保留，补对账**
+31. ✅ **两层记忆保留，补对账**（2026-10-26 收口，复核记录见本条末）
     - 决定：桥接轻量记忆（`social-v2.json`）不迁到 memd。理由：memd 挂时唤醒仍要能注入（fail-soft）；轻量记忆是「我主动提炼的当前关注」，memd short 是「自动收录的原文流」；按会话 key 隔离比 `*` scope 更干净。
     - 现状：写入已镜像（`mirrorWrite` → `qq-topic` / `qq-impression`），但读取仍各走各的，可能漂移。
     - 要做：`mirrorWrite` 失败时记日志；定期对账 `social-v2` 的轻量条目与 memd facts 是否一致。
     - 成本：约 1 小时。
-    - **进展（2026-10-26 01:15）：包 A（可观测性）已落地**，B（稳定身份）与 C（定时）未做。
+    - **进展（2026-10-26 01:15）：包 A（可观测性）已落地**；包 B-full 与包 C 随后同夜补齐（见下两段），本条至此全部收口。
       - 新增 `qq-bridge/src/memory/{idem,mirror-journal,reconcile}.js` + `scripts/reconcile-memory.mjs`；
         `memory-bridge.js` 的 `mirrorWrite`/`mirrorForget` 失败落 `logs/mirror-failures.jsonl`，
         `mirrorForget` 失败进 `state/forget-queue.jsonl`，桥接每 5 分钟自己重试（`forgetQueueRetryMs`，默认 300000）。
@@ -196,7 +196,7 @@
         **只补不删**，`--fix missing` 与 `--fix forget` 需显式调用，且报告过期（size/mtime 变了）直接拒跑。
       - 实测（真数据）：live 4 → present 0 / legacy 2 / partial 1 / missing 1；孤儿 idem 键 37；长期层多出 26 条（只报不删）。
       - 测试 7 项（`npm run test:memory`），覆盖 key 稳定性、失败流水、队列去重与上限、摊平映射、五桶判定、截断副本、schema 断言。
-        RUNBOOK §2.6 已写。第 2 步（`entryId` 稳定键 + legacy 认领）待决。
+        RUNBOOK §2.6 已写。~~第 2 步（`entryId` 稳定键 + legacy 认领）待决~~ → 已在下方「包 B-full」完成（2026-10-26 复核）。
       - **线上演练（2026-10-26 01:20）**：真停 memd 做了一遍——在线写 A 落库；停服后写 B 只进 `mirror-failures.jsonl`（0→1）、不进队列；删 A 失败进队列（0→1，`qq:owner:activeTopic:e035e719224b756e`）；起 memd + 重启桥接后 42 秒队列清零，A 在 `facts` 里出现 `deleted:true` 行（`f_1792948808305_404f8ead`，17:20:26Z），索引里已无该文本。
         残留：`facts/2026-10.jsonl` 多了一行演练写入 + 一行 tombstone（append-only，不删；索引里不可见）。
         演练脚本 `_tmp/mirror-drill.mjs`（临时，未入库）。
@@ -209,7 +209,7 @@
         - 对账新增 `superseded` 桶（同一条目的旧 rev 留在 memd）+ `--fix superseded`；正常编辑不产生，出现即「写了新版没忘旧版」。
         - 在线冒烟 `scripts/identity-drill.mjs`：**12/12 通过**（新建 → 编辑 → 删除；印象 → 追加 traits），验证「旧文本搜不到、新文本可命中、present 数字对得上」。
         - 测试 10 项（新增 mirrorKey/forgetKeys 两代键、编辑遗留 superseded）。
-        - **未做**：把历史 3 条 legacy 接管成 present（需人工 `--fix missing` 或逐条认领）；包 C（定时）。
+        - ~~**未做**：把历史 3 条 legacy 接管成 present（需人工 `--fix missing` 或逐条认领）；包 C（定时）。~~ → 两条均已收口：legacy 由下述 `adopt-legacy.mjs` 清零（`legacy 0`），包 C 由 `reconcile-scheduler.js` 落地并在 17:30 窗口实跑通过（2026-10-26 复核）。
       - **数据核对 + 历史条目处置（2026-10-26 02:00）**：
         - 核对工具 `scripts/audit-mirror.mjs`（只读）：轻量层现存条目 / 每条在 memd 的对应物 / memd 里 `qq-*` 按来源分组（摘要 / 迁移 / 演练 / 其他）/ 孤儿 idem 键。
         - 事实：轻量层只有 2 条有效记忆（黑天炎、沐沐，都是 10-23 的群友印象）；memd 里 41 条 `qq-*` 中 **37 条是自动摘要**（`[群摘要]`/`[聊天摘要]`，机器生成）、1 条 owner 迁移副本、3 条其他。
@@ -223,6 +223,12 @@
         - 日志与状态：`logs/reconcile/scheduler.log` / `scheduler-state.json`；`--retain-days 30` 清旧报告；修完自动重跑一次报告，`latest.json` 反映修复后状态。
         - 实测：临时窗口（02:00）下启动 60 秒后自动跑了一次，`ok 0.1s exit=0 present=2 missing=0 …`，状态落盘；随后改回 17:30 并清 `lastRunAt`，今天 17:30 会跑第一次。
         - 单测 13 项（新增调度窗口判断、通知文案与频控）。配置示例见 `config.example.json` 的 `memory.reconcile`。
+       - **31 收口复核（2026-10-26 21:45，本条标 ✅ 的依据）**：
+         - 代码在位：`src/memory/idem.js`、`mirror-journal.js`、`reconcile.js`、`reconcile-scheduler.js`、`memory-bridge.js` 与 `scripts/reconcile-memory.mjs`、`audit-mirror.mjs`、`adopt-legacy.mjs`、`migrate-social-v2-ids.mjs`、`identity-drill.mjs` 全部存在。
+         - 定时任务实跑：`logs/reconcile/scheduler-state.json` 显示 `lastResult: "ok"`、`lastRunAt` 落在 2026-10-26 17:30 窗口（`latest.json` 的 `generatedAt` 为 `2026-10-26T09:31:13Z`），不是只有手工跑过。
+         - 对账结果：`live 2 / present 2 / legacy 0 / partial 0 / missing 0 / superseded 0 / forgetQueue 0`——五桶全平，漂移为零。
+         - 孤儿 idem 键从记录时的 39 涨到 66、`staleDocs` 同步 66：全是 `[群摘要]` / `[聊天摘要]` 自动摘要累积，每条摘要一个 idem 键，本来就不来自轻量层，属预期而非漂移。
+         - 因此本条尾部的「包 B-full 未做」「第 2 步待决」两处旧注一并作废（已加删除线）。
 
 32. ✅ **QQ 桥接看护并入 `memd-watchdog`**（2026-10-25 夜）
     - 起因：桥接原本只有登录时的 `Startup\qq-stack.vbs` 一条链，会话里手动关掉后没人补；沙箱身份也起不了它（`qq-bridge\state\` 与 `config.json` 做过 ACL 收紧）。
@@ -254,7 +260,7 @@
 ## 验收口径（每次都跑）
 
 ```powershell
-pnpm test                              # 158 项
+pnpm test                              # 184 项（2026-10-26 实测 pass 184 / fail 0）
 node scripts\verify-recall.mjs         # 真实语料检索
 node scripts\setup-dsh-mcp.mjs --check
 node scripts\setup-dsh-plugin.mjs --check
