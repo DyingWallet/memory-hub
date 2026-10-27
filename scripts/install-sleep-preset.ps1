@@ -1,4 +1,4 @@
-# 把 sleep-consolidator preset 接入 DSH profile。
+﻿# 把 sleep-consolidator preset 接入 DSH profile。
 # 必须在**普通 PowerShell 窗口**里跑（~/.dsh 对沙箱只读），跑完重启 DSH。
 #
 #   powershell -ExecutionPolicy Bypass -File scripts\install-sleep-preset.ps1
