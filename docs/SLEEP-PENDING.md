@@ -18,6 +18,8 @@
 | `/v1/models` 每个 id 附 `x_dsh` 映射；`/status` 暴露 DSH 真实模型目录 | `ae83482` |
 | **pet 去掉记忆卡**：删 `memory-card.mjs`、`bootstrapText`、bootstrapped 状态、`/admin/memory/refresh`；recallK 3→5、maxChars 800→1500；preset prompt 改为「记忆由服务每轮注入」 | `559cfcf` |
 | `preset/sleep-consolidator.patch.yml` + `scripts/install-sleep-preset.ps1` + `scripts/sleep-consolidate.mjs`（dry-run 实测今天 66 条记录） | `eb9ef7b` |
+| **ID 迁移已执行**（1669 行重写、0 冲突、索引重建、`doc-<hash8>` 生效） | 数据操作，无提交 |
+| 运行时重启验证：新 ID 生成、`block` 输出、secret 通道、pet 去卡全部生效 | 2026-10-27 20:0x |
 
 测试：memory-hub **190 项**、pet **29 项**，全过。
 
@@ -30,13 +32,30 @@
    node scripts\sleep-consolidate.mjs --dry-run
    node scripts\sleep-consolidate.mjs
    ```
-2. **执行 ID 迁移**（不可逆，我留着没跑）：
-   ```powershell
-   # 先停 memd
-   node scripts\migrate-ids.mjs --apply
-   ```
-   dry-run：1520 行 / 1287 个 id / 0 冲突 / 0 条 supersedes 引用；apply 自动备份到 `backups/ids-before-<时间>/`。
-3. **回退留下的 10 条 `source='sleep'` 记忆**：留还是 forget，你定。
+2. **回退留下的 10 条 `source='sleep'` 记忆**：留还是 forget，你定（id 已随迁移更新，见下表）。
+
+## 2026-10-27 19:xx：ID 迁移已执行
+
+- 停 memd → `node scripts/migrate-ids.mjs --apply` → 看护任务拉起。
+- **1669 行全部重写，0 冲突，0 条断裂 supersedes**；备份在 `memory-hub/backups/ids-before-2026-10-27T12-03-38-352Z/`。
+- 索引重建：docs 49 / facts 367 / chunks 835。
+- 验证：旧 `f_` 前缀 **0**、`chat:` 前缀 **0**、新 `fact-` **1662**（其余 7 条是 `import-`）；文档 id 变成 `doc-<hash8>`。
+- 运行时另已重启 memd / pet，新代码（新 id 生成、block 输出、secret 通道、pet 去卡）实测生效。
+
+## 10 条遗留（迁移后的新 id）
+
+| 新 id | 场景 | kind | 内容 |
+|---|---|---|---|
+| `fact-main-tnj07l-a00c` | main | decision | 记忆对账的定时时刻放在下午 17:30 |
+| `fact-main-tnj07l-1f6a` | main | decision | 「离机加密」暂不做，等有需求再设计 |
+| `fact-main-tnj07l-32bb` | main | decision | 记忆整理应当调用模型来做 |
+| `fact-qq-owner-tnj07l-704c` | qq:owner | promise | 明早 8 点 20 前叫他起床 |
+| `fact-qq-owner-tnj07l-406b` | qq:owner | note | 新的一周开始时先写周报 |
+| `fact-qq-owner-tnj07l-3cba` | qq:owner | note | 早上出门时天还没亮 |
+| `fact-qq-private-2791166082-tnj07l-91c2` | qq:private:2791166082 | person | 沐沐拿金融/Oracle 问题来问 |
+| `fact-qq-private-2791166082-tnj07l-056e` | qq:private:2791166082 | person | 沐沐叫我「大肥鱼」并挤兑我 |
+| `fact-qq-group-650866701-tnj07l-c3fa` | qq:group:650866701 | note | 群里添了称呼「鱼摆摆」 |
+| `fact-qq-group-650866701-tnj07l-97c6` | qq:group:650866701 | note | 群友对我发言不设限 |
 
 ## 未完成（等上面第 1 条做完再继续）
 
