@@ -31,12 +31,10 @@ test('root token can update shortTerm, privacy, and archive', async () => {
     'archive.keepMonths',
     'privacy.ownerAudiences',
     'privacy.sensitiveAudiences',
-    'shortTerm.reviewIntervalHours',
     'shortTerm.ttlHours',
   ]);
 
   assert.equal(fixture.config.shortTerm.ttlHours, 12);
-  assert.equal(fixture.config.shortTerm.reviewIntervalHours, 6);
   assert.deepEqual(fixture.config.privacy.sensitiveAudiences, ['main', 'qq:owner', 'wx:owner']);
   assert.deepEqual(fixture.config.privacy.ownerAudiences, ['main', 'wx:owner']);
   assert.deepEqual(fixture.config.archive, { enabled: true, keepMonths: 6 });

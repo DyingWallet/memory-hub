@@ -190,38 +190,24 @@ export function createQQMemoryClient(options: QQMemoryOptions): QQMemoryClient {
             k: recallK,
             scene,
             max_chars: Math.min(300, maxChars),
+            // 记忆块由 memd 渲染（标题、时间、截断、owner 标记都在服务端），
+            // 这里不再自己拼【相关记忆】——三端共用同一份格式。
+            format: 'block',
             ...(recallOptions?.scope ? { scope: recallOptions.scope } : {}),
             ...(recallOptions?.sinceHours ? { since_hours: recallOptions.sinceHours } : {}),
           }),
           identity().catch(() => ''),
         ]);
 
+        const memoryBlock = typeof payload?.block === 'string' ? payload.block.trim() : '';
         const results: any[] = Array.isArray(payload?.results) ? payload.results : [];
-        if (results.length === 0 && identityLine.length === 0) return null;
+        if (memoryBlock.length === 0 && identityLine.length === 0) return null;
 
-        const lines: string[] = [];
-        if (identityLine.length > 0) lines.push(`【长期记忆】${identityLine}`);
-        if (results.length > 0) {
-          lines.push('【相关记忆】');
-          let used = lines.join('\n').length;
-          for (const [index, item] of results.entries()) {
-            const text = String(item?.render?.text ?? item?.text ?? '')
-              .replace(/\s+/g, ' ')
-              .trim();
-            if (text.length === 0) continue;
-            const borrowed = item?.disclosure === 'owner_initiated' ? '（对方自己提起过的记忆）' : '';
-            const line = `${index + 1}. ${borrowed}${text}`;
-            if (used + line.length + 1 > maxChars) break;
-            lines.push(line);
-            used += line.length + 1;
-          }
-        }
-        const block = lines.join('\n').trim();
-        const reviewHint =
-          payload?.review?.should_review === true
-            ? '【记忆回顾】有短期记忆待回顾：用 mcp__memory__memory_review 查看，挑重要的用 mcp__memory__memory_persist 转长期，其余让它自然过期。'
-            : '';
-        return [block, reviewHint].filter((part) => part.length > 0).join('\n\n');
+        // 身份那一句来自 /v1/bootstrap，不属于记忆块，单独放最前面。
+        const parts: string[] = [];
+        if (identityLine.length > 0) parts.push(`【身份】${identityLine}`);
+        if (memoryBlock.length > 0) parts.push(memoryBlock);
+        return parts.join('\n\n');
       } catch (error) {
         // Silent by contract: a missing memd must never delay or break a wake-up.
         return null;

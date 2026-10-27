@@ -43,10 +43,8 @@ import {
   type IngestResponse,
   type MemoryKind,
   type MemoryResult,
-  type PersistResponse,
   type RecallResponse,
   type RecentResponse,
-  type ReviewResponse,
   type SearchResponse,
   type TimelineItem,
   type TimelineRequest,
@@ -63,11 +61,10 @@ import { loadConfig, type ServerConfig } from './config.js';
 import { getMeta, readStats, setMeta, type Db } from './db.js';
 import { errors } from './errors.js';
 import { appendFact, forgetFact, loadAudienceCard, loadIdentity, type FactRecord } from './indexer.js';
-import { getChunkOrDoc, liveMessages, recentDocs, reviewCandidates, searchChunks, timelineDocs, type SearchHit } from './search.js';
+import { getChunkOrDoc, liveMessages, recentDocs, searchChunks, timelineDocs, type SearchHit } from './search.js';
 import { cleanIngestText } from './ingest-filter.js';
-import { lastReviewAt, markReviewSeen, reminderSince, shouldReview } from './review.js';
 import { visibilityClause } from './visibility.js';
-import { renderRecallBlock } from './recall-format.js';
+import { renderMemoryBlock, renderRecallBlock } from './recall-format.js';
 import { dedupeKey, isNearDuplicate, normalizeForDedupe } from './dedupe.js';
 import type { SemanticManager } from './semantic.js';
 import type { TokenStore } from './tokens.js';
@@ -112,6 +109,17 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return searchChunks(db, params);
   };
 
+/**
+ * `source` 表示「这条记忆从哪个端来」，不是场景名。pet 场景写 pet——以前一律
+ * 落成 `qq`，按来源统计或回滚时会把桌宠的记忆一起算进 QQ。
+ */
+function sourceForScene(scene: string): TFactRecord['source'] {
+  if (scene === 'main') return 'main';
+  if (scene.startsWith('qq:')) return 'qq';
+  if (scene === 'pet') return 'pet';
+  return 'qq';
+}
+
   const finish = (
     route: string,
     auth: AuthContext,
@@ -120,6 +128,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     query?: string,
     denied = 0,
     extras: { group?: string; requester_hash?: string } = {},
+    skipped = 0,
   ): void => {
     audit.append({
       ts: new Date().toISOString(),
@@ -129,6 +138,9 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       ...(query !== undefined ? { query_hash: sha256Hex(query).slice(0, 16) } : {}),
       ids,
       denied,
+      // ingest 的「跳过」（重复 / 清洗过滤）不是权限拒绝，分开记，否则审计里
+      // 会堆出一大串 denied，把真正的越权告警淹掉。
+      ...(skipped > 0 ? { skipped } : {}),
       ms: Math.round(performance.now() - started),
       ...(extras.group ? { group: extras.group } : {}),
       ...(extras.requester_hash ? { requester_hash: extras.requester_hash } : {}),
@@ -545,7 +557,10 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   /* ---------------------------------------------------------------- */
   /* recent                                                           */
   /* ---------------------------------------------------------------- */
-  app.post<{ Body: { k?: number; scene?: string; kinds?: MemoryKind[] }; Reply: RecentResponse }>(
+  app.post<{
+    Body: { k?: number; scene?: string; kinds?: MemoryKind[]; format?: 'block'; stage?: 'short' | 'long' };
+    Reply: RecentResponse;
+  }>(
     routeByOperationId('recent').path,
     {
       schema: {
@@ -563,9 +578,22 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         clamp(request.body.k ?? 5, 1, 10),
         request.body.kinds,
         restrictionFor(auth.view.scopes, auth.scene, config.privacy),
+        undefined,
+        request.body.stage,
       );
       finish('recent', auth, started, docs.map((doc) => doc.id));
-      return { results: docs.map(docToMemoryResult) };
+      const results = docs.map(docToMemoryResult);
+      return {
+        results,
+        ...(request.body.format === 'block'
+          ? {
+              block: renderMemoryBlock(results, {
+                maxChars: 1200,
+                title: '【最近记下的】（按时间倒序，不是「相关」）',
+              }),
+            }
+          : {}),
+      };
     },
   );
 
@@ -716,14 +744,6 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         results.filter((result) => result.stage === 'short').map((result) => result.id),
         config,
       );
-      const shortCount = (
-        db
-          .prepare("SELECT COUNT(*) AS n FROM docs WHERE stage = 'short' AND scene = ? AND (expires_at IS NULL OR expires_at > ?)")
-          .get(auth.scene, Date.now()) as { n: number }
-      ).n;
-      const lastReview = lastReviewAt(db, auth.scene);
-      const reminder = reminderSince(db, auth.scene);
-      const shouldReviewNow = shouldReview(db, auth.scene, config.shortTerm.reviewIntervalHours, shortCount > 0);
       finish('recall', auth, started, results.map((result) => result.id));
       return {
         keywords,
@@ -737,11 +757,6 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
               }),
             }
           : {}),
-        review: {
-          should_review: shouldReviewNow,
-          ...(reminder ? { reminder_since: reminder } : {}),
-          ...(lastReview > 0 ? { last_reviewed_at: new Date(lastReview).toISOString() } : {}),
-        },
       };
     },
   );
@@ -819,7 +834,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       tags?: string[];
       audience?: string[];
       privacy?: 'normal' | 'personal' | 'work' | 'financial' | 'secret';
-      source?: 'main' | 'qq' | 'import' | 'work';
+      source?: 'main' | 'qq' | 'import' | 'sleep' | 'pet';
       scene?: string;
       subject?: 'owner' | 'self' | 'other';
       supersedes?: string;
@@ -905,7 +920,9 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         ...(body.tags ? { tags: body.tags } : {}),
         audience,
         privacy,
-        source: body.source ?? (auth.scene === 'main' ? 'main' : 'qq'),
+        // 只有 root 能标来源：否则群令牌能把自己写的东西伪装成 sleep / import，
+        // 回滚时会误删或漏删。
+        source: hasRootScope(auth.view.scopes) && body.source ? body.source : sourceForScene(auth.scene),
         device: 'memd',
         scene: auth.scene,
         subject,
@@ -1004,14 +1021,24 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
           continue;
         }
         const text = cleaned.text;
-        const id = message.message_id
-          ? `chat:${auth.scene}:${sha256Hex(String(message.message_id)).slice(0, 16)}`
-          : `chat:${auth.scene}:${sha256Hex(`${text}\u0000${now}\u0000${Math.random()}`).slice(0, 16)}`;
-        const exists = db.prepare('SELECT 1 FROM docs WHERE id = ?').get(id);
-        if (exists) {
-          skipped += 1;
-          continue;
+        // id 统一走 `<source>-<scene>-<time36>-<rand4>`；幂等改由 source_message_id
+        // 承担。它不是一个裸的 provider id：QQ 会在同一个会话里复用短 messageId，
+        // 只用 id 当键会把「第二条不同的消息」当成重复丢掉，所以键是
+        // `<messageId>#<内容 hash 前 12 位>`。同一条消息重放键相同 → 跳过；
+        // 同 id 不同内容键不同 → 两条都留下。
+        const sourceMessageId = message.message_id
+          ? `${String(message.message_id)}#${sha256Hex(text).slice(0, 12)}`
+          : null;
+        if (sourceMessageId) {
+          const exists = db
+            .prepare('SELECT 1 FROM docs WHERE scene = ? AND source_message_id = ?')
+            .get(auth.scene, sourceMessageId);
+          if (exists) {
+            skipped += 1;
+            continue;
+          }
         }
+        const id = newFactId({ now, scene: auth.scene });
         const record: FactRecord = {
           schema_version: 1,
           id,
@@ -1020,197 +1047,28 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
           text,
           audience,
           privacy: 'normal',
-          source: auth.scene === 'main' ? 'main' : 'qq',
+          source: sourceForScene(auth.scene),
           device: 'memd',
           scene: auth.scene,
           stage: 'short',
           expires_at: new Date(expiresAt).toISOString(),
           recall_count: 0,
-          ...(message.message_id ? { source_message_id: String(message.message_id) } : {}),
+          // 原始发送时间：桥接补录未读时一批消息的 ts 全是同一入库时刻，
+          // 真正的「什么时候说的」在这里，留给整理脚本显示时刻与排序。
+          ...(message.ts && Number.isFinite(Date.parse(message.ts))
+            ? { sent_at: new Date(message.ts).toISOString() }
+            : {}),
+          ...(sourceMessageId ? { source_message_id: sourceMessageId } : {}),
         };
         appendFact(db, config, record as TFactRecord);
         written += 1;
       }
 
-      finish('ingest', auth, started, [], undefined, skipped);
+      finish('ingest', auth, started, [], undefined, 0, {}, skipped);
       return { written, skipped };
     },
   );
 
-  app.post<{
-    Body: { scene?: string; lookback_hours?: number; limit?: number; status_only?: boolean };
-    Reply: ReviewResponse;
-  }>(
-    routeByOperationId('review').path,
-    {
-      schema: {
-        body: routeByOperationId('review').request,
-        response: responseSchema('review'),
-      },
-    },
-    async (request) => {
-      const started = performance.now();
-      const body = request.body;
-      const auth = authenticate(request.headers.authorization, tokens, body.scene);
-      const lookbackHours = clamp(body.lookback_hours ?? config.shortTerm.reviewLookbackHours, 1, 24 * 14);
-      const limit = clamp(body.limit ?? config.shortTerm.reviewLimit, 1, 100);
-      const candidates = reviewCandidates(
-        db,
-        auth.view,
-        auth.scene,
-        restrictionFor(auth.view.scopes, auth.scene, config.privacy),
-        { lookbackMs: lookbackHours * 3_600_000, limit },
-      );
-      const lastReview = lastReviewAt(db, auth.scene);
-      const reminder = reminderSince(db, auth.scene);
-      const shouldReviewNow = shouldReview(db, auth.scene, config.shortTerm.reviewIntervalHours, candidates.length > 0);
-      if (!body.status_only && candidates.length > 0) {
-        // Looking at the list counts as "reviewed"; the reminder clears so the
-        // next wake does not nag again until the interval elapses.
-        markReviewSeen(db, auth.scene);
-      }
-
-      finish('review', auth, started, candidates.map((candidate) => candidate.id));
-      return {
-        should_review: shouldReviewNow,
-        ...(reminder ? { reminder_since: reminder } : {}),
-        ...(lastReview > 0 ? { last_reviewed_at: new Date(lastReview).toISOString() } : {}),
-        counts: { short: candidates.length, reviewable: candidates.length },
-        results: body.status_only
-          ? []
-          : candidates.map((candidate) => ({
-              id: candidate.id,
-              title: candidate.title,
-              kind: candidate.kind as MemoryKind,
-              render: { type: 'text' as const, text: candidate.text },
-              updated_at: new Date(candidate.updated_at).toISOString(),
-              stage: 'short' as const,
-              ...(candidate.expires_at ? { expires_at: new Date(candidate.expires_at).toISOString() } : {}),
-            })),
-      };
-    },
-  );
-
-  app.post<{
-    Body: { ids: string[]; note?: { kind?: MemoryKind; text: string; tags?: string[] } };
-    Reply: PersistResponse;
-  }>(
-    routeByOperationId('persist').path,
-    {
-      schema: {
-        body: routeByOperationId('persist').request,
-        response: responseSchema('persist'),
-      },
-    },
-    async (request) => {
-      const started = performance.now();
-      const body = request.body;
-      const auth = authenticate(request.headers.authorization, tokens);
-      const restriction = restrictionFor(auth.view.scopes, auth.scene, config.privacy);
-      const now = Date.now();
-      const persisted: string[] = [];
-      const merged: { from: string; into: string }[] = [];
-
-      // Long-term facts visible in this scene are candidates for folding.
-      const longCandidates = db
-        .prepare(
-          `SELECT doc_id, text, audience, privacy FROM chunks
-            WHERE stage = 'long' AND scene = ? ORDER BY updated_at DESC LIMIT 500`,
-        )
-        .all(auth.scene) as { doc_id: string; text: string; audience: string; privacy: string }[];
-
-      for (const id of body.ids) {
-        const hit = getChunkOrDoc(db, id, auth.view, auth.scene, 2000, restriction);
-        if (!hit) continue;
-        const row = db
-          .prepare('SELECT doc_id, text, audience, privacy FROM chunks WHERE doc_id = ? LIMIT 1')
-          .get(id) as { doc_id: string; text: string; audience: string; privacy: string } | undefined;
-        if (!row) continue;
-
-        const duplicate = longCandidates.find(
-          (candidate) =>
-            candidate.doc_id !== id &&
-            candidate.privacy === row.privacy &&
-            candidate.audience === row.audience &&
-            isNearDuplicate(candidate.text, row.text),
-        );
-        if (duplicate) {
-          // Fold: tombstone the short copy, keep the existing long-term fact.
-          forgetFact(db, config, id);
-          merged.push({ from: id, into: duplicate.doc_id });
-          continue;
-        }
-
-        // 先取原状态：UPDATE 之后 stage 就变 long 了，判断不出「这原本是不是短期」。
-        const before = db
-          .prepare('SELECT stage, kind, audience, privacy, source, scene, subject FROM docs WHERE id = ?')
-          .get(id) as
-          | { stage?: string; kind: string; audience: string; privacy: string; source: string; scene: string | null; subject: string | null }
-          | undefined;
-
-        db.prepare("UPDATE docs SET stage = 'long', expires_at = NULL, persisted_at = ? WHERE id = ?").run(now, id);
-        db.prepare("UPDATE chunks SET stage = 'long', expires_at = NULL WHERE doc_id = ?").run(id);
-
-        // 把 long 状态也写进 JSONL。index.db 是可以从 memories/ 重建的，持久化状态不能
-        // 只活在索引里——否则从备份恢复（备份不含 index.db）后，reindex 会把它变回短期，
-        // 等 TTL 到了就被删掉。追加一行同 id 的记录，reindex 时后行覆盖前行。
-        // 只对原本是 short 的记录写：多 chunk 的文档用单个 chunk 文本会截断。
-        if (before?.stage === 'short') {
-          try {
-            appendFact(db, config, {
-              schema_version: 1,
-              id,
-              ts: new Date(now).toISOString(),
-              kind: before.kind as MemoryKind,
-              text: row.text,
-              audience: JSON.parse(before.audience) as string[],
-              privacy: before.privacy,
-              source: before.source,
-              ...(before.scene ? { scene: before.scene } : {}),
-              ...(before.subject ? { subject: before.subject as 'owner' | 'self' | 'other' } : {}),
-              stage: 'long',
-              recall_count: 0,
-              persisted_at: new Date(now).toISOString(),
-            } as TFactRecord);
-          } catch (error) {
-            // 写 JSONL 失败不能回滚已经生效的 persist：索引已经是 long，只是重建能力丢了。
-            // 记一行日志，下一次 persist 或手动迁移可以补。
-            console.error(`[persist] failed to append long row for ${id}: ${(error as Error).message}`);
-          }
-        }
-        persisted.push(id);
-        longCandidates.push({ ...row, doc_id: id, text: hit.text });
-      }
-
-      let noteId: string | undefined;
-      if (body.note && body.note.text.trim().length > 0) {
-        const note: FactRecord = {
-          schema_version: 1,
-          id: newFactId({ now, scene: auth.scene }),
-          ts: new Date(now).toISOString(),
-          kind: body.note.kind ?? 'note',
-          text: body.note.text.trim(),
-          audience: normalizeAudience(undefined, body.note.kind ?? 'note', auth.scene),
-          privacy: 'normal',
-          source: auth.scene === 'main' ? 'main' : 'qq',
-          device: 'memd',
-          scene: auth.scene,
-          stage: 'long',
-          ...(body.note.tags ? { tags: body.note.tags } : {}),
-        };
-        appendFact(db, config, note as TFactRecord);
-        noteId = note.id;
-      }
-
-      markReviewSeen(db, auth.scene, now);
-      finish('persist', auth, started, persisted);
-      return {
-        persisted,
-        ...(merged.length > 0 ? { merged } : {}),
-        ...(noteId ? { note_id: noteId } : {}),
-      };
-    },
-  );
 
   /* ---------------------------------------------------------------- */
   /* audience                                                         */
@@ -1385,13 +1243,21 @@ function touchShortTerm(db: Db, ids: string[], config: ServerConfig): void {
   }
 }
 
-function docToMemoryResult(doc: { id: string; title: string; kind: string; updated_at: number; text: string }): MemoryResult {
+function docToMemoryResult(doc: {
+  id: string;
+  title: string;
+  kind: string;
+  updated_at: number;
+  text: string;
+  stage?: string;
+}): MemoryResult {
   return {
     id: doc.id,
     title: doc.title,
     kind: doc.kind as MemoryKind,
     render: { type: 'text', text: truncate(doc.text, 400) },
     updated_at: new Date(doc.updated_at).toISOString(),
+    stage: doc.stage === 'short' ? 'short' : 'long',
   };
 }
 

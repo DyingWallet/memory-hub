@@ -41,7 +41,10 @@ export const MEMORY_KINDS = [
 export const TMemoryKind = Type.Union(MEMORY_KINDS.map((v) => Type.Literal(v)));
 export type MemoryKind = Static<typeof TMemoryKind>;
 
-export const SOURCE_VALUES = ['main', 'qq', 'import', 'work'] as const;
+// `sleep` = 夜间整理产出（整理会话写入，只有 root 令牌能标）。存在的意义是让
+// 「按来源整批撤回」有抓手：整理写错了能一次 forget，而不是一条条翻。
+// `pet` 同理——桌宠写的东西不该混进 `qq`，否则按来源统计/回滚会串。
+export const SOURCE_VALUES = ['main', 'qq', 'import', 'sleep', 'pet'] as const;
 export const TSource = Type.Union(SOURCE_VALUES.map((v) => Type.Literal(v)));
 export type Source = Static<typeof TSource>;
 
@@ -334,13 +337,24 @@ export const TRecentRequest = Type.Object(
     k: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
     scene: Type.Optional(Type.String({ maxLength: 120 })),
     kinds: Type.Optional(Type.Array(TMemoryKind, { maxItems: 16 })),
+    /**
+     * 只取某一层。夜间整理要拿「最近的长期记忆」做查重参照——短期聊天每秒在写，
+     * 按 updated_at 倒序取 10 条永远是短期，过滤完只剩一两条。
+     */
+    stage: Type.Optional(Type.Union([Type.Literal('short'), Type.Literal('long')])),
+    // 和 /v1/recall 一样：传 "block" 时多返一段服务端渲染好的文本，
+    // 消费端不再自己拼格式（三端共用同一套）。
+    format: Type.Optional(Type.Literal('block')),
   },
   { additionalProperties: false },
 );
 export type RecentRequest = Static<typeof TRecentRequest>;
 
 export const TRecentResponse = Type.Object(
-  { results: Type.Array(TMemoryResult) },
+  {
+    results: Type.Array(TMemoryResult),
+    block: Type.Optional(Type.String()),
+  },
   { additionalProperties: false },
 );
 export type RecentResponse = Static<typeof TRecentResponse>;
@@ -400,17 +414,6 @@ export const TRecallResponse = Type.Object(
     results: Type.Array(TMemoryResult),
     /** Newest chat from other scenes (only when the request asked for `live`). */
     live: Type.Optional(Type.Array(TMemoryResult)),
-    /** Daily review state for this scene. */
-    review: Type.Optional(
-      Type.Object(
-        {
-          should_review: Type.Boolean(),
-          reminder_since: Type.Optional(Type.String()),
-          last_reviewed_at: Type.Optional(Type.String()),
-        },
-        { additionalProperties: false },
-      ),
-    ),
     /** Ready-to-inject prompt block, only when the request asked for `format: "block"`. */
     block: Type.Optional(Type.String()),
   },
@@ -517,67 +520,7 @@ export const TIngestResponse = Type.Object(
 );
 export type IngestResponse = Static<typeof TIngestResponse>;
 
-export const TReviewRequest = Type.Object(
-  {
-    scene: Type.Optional(Type.String({ maxLength: 120 })),
-    lookback_hours: Type.Optional(Type.Integer({ minimum: 1, maximum: 24 * 14 })),
-    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
-    /** Only report status + counts (cheap; no item payload, no side effects). */
-    status_only: Type.Optional(Type.Boolean()),
-  },
-  { additionalProperties: false },
-);
-export type ReviewRequest = Static<typeof TReviewRequest>;
 
-export const TReviewResponse = Type.Object(
-  {
-    should_review: Type.Boolean(),
-    reminder_since: Type.Optional(Type.String()),
-    last_reviewed_at: Type.Optional(Type.String()),
-    counts: Type.Object(
-      { short: Type.Integer(), reviewable: Type.Integer() },
-      { additionalProperties: false },
-    ),
-    results: Type.Array(TMemoryResult),
-  },
-  { additionalProperties: false },
-);
-export type ReviewResponse = Static<typeof TReviewResponse>;
-
-export const TPersistRequest = Type.Object(
-  {
-    /** Short-term memory ids to promote to long-term. */
-    ids: Type.Array(Type.String({ maxLength: 200 }), { maxItems: 50 }),
-    /** Optional distilled note written as a new long-term memory. */
-    note: Type.Optional(
-      Type.Object(
-        {
-          kind: Type.Optional(TMemoryKind),
-          text: Type.String({ minLength: 1, maxLength: 4000 }),
-          tags: Type.Optional(Type.Array(Type.String({ maxLength: 64 }), { maxItems: 24 })),
-        },
-        { additionalProperties: false },
-      ),
-    ),
-  },
-  { additionalProperties: false },
-);
-export type PersistRequest = Static<typeof TPersistRequest>;
-
-export const TPersistResponse = Type.Object(
-  {
-    persisted: Type.Array(Type.String()),
-    /** Short memories folded into an existing long-term fact. */
-    merged: Type.Optional(
-      Type.Array(
-        Type.Object({ from: Type.String(), into: Type.String() }, { additionalProperties: false }),
-      ),
-    ),
-    note_id: Type.Optional(Type.String()),
-  },
-  { additionalProperties: false },
-);
-export type PersistResponse = Static<typeof TPersistResponse>;
 
 /* ------------------------------------------------------------------ */
 /* write                                                              */
@@ -612,6 +555,11 @@ export const TFactRecord = Type.Object(
     recall_count: Type.Optional(Type.Integer({ minimum: 0 })),
     persisted_at: Type.Optional(Type.String({ maxLength: 40 })),
     source_message_id: Type.Optional(Type.String({ maxLength: 200 })),
+    /**
+     * 原始发送时间。`ts` 是入库时刻——桥接补录未读时一批消息的 ts 全一样，
+     * 真正的「什么时候说的」在这里。整理脚本按它显示时刻与排序。
+     */
+    sent_at: Type.Optional(Type.String({ maxLength: 40 })),
     meta: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
   },
   { additionalProperties: true },
@@ -681,9 +629,6 @@ export const TConfigUpdateRequest = Type.Object(
           enabled: Type.Optional(Type.Boolean()),
           ttlHours: Type.Optional(Type.Number({ minimum: 0.1, maximum: 720 })),
           maxTtlHours: Type.Optional(Type.Number({ minimum: 0.1, maximum: 8760 })),
-          reviewLookbackHours: Type.Optional(Type.Number({ minimum: 1, maximum: 336 })),
-          reviewLimit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
-          reviewIntervalHours: Type.Optional(Type.Number({ minimum: 1, maximum: 168 })),
         },
         { additionalProperties: false },
       ),
@@ -734,9 +679,6 @@ export const TConfigResponse = Type.Object(
         enabled: Type.Boolean(),
         ttlHours: Type.Number(),
         maxTtlHours: Type.Number(),
-        reviewLookbackHours: Type.Number(),
-        reviewLimit: Type.Integer(),
-        reviewIntervalHours: Type.Number(),
       },
       { additionalProperties: false },
     ),

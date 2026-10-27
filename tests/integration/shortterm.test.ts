@@ -38,36 +38,6 @@ test('ordinary chat is ingested as short-term memory and can be recalled', async
   assert.ok(hit.expires_at, 'short memories carry an expiry');
 });
 
-test('review lists short-term candidates and persists them as long-term', async () => {
-  const review = await post('/v1/review', fixture.tokens.main.token, {});
-  const body = review.json();
-  assert.equal(body.should_review, true);
-  const candidate = (body.results as { id: string; render: { text: string } }[]).find((item) =>
-    item.render.text.includes('快递'),
-  );
-  assert.ok(candidate, JSON.stringify(body));
-
-  const persisted = await post('/v1/persist', fixture.tokens.main.token, { ids: [candidate.id] });
-  assert.deepEqual(persisted.json().persisted, [candidate.id]);
-
-  const search = await post('/v1/search', fixture.tokens.main.token, { query: '快递' });
-  assert.equal(search.json().results[0].stage, 'long');
-  assert.equal(search.json().results[0].expires_at, undefined);
-
-  const afterReview = await post('/v1/review', fixture.tokens.main.token, {});
-  assert.equal(afterReview.json().counts.short, 0);
-});
-
-test('status_only reports counts without item payload', async () => {
-  await post('/v1/ingest', fixture.tokens.main.token, {
-    messages: [{ message_id: 'm-2', role: 'user', text: '明天要记得回复邮件' }],
-  });
-  const review = await post('/v1/review', fixture.tokens.main.token, { status_only: true });
-  assert.equal(review.json().should_review, false, 'just reviewed, so not due yet');
-  assert.ok(review.json().counts.short >= 1);
-  assert.deepEqual(review.json().results, []);
-});
-
 test('expired short-term memories disappear from search and are purged', async () => {
   const past = new Date(Date.now() - 3_600_000).toISOString();
   const written = await post('/v1/write', fixture.tokens.main.token, {
@@ -123,37 +93,3 @@ test('group-scoped short-term chat stays inside the group', async () => {
   assert.equal(privateB.json().results.length, 0);
 });
 
-test('persisting a duplicate short memory folds it into the existing long fact', async () => {
-  const text = '周六去美术馆看展';
-  await post('/v1/ingest', fixture.tokens.main.token, {
-    messages: [{ message_id: 'fold-1', role: 'user', text }],
-  });
-  const firstReview = await post('/v1/review', fixture.tokens.main.token, {});
-  const first = (firstReview.json().results as { id: string; render: { text: string } }[]).find((item) =>
-    item.render.text.includes('美术馆'),
-  );
-  assert.ok(first);
-  const firstPersist = await post('/v1/persist', fixture.tokens.main.token, { ids: [first.id] });
-  assert.deepEqual(firstPersist.json().persisted, [first.id]);
-
-  await post('/v1/ingest', fixture.tokens.main.token, {
-    messages: [{ message_id: 'fold-2', role: 'user', text: `  ${text} ` }],
-  });
-  const secondReview = await post('/v1/review', fixture.tokens.main.token, {});
-  const second = (secondReview.json().results as { id: string; render: { text: string } }[]).find((item) =>
-    item.render.text.includes('美术馆'),
-  );
-  assert.ok(second);
-  assert.notEqual(second.id, first.id);
-
-  const secondPersist = await post('/v1/persist', fixture.tokens.main.token, { ids: [second.id] });
-  assert.deepEqual(secondPersist.json().persisted, []);
-  assert.deepEqual(secondPersist.json().merged, [{ from: second.id, into: first.id }]);
-
-  const search = await post('/v1/search', fixture.tokens.main.token, { query: '美术馆' });
-  const hits = (search.json().results as { id: string; stage: string }[]).filter((hit) => hit.stage === 'long');
-  assert.equal(hits.length, 1, JSON.stringify(search.json().results));
-  const only = hits[0];
-  assert.ok(only);
-  assert.equal(only.id, first.id);
-});

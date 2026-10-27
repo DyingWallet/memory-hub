@@ -40,8 +40,8 @@ test('owner can pull recent group messages for a vague question', async () => {
   });
   assert.equal(recall.statusCode, 200, JSON.stringify(recall.json()));
   const ids = (recall.json().results as { id: string }[]).map((item) => item.id);
-  assert.ok(ids.some((id) => id.includes('qq:group:')), JSON.stringify(ids));
-  assert.equal(ids.some((id) => id.includes('qq:private:')), false, 'third-party private must stay out');
+  assert.ok(ids.some((id) => /qq[:\-]group[:\-]/.test(id)), JSON.stringify(ids));
+  assert.equal(ids.some((id) => /qq[:\-]private[:\-]/.test(id)), false, 'third-party private must stay out');
 });
 
 test('scope=groups is owner-only', async () => {

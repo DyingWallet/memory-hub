@@ -12,6 +12,8 @@
  * 语义不可用时默认只提示并退出 0（降级是预期行为）；带 --require-semantic 则退出 1。
  */
 import { performance } from 'node:perf_hooks';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { loadConfig } from '../packages/server/dist/config.js';
 import { openDb } from '../packages/server/dist/db.js';
 import { reindexAll } from '../packages/server/dist/indexer.js';
@@ -20,6 +22,8 @@ import { SemanticManager } from '../packages/server/dist/semantic.js';
 
 const argv = process.argv.slice(2);
 const requireSemantic = argv.includes('--require-semantic');
+const baselineMode = argv.includes('--baseline');
+const updateBaseline = argv.includes('--update');
 const extraQueries = argv.filter((arg) => !arg.startsWith('--'));
 
 const config = loadConfig();
@@ -30,6 +34,119 @@ console.log(`index: docs=${index.docs} facts=${index.facts} chunks=${index.chunk
 // 与服务里 root token 的可见范围一致：主会话可读敏感。
 const token = { surface: 'main', scopes: ['*', 'sensitive:read', 'work:read'], scenes: ['main'] };
 const params = (query) => ({ query, k: 3, maxChars: 80, token, scene: 'main' });
+
+/* ------------------------------------------------------------------ */
+/* 检索基线（方案第十三节）：同一批查询、同一批锚点，每次比排名升降。      */
+/* 只报告，不阻塞——退出码恒 0（除非还没生成基线）。                      */
+/* ------------------------------------------------------------------ */
+
+const BASELINE_FILE = join(config.dataDir, 'recall-baseline.json');
+
+// 12 条查询，覆盖中文短语 / 长口语 / 时间线 / 跨场景 / 近期。
+// 故意用「跟正文措辞不完全一致」的说法，才能测到召回而不是精确串匹配。
+const BASELINE_QUERIES = [
+  { id: 'q01', query: '记忆对账', note: '中文短语' },
+  { id: 'q02', query: '桌宠', note: '中文短语' },
+  { id: 'q03', query: 'QQ 桥接', note: '中文短语' },
+  { id: 'q04', query: '夜间整理', note: '中文短语' },
+  { id: 'q05', query: '我当时是怎么判断要不要上 GPU 的', note: '长口语' },
+  { id: 'q06', query: '计划任务为什么会弹黑框', note: '长口语' },
+  { id: 'q07', query: '打游戏的时候会不会被占资源', note: '长口语' },
+  { id: 'q08', query: '上个月都做了些什么', note: '时间线类' },
+  { id: 'q09', query: '昨晚实现了什么', note: '时间线类' },
+  { id: 'q10', query: '群里聊天说的内容', note: '跨场景' },
+  { id: 'q11', query: '今天做了什么', note: '近期' },
+  { id: 'q12', query: '最近定了哪些决定', note: '近期' },
+];
+
+function runBaseline(update) {
+  console.log('== 检索基线（只报告，不阻塞）==\n');
+  const current = BASELINE_QUERIES.map((item) => {
+    const outcome = searchChunks(db, { query: item.query, k: 10, maxChars: 600, token, scene: 'main' });
+    return { ...item, hits: outcome.hits };
+  });
+
+  if (update) {
+    const payload = {
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      // 锚点 = 当前 top-3 的 id（去掉 chunk 的 `#序号`，落到文档/记忆本身——
+      // 否则文档一更新分块重排，锚点就集体失效）。比「记全部命中」稳，也比「只记 top1」宽容。
+      queries: current.map((item) => ({
+        id: item.id,
+        query: item.query,
+        note: item.note,
+        top: [...new Set(item.hits.map((hit) => String(hit.id).split('#')[0]))].slice(0, 3),
+      })),
+    };
+    writeFileSync(BASELINE_FILE, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+    console.log(`基线已写入 ${BASELINE_FILE}（${payload.queries.length} 条查询，锚点 top-3）\n`);
+  }
+
+  if (!existsSync(BASELINE_FILE)) {
+    console.error(`还没有基线文件：${BASELINE_FILE}`);
+    console.error('先生成一次：node scripts/verify-recall.mjs --baseline --update');
+    return 1;
+  }
+
+  const saved = JSON.parse(readFileSync(BASELINE_FILE, 'utf8'));
+  const byId = new Map((saved.queries ?? []).map((item) => [item.id, item]));
+  const tally = { same: 0, up: 0, down: 0, gone: 0, missing: 0 };
+  const details = [];
+
+  for (const item of current) {
+    const anchor = byId.get(item.id);
+    if (!anchor) {
+      tally.missing += 1;
+      continue;
+    }
+    const ranked = [...new Set(item.hits.map((hit) => String(hit.id).split('#')[0]))];
+    const anchors = (anchor.top ?? []).map((id, index) => ({
+      id,
+      before: index + 1,
+      after: ranked.indexOf(id) + 1, // 0 = 掉出 top-10
+    }));
+    // 判定看主锚点（基线里的 top-1）：平均法会把「1↔3 互换」判成持平，
+    // 而那正是最值得报的退化。
+    const primary = anchors[0];
+    const aux = anchors.slice(1);
+    const auxAlive = aux.filter((entry) => entry.after > 0).length;
+    let verdict;
+    if (!primary || primary.after === 0) verdict = 'gone';
+    else if (primary.after > primary.before) verdict = 'down';
+    else if (primary.after < primary.before) verdict = 'up';
+    else if (aux.length > 0 && auxAlive === 0) verdict = 'down'; // 主锚点没动、其余全掉出去
+    else verdict = 'same';
+    tally[verdict] += 1;
+    details.push({ item, verdict, anchors, anchor });
+  }
+
+  const label = { same: '保持', up: '上升', down: '下降', gone: '未命中' };
+  for (const { item, verdict, anchors, anchor } of details) {
+    const moved = anchors.map((entry) => `${entry.before}→${entry.after || '出局'}`).join(' ');
+    const query = item.query.length > 16 ? `${item.query.slice(0, 16)}…` : item.query;
+    console.log(`${label[verdict]}  ${item.id}「${query}」  ${moved}`);
+    if (verdict === 'gone') {
+      console.log(`      锚点全部掉出 top-10（基线记了 ${anchor.top.length} 个）：确认是不是被 forget，或索引没重建`);
+    }
+  }
+
+  const total = tally.same + tally.up + tally.down + tally.gone;
+  console.log(
+    `\n${total} 查询：${tally.same} 保持，${tally.up} 上升，${tally.down} 下降，${tally.gone} 未命中` +
+      (tally.missing > 0 ? `，${tally.missing} 条基线里没有` : ''),
+  );
+  if (tally.down > 0 || tally.gone > 0) {
+    console.log('排名变差是报告项，不是失败——确认这是有意改动后再 --update 重写基线。');
+  }
+  return 0;
+}
+
+if (baselineMode) {
+  const code = runBaseline(updateBaseline);
+  db.close();
+  process.exit(code);
+}
 
 const BASELINE = ['记忆', '桌宠', '记忆简报', 'QQ 桥接', '股票'];
 const baseline = extraQueries.length > 0 ? [...BASELINE, ...extraQueries] : BASELINE;

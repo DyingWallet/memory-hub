@@ -6,7 +6,6 @@ import { openDb, purgeExpired, type Db } from './db.js';
 import { ApiError } from './errors.js';
 import { reindexAll, type ReindexResult } from './indexer.js';
 import { registerRoutes } from './routes.js';
-import { startReviewScheduler } from './review.js';
 import { SemanticManager } from './semantic.js';
 import { TokenStore } from './tokens.js';
 
@@ -143,14 +142,8 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     void semantic.sync(64).catch((error: unknown) => app.log.warn({ err: error }, 'semantic sync failed'));
   }
 
-  // Daily review nudge: mark due scenes even when no client is awake; the next
-  // recall/review sees the pending flag. Timer is unref'd and stopped on close.
-  if (config.shortTerm.enabled) {
-    const stopReview = startReviewScheduler(db, config.shortTerm.reviewIntervalHours, (scenes) => {
-      app.log.debug({ scenes }, 'review due');
-    });
-    app.addHook('onClose', async () => stopReview());
-  }
+  // 夜间整理（supervisor 每天一次）替代了原来的 review 定时器：不再在 memd 里
+  // 标记「哪些场景该回顾了」，整理会话自己读当天全部记忆。
 
   app.addHook('onClose', async () => {
     if (semanticSync) clearInterval(semanticSync);

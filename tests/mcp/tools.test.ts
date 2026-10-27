@@ -79,12 +79,6 @@ const fakeApi: MemoryApi = {
   async forget(id) {
     return { forgotten: [id], missing: [] };
   },
-  async review() {
-    return { should_review: false, counts: { short: 0, reviewable: 0 }, results: [] };
-  },
-  async persist(ids) {
-    return { persisted: ids };
-  },
   async capabilities() {
     return {
       protocol: 'v1',
@@ -128,10 +122,8 @@ test('all v1 tools are registered with descriptions', async () => {
     'memory_call',
     'memory_forget',
     'memory_get',
-    'memory_persist',
     'memory_recall',
     'memory_recent',
-    'memory_review',
     'memory_search',
     'memory_timeline',
     'memory_write',

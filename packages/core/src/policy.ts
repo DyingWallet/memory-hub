@@ -8,7 +8,9 @@
  *  - a token with `sensitiveScope` (default `sensitive:read`) may additionally
  *    read/write `sensitive` memories, which are pinned to the owner's own
  *    audiences;
- *  - `secret` is never readable and never writable through the API.
+ *  - `secret` needs `secret:read` / `secret:write` (root `*` has both) and is
+ *    pinned to `secretAudiences` (default `main`), so group / third-party
+ *    private / pet tokens never see it. It is plaintext on disk, not encrypted.
  *
  * Older data may still carry `work` / `financial` / ... values; the migration
  * rewrites them to `sensitive` and keeps the old name as a tag. Any non

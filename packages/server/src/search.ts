@@ -223,6 +223,8 @@ export interface RecentDoc {
   kind: string;
   updated_at: number;
   text: string;
+  /** `short` 会过期，`long` 是长期。夜间整理只拿长期记忆做查重参照。 */
+  stage?: string;
 }
 
 /** `get` accepts a chunk id (from search) or a doc id (from bootstrap/recent). */
@@ -272,6 +274,7 @@ export function recentDocs(
   kinds?: readonly string[],
   restriction?: Restriction,
   subject?: string,
+  stage?: 'short' | 'long',
 ): RecentDoc[] {
   const visibility = visibilityClause(token, scene, 'c', restriction ? { restriction } : {});
   const clauses = [visibility.where];
@@ -279,6 +282,10 @@ export function recentDocs(
   if (kinds && kinds.length > 0) {
     clauses.push(`c.kind IN (${kinds.map(() => '?').join(', ')})`);
     values.push(...kinds);
+  }
+  if (stage) {
+    clauses.push('c.stage = ?');
+    values.push(stage);
   }
   if (subject) {
     clauses.push('c.subject = ?');
@@ -301,6 +308,8 @@ export function recentDocs(
       text: string;
       kind: string;
       updated_at: number;
+      stage: string;
+      expires_at: number | null;
     }[];
 
   const seen = new Set<string>();
@@ -314,6 +323,7 @@ export function recentDocs(
       kind: row.kind,
       updated_at: row.updated_at,
       text: row.text,
+      stage: row.stage === 'short' ? 'short' : 'long',
     });
     if (out.length >= k) break;
   }

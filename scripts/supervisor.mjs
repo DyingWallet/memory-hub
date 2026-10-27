@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
- * memory-hub 的唯一看护：每分钟跑一次，按顺序做四件事。
+ * memory-hub 的唯一看护：每分钟跑一次，按顺序做五件事。
  *
  *   1. memd 活着吗？不在就用 scripts\start.ps1 -NoWait 拉起来（最常见的情况，什么都不做）；
  *   2. config.bridge.enabled 为真时，盯着 QQ 桥接的控制台探活，掉了就起（可选，默认关）；
  *   3. data\metrics.csv 超过 60 分钟没更新 -> 跑一次 scripts\monitor.mjs；
- *   4. 今天的备份目录还不存在、且已过 04:00 -> 跑一次 scripts\backup.mjs。
+ *   4. 今天的备份目录还不存在、且已过 04:00 -> 跑一次 scripts\backup.mjs；
+ *   5. config.sleep.enabled 为真、且过了 config.sleep.at 而今天还没跑成 -> 跑一次夜间整理
+ *      （scripts\sleep-consolidate.mjs，可选，默认关；它自己建 DSH 整理会话）。
  *
  * 为什么合成一个：之前是四个计划任务（登录、看护、监控、备份），触发器各写一份，改一个忘三个，
  * 而且每次都要单独处理「黑框」。现在只有这一个任务，日志也只有一份。
@@ -118,7 +120,7 @@ function writeState(patch) {
   }
 }
 
-function runNodeScript(script, logName) {
+function runNodeScript(script, logName, extraArgs = []) {
   return new Promise((resolve) => {
     mkdirSync(LOG_DIR, { recursive: true });
     const fd = openSync(join(LOG_DIR, logName), 'a');
@@ -135,7 +137,7 @@ function runNodeScript(script, logName) {
     };
     let child;
     try {
-      child = spawn(process.execPath, [join(ROOT, 'scripts', script)], {
+      child = spawn(process.execPath, [join(ROOT, 'scripts', script), ...extraArgs], {
         cwd: ROOT,
         windowsHide: true,
         stdio: ['ignore', fd, fd],
@@ -207,6 +209,51 @@ function startBridge(dir) {
 
 function minutesSince(date) {
   return (Date.now() - date.getTime()) / 60_000;
+}
+
+function localDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * 夜间整理到点了吗？
+ *
+ * 三条都满足才跑：开了开关、过了今天的时刻、今天还没成功跑过。
+ * 另外两种「先别跑」：上一轮还在跑（15 分钟的会话 + 余量，20 分钟内不重起）、
+ * 上一次失败且还在退避窗口里。
+ */
+const SLEEP_PERIODS = ['daily', 'weekly', 'monthly', 'yearly'];
+
+/**
+ * 某个周期到点了吗：开关开着 + 过了今天的 at + 本周期还没成功跑过。
+ * 周/月/年额外有日期门槛（周一 / 1 号 / 1 月 1 日），否则每天都会想跑。
+ */
+function sleepDueFor(period, sleepCfg) {
+  const now = new Date();
+  const today = localDate(now);
+  const state = readState();
+  if (state[`lastSleepSuccessDate_${period}`] === today) return { due: false, reason: 'already ran today' };
+
+  const startedAt = Number(state[`sleepStartedAt_${period}`]) || 0;
+  if (startedAt && minutesSince(new Date(startedAt)) < 20) {
+    return { due: false, reason: `run in progress (${Math.round(minutesSince(new Date(startedAt)))}min)` };
+  }
+
+  const [hour, minute] = String(sleepCfg.at).split(':').map((part) => Number(part));
+  const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour || 0, minute || 0, 0, 0);
+  if (now < target) return { due: false, reason: `before ${sleepCfg.at}` };
+
+  if (period === 'weekly' && now.getDay() !== 1) return { due: false, reason: 'not Monday' };
+  if (period === 'monthly' && now.getDate() !== 1) return { due: false, reason: 'not the 1st' };
+  if (period === 'yearly' && !(now.getMonth() === 0 && now.getDate() === 1)) {
+    return { due: false, reason: 'not Jan 1' };
+  }
+
+  const failedAt = Number(state[`sleepFailedAt_${period}`]) || 0;
+  if (failedAt && minutesSince(new Date(failedAt)) < sleepCfg.retryMinutes) {
+    return { due: false, reason: `retry in ${Math.ceil(sleepCfg.retryMinutes - minutesSince(new Date(failedAt)))}min` };
+  }
+  return { due: true, reason: 'no successful run today' };
 }
 
 function backupDue(backupDir) {
@@ -319,6 +366,43 @@ async function main() {
     log(`backup (${backup.reason}) -> ${result.detail}`);
     actions.push(`backup=${result.ok ? 'ran' : 'FAILED'}`);
     if (!DRY_RUN) writeState({ lastBackupAttemptAt: Date.now() });
+  }
+
+  // 5. 整理（可选，默认关）。四个周期共用一套脚本，各自的 state 键分开：
+  //    daily 每天、weekly 周一、monthly 1 号、yearly 1 月 1 日，都在 config.sleep.at 之后。
+  //    整理者要用 MCP 记忆工具写回，所以 memd 不在就整体跳过，等下一分钟。
+  if (config.sleep.enabled) {
+    const memdUp = await memdHealthy(port);
+    for (const kind of SLEEP_PERIODS) {
+      const due = sleepDueFor(kind, config.sleep);
+      if (!due.due) {
+        actions.push(`sleep-${kind}=skip(${due.reason})`);
+        continue;
+      }
+      if (!memdUp) {
+        actions.push(`sleep-${kind}=skip(memd down)`);
+        continue;
+      }
+      log(`sleep ${kind} (${due.reason}) -> starting`);
+      if (!DRY_RUN) writeState({ [`sleepStartedAt_${kind}`]: Date.now() });
+      const result = DRY_RUN
+        ? { ok: true, detail: 'dry-run' }
+        : await runNodeScript('sleep-consolidate.mjs', `sleep-${kind}.out.log`, [`--period=${kind}`]);
+      log(`sleep-consolidate --period=${kind} -> ${result.detail}`);
+      if (!DRY_RUN) {
+        if (result.ok) {
+          // 退出码 0 也可能是「今天没东西可整理」，同样算当天完成。
+          writeState({
+            [`lastSleepSuccessDate_${kind}`]: localDate(new Date()),
+            [`sleepStartedAt_${kind}`]: 0,
+            [`sleepFailedAt_${kind}`]: 0,
+          });
+        } else {
+          writeState({ [`sleepStartedAt_${kind}`]: 0, [`sleepFailedAt_${kind}`]: Date.now() });
+        }
+      }
+      actions.push(`sleep-${kind}=${result.ok ? 'ran' : 'FAILED'}`);
+    }
   }
 
   heartbeat(actions.join(' '));

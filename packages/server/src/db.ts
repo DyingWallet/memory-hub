@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS docs (
   recall_count INTEGER NOT NULL DEFAULT 0,
   persisted_at INTEGER,
   subject    TEXT NOT NULL DEFAULT 'owner', -- 'owner' | 'self' | 'other'
-  supersedes TEXT                        -- id of the memory this one replaced
+  supersedes TEXT,                        -- id of the memory this one replaced
+  source_message_id TEXT                 -- provider-side id, used for ingest idempotency
 );
 
 CREATE INDEX IF NOT EXISTS docs_path ON docs(path);
@@ -86,6 +87,14 @@ export function openDb(indexFile: string): Db {
   // Indexes over migrated columns must come after the migration: on an existing
   // database SCHEMA runs first, and `docs.subject` does not exist yet there.
   db.exec('CREATE INDEX IF NOT EXISTS docs_subject ON docs(subject);');
+  // Ingest idempotency keys on (scene, source_message_id). The id is a *composite*
+  // key — `<provider id>#<content hash>` — because QQ reuses short message ids
+  // inside one conversation: keying on the bare id silently dropped the second,
+  // different message. Plain (not unique) index is deliberate: pre-migration rows
+  // still carry bare ids that collide, and those are historical only.
+  db.exec(
+    'CREATE INDEX IF NOT EXISTS docs_source_message ON docs(scene, source_message_id) WHERE source_message_id IS NOT NULL;',
+  );
 
   // The index is disposable; on a schema bump just drop and rebuild it.
   const stored = getMeta(db, 'schema_version');
@@ -115,6 +124,7 @@ function migrateColumns(db: Db): void {
   // written before `subject` existed is about the owner.
   add('docs', 'subject', "TEXT NOT NULL DEFAULT 'owner'");
   add('docs', 'supersedes', 'TEXT');
+  add('docs', 'source_message_id', 'TEXT');
   add('chunks', 'stage', "TEXT NOT NULL DEFAULT 'long'");
   add('chunks', 'expires_at', 'INTEGER');
   add('chunks', 'subject', "TEXT NOT NULL DEFAULT 'owner'");

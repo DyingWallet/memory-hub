@@ -17,12 +17,55 @@ import {
 import type { MemoryKind, Privacy, TFactRecord } from '@memsvc/protocol';
 import type { ServerConfig } from './config.js';
 import type { Db } from './db.js';
-import { clearIndex, readStats, setMeta } from './db.js';
-import { listFactFiles, readFactFileLines } from './archive.js';
+import { clearIndex, getMeta, readStats, setMeta } from './db.js';
+import { listFactFiles, readFactFileLines, readFactLines } from './archive.js';
+import { dedupeKey, normalizeForDedupe } from './dedupe.js';
 import { scopesForAudience } from './visibility.js';
 import { tokensForText } from './search.js';
 
 export type FactRecord = TFactRecord;
+
+/**
+ * 从 JSONL 重建 `dedupe:*` 去重键。
+ *
+ * 索引是派生物：`migrate-ids.mjs` 会删掉 index.db 重建，meta 表里那些 `dedupe:*`
+ * 键跟着一起消失，于是同一段内容再写一次就不再被认成重复。这些键是可计算的
+ * （scene + kind + 正文 + audience + privacy + subject），所以能从 JSONL 重建。
+ *
+ * `idem:*` 建不了——它的 key 是客户端传的 idempotency_key，只存在 meta 里，
+ * 重建索引前必须先导出、按 id 映射改写、再写回。
+ */
+export function rebuildDedupeKeys(db: Db, config: ServerConfig): number {
+  let written = 0;
+  for (const line of readFactLines(config.factsDir)) {
+    let record: FactRecord;
+    try {
+      record = JSON.parse(line) as FactRecord;
+    } catch {
+      continue;
+    }
+    if ((record as { deleted?: boolean }).deleted === true) continue;
+    if (record.stage === 'short') continue; // 短期记忆走 ingest，不建内容去重键
+    if (typeof record.id !== 'string' || typeof record.text !== 'string') continue;
+    const audience = normalizeAudience(record.audience, record.kind, record.scene);
+    const privacy = (record.privacy ?? 'normal') as string;
+    const subject = record.subject ?? 'owner';
+    const contentKey = dedupeKey([
+      'fact',
+      record.scene,
+      record.kind,
+      normalizeForDedupe(record.text),
+      [...audience].sort().join(','),
+      privacy,
+      subject,
+    ]);
+    const metaKey = `dedupe:${contentKey}`;
+    if (getMeta(db, metaKey)) continue;
+    setMeta(db, metaKey, record.id);
+    written += 1;
+  }
+  return written;
+}
 
 const SKIP_DIRS = new Set(['.meta', '90-tools', 'facts', 'audiences', 'node_modules']);
 
@@ -181,6 +224,8 @@ interface ReplaceDocInput {
   subject?: string;
   /** Id of the memory this one replaced. */
   supersedes?: string;
+  /** Provider-side message id; drives ingest idempotency (unique per scene). */
+  sourceMessageId?: string;
   chunks: { heading: string; text: string }[];
 }
 
@@ -189,14 +234,15 @@ function replaceDoc(db: Db, input: ReplaceDocInput): void {
   try {
     deleteDocRows(db, input.id);
     db.prepare(
-      `INSERT INTO docs(id, doc_type, path, title, kind, audience, privacy, source, scene, hash, updated_at, stage, expires_at, recall_count, persisted_at, subject, supersedes)
-       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO docs(id, doc_type, path, title, kind, audience, privacy, source, scene, hash, updated_at, stage, expires_at, recall_count, persisted_at, subject, supersedes, source_message_id)
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          doc_type=excluded.doc_type, path=excluded.path, title=excluded.title, kind=excluded.kind,
          audience=excluded.audience, privacy=excluded.privacy, source=excluded.source,
          scene=excluded.scene, hash=excluded.hash, updated_at=excluded.updated_at,
          stage=excluded.stage, expires_at=excluded.expires_at, recall_count=excluded.recall_count,
-         persisted_at=excluded.persisted_at, subject=excluded.subject, supersedes=excluded.supersedes`,
+         persisted_at=excluded.persisted_at, subject=excluded.subject, supersedes=excluded.supersedes,
+         source_message_id=excluded.source_message_id`,
     ).run(
       input.id,
       input.docType,
@@ -215,6 +261,7 @@ function replaceDoc(db: Db, input: ReplaceDocInput): void {
       input.persistedAt ?? null,
       input.subject ?? 'owner',
       input.supersedes ?? null,
+      input.sourceMessageId ?? null,
     );
 
     const insertChunk = db.prepare(
@@ -420,6 +467,7 @@ function upsertFact(db: Db, config: ServerConfig, record: FactRecord, relPath: s
     persistedAt: record.persisted_at ? Date.parse(record.persisted_at) : null,
     subject: record.subject ?? 'owner',
     supersedes: record.supersedes,
+    sourceMessageId: record.source_message_id,
     chunks,
   });
   return true;

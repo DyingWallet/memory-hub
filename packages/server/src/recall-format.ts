@@ -27,6 +27,25 @@ function textOf(result: MemoryResult): string {
   return (text || result.title || '').replace(/\s+/g, ' ').trim();
 }
 
+/** 只渲染记忆列表（不带 live 段）。`/v1/recent` 的 block 也用它，标题可换。 */
+export function renderMemoryBlock(
+  results: readonly MemoryResult[],
+  options: RecallBlockOptions & { title?: string } = {},
+): string {
+  if (results.length === 0) return '';
+  const maxChars = Math.max(200, options.maxChars ?? 1500);
+  const title = options.title ?? '【长期记忆】（只是背景，不要原样复述）';
+  const perLine = Math.max(120, Math.floor(maxChars / Math.max(1, results.length)));
+  const lines = [title];
+  for (const row of results) {
+    const text = textOf(row);
+    if (!text) continue;
+    const marker = row.disclosure === 'owner_initiated' ? '（对方自己提起过的）' : '';
+    lines.push(`- ${marker}${text.slice(0, perLine)}`);
+  }
+  return lines.join('\n').trim();
+}
+
 /** 纯函数：结果 → prompt 块。空结果返回空串。 */
 export function renderRecallBlock(
   results: readonly MemoryResult[],
@@ -48,16 +67,8 @@ export function renderRecallBlock(
     lines.push('');
   }
 
-  if (results.length > 0) {
-    lines.push('【长期记忆】（只是背景，不要原样复述）');
-    const perLine = Math.max(120, Math.floor(maxChars / Math.max(1, results.length)));
-    for (const row of results) {
-      const text = textOf(row);
-      if (!text) continue;
-      const marker = row.disclosure === 'owner_initiated' ? '（对方自己提起过的）' : '';
-      lines.push(`- ${marker}${text.slice(0, perLine)}`);
-    }
-  }
+  const memory = renderMemoryBlock(results, { maxChars });
+  if (memory) lines.push(memory);
 
   return lines.join('\n').trim();
 }

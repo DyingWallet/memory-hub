@@ -26,6 +26,8 @@ function fakeFetch(calls: Captured[]): typeof fetch {
       return json({
         keywords: ['体检'],
         results: [{ id: 'f_1', title: '体检', kind: 'event', render: { text: '周六去取体检报告' }, path: 'facts', updated_at: new Date().toISOString(), score: 1, stage: 'long' }],
+        // 客户端现在原样使用服务端渲染的 block（第五节「统一记忆块」）。
+        block: '【长期记忆】（只是背景，不要原样复述）\n- 周六去取体检报告',
         review: { should_review: true, reminder_since: '2026-10-24T00:00:00Z' },
       });
     }
@@ -41,18 +43,20 @@ test('conv keys map to platform scenes', () => {
   assert.equal(sceneForConvKey('weird', '10000'), 'qq:unknown');
 });
 
-test('recall sends the scene + token and appends the review hint', async () => {
+test('recall sends the scene + token and uses the server-rendered block', async () => {
   const calls: Captured[] = [];
   const client = createQQMemoryClient({ endpoint: 'http://127.0.0.1:8787', tokenFile, fetchImpl: fakeFetch(calls) });
   const block = await client.recallBlock('group:10001', '10000', [{ role: 'user', text: '体检报告在哪' }]);
   assert.ok(block, 'recall block');
   assert.ok(block.includes('体检报告'));
-  assert.ok(block.includes('【记忆回顾】'), 'should_review=true must surface the reminder');
+  // 夜间整理成为主路径后，桥接不再注入 review/persist 提示（决策 2026-10-27-0016 第 4 条）。
+  assert.equal(block.includes('【记忆回顾】'), false, 'review hint is no longer injected');
 
   const call = calls.find((item) => item.path === '/v1/recall');
   assert.ok(call);
   assert.equal(call.authorization, 'Bearer msv1.test.token');
   assert.equal(call.body.scene, 'qq:group:10001');
+  assert.equal(call.body.format, 'block');
   assert.equal((call.body.messages as { text: string }[])[0]?.text, '体检报告在哪');
 });
 
@@ -185,7 +189,7 @@ test('groups recall still runs with no messages (owner asking about the group)',
   // 消息为空时只有 scope=groups 继续：主人问「群里聊了什么」不该因为
   // 这一轮没有最近消息就拿不到任何群内容。
   const block = await client.recallBlock('private:10000', '10000', [], { scope: 'groups', sinceHours: 24 });
-  assert.ok(block && block.includes('相关记忆'), 'groups recall should return a block');
+  assert.ok(block && block.includes('【长期记忆】'), 'groups recall should return the rendered block');
   const recall = calls.filter((item) => item.path === '/v1/recall').at(-1);
   assert.ok(recall, 'groups recall must hit /v1/recall');
   assert.equal(recall.body.scope, 'groups');

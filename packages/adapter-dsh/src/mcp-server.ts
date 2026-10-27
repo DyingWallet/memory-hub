@@ -18,11 +18,9 @@ import type {
   ForgetResponse,
   GetResponse,
   MemoryKind,
-  PersistResponse,
   RecallMessage,
   RecallResponse,
   RecentResponse,
-  ReviewResponse,
   SearchResponse,
   TimelineResponse,
   WriteRequest,
@@ -37,7 +35,6 @@ export const SERVER_INSTRUCTIONS = [
   'memory_write 只记持久的事实、承诺、立场、偏好；不记流水账和一次性的寒暄。',
   '记我自己的判断时用 memory_write + subject=self：记忆不只是「他说了什么」。',
   '问「那阵子 / 上个月 / 去年在忙什么」用 memory_timeline，按时间看，不要拿 memory_search 硬凑。',
-  '普通聊天已自动进短期记忆（会过期）。新会话开始时若不确定，先 memory_review(status_only=true)；需要回顾就用 memory_review 看候选、memory_persist 挑重要的转长期，其余让它过期。',
   '写不出处不确定时就别写；宁可少一条，不要写错一条。',
 ].join('\n');
 
@@ -65,8 +62,6 @@ export interface MemoryApi {
   }): Promise<TimelineResponse>;
   write(record: WriteRequest): Promise<WriteResponse>;
   forget(id: string, options?: { idempotencyKey?: string }): Promise<ForgetResponse>;
-  review(options?: { scene?: string; lookbackHours?: number; limit?: number; dueOnly?: boolean }): Promise<ReviewResponse>;
-  persist(ids: string[], note?: { kind?: MemoryKind; text: string; tags?: string[] }): Promise<PersistResponse>;
   capabilities(): Promise<CapabilitiesResponse>;
 }
 
@@ -284,10 +279,16 @@ export function createMemoryMcpServer(client: MemoryApi, options: McpServerOptio
           .describe('这是关于谁的：owner=主人（默认）、self=我自己的判断、other=第三方'),
         idempotency_key: z.string().max(200).optional().describe('重试时用来去重'),
         supersedes: z.string().max(200).optional().describe('这条记忆替代的旧记忆 id（改主意/更新时用）'),
+        source: z
+          .enum(['main', 'qq', 'sleep', 'pet', 'import'])
+          .optional()
+          .describe(
+            '来源标记，只有 root 令牌能设。夜间整理必须传 "sleep"——这样写错了能按来源整批 forget；不传则按场景记 main/qq',
+          ),
         scene: sceneArg,
       },
     },
-    async ({ kind, text, tags, privacy, audience, subject, idempotency_key, supersedes, scene }) => {
+    async ({ kind, text, tags, privacy, audience, subject, idempotency_key, supersedes, source, scene }) => {
       if (!writeEnabled) {
         return fail(new Error('write is disabled in the plugin config'));
       }
@@ -302,6 +303,7 @@ export function createMemoryMcpServer(client: MemoryApi, options: McpServerOptio
             ...(subject ? { subject } : {}),
             ...(idempotency_key ? { idempotency_key } : {}),
             ...(supersedes ? { supersedes } : {}),
+            ...(source ? { source } : {}),
             ...(scene ? { scene } : {}),
           }),
         );
@@ -324,79 +326,6 @@ export function createMemoryMcpServer(client: MemoryApi, options: McpServerOptio
     async ({ id }) => {
       try {
         return ok(await client.forget(id));
-      } catch (error) {
-        return fail(error);
-      }
-    },
-  );
-
-  server.registerTool(
-    'memory_review',
-    {
-      title: '记忆回顾',
-      description: '列出待回顾的短期聊天记忆；挑重要的用 memory_persist 转长期，其余让它自然过期。',
-      inputSchema: {
-        lookback_hours: z.number().int().min(1).max(24 * 14).optional().describe('回看多少小时，默认 72'),
-        limit: z.number().int().min(1).max(100).optional(),
-        status_only: z.boolean().optional().describe('只查状态和条数，不返回条目、不清提醒'),
-        scene: sceneArg,
-      },
-    },
-    async ({ lookback_hours, limit, status_only, scene }) => {
-      try {
-        return ok(
-          await client.review({
-            ...(typeof lookback_hours === 'number' ? { lookbackHours: lookback_hours } : {}),
-            ...(typeof limit === 'number' ? { limit } : {}),
-            ...(typeof status_only === 'boolean' ? { statusOnly: status_only } : {}),
-            ...(scene ? { scene } : {}),
-          }),
-        );
-      } catch (error) {
-        return fail(error);
-      }
-    },
-  );
-
-  server.registerTool(
-    'memory_persist',
-    {
-      title: '转为长期记忆',
-      description: '把回顾中挑中的短期记忆转长期；可另写一条蒸馏后的 note。',
-      inputSchema: {
-        ids: z.array(z.string().max(200)).max(50).describe('要转长期的短期记忆 id'),
-        note: z
-          .object({
-            kind: z
-              .enum([
-                'note',
-                'event',
-                'stance',
-                'promise',
-                'person',
-                'identity',
-                'qq-topic',
-                'qq-impression',
-                'journal',
-                'decision',
-                'knowledge',
-                'audience',
-                'project',
-                'profile',
-                'preference',
-                'chat',
-              ])
-              .optional(),
-            text: z.string().min(1).max(4000),
-            tags: z.array(z.string().max(64)).max(24).optional(),
-          })
-          .optional()
-          .describe('蒸馏后的一条长期记忆（可选）'),
-      },
-    },
-    async ({ ids, note }) => {
-      try {
-        return ok(await client.persist(ids, note ? { ...note, kind: note.kind as MemoryKind } : undefined));
       } catch (error) {
         return fail(error);
       }

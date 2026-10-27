@@ -11,11 +11,9 @@ import type {
   IngestMessage,
   IngestResponse,
   MemoryResult,
-  PersistResponse,
   RecallMessage,
   RecallResponse,
   RecentResponse,
-  ReviewResponse,
   SearchResponse,
   TimelineRequest,
   TimelineResponse,
@@ -134,24 +132,6 @@ export class MemoryClient {
       messages,
       ...(options.scene ? { scene: options.scene } : {}),
       ...(options.ttlHours !== undefined ? { ttl_hours: options.ttlHours } : {}),
-    });
-  }
-
-  /** Short-term memories waiting for review. */
-  review(options: { scene?: string; lookbackHours?: number; limit?: number; statusOnly?: boolean } = {}): Promise<ReviewResponse> {
-    return this.request<ReviewResponse>('POST', '/v1/review', {
-      ...(options.scene ? { scene: options.scene } : {}),
-      ...(options.lookbackHours !== undefined ? { lookback_hours: options.lookbackHours } : {}),
-      ...(options.limit !== undefined ? { limit: options.limit } : {}),
-      ...(options.statusOnly !== undefined ? { status_only: options.statusOnly } : {}),
-    });
-  }
-
-  /** Promote short-term memories to long-term, optionally with a distilled note. */
-  persist(ids: string[], note?: { kind?: MemoryKind; text: string; tags?: string[] }): Promise<PersistResponse> {
-    return this.request<PersistResponse>('POST', '/v1/persist', {
-      ids,
-      ...(note ? { note } : {}),
     });
   }
 

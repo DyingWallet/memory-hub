@@ -69,6 +69,8 @@ export interface ServerConfig {
   backup: BackupConfig;
   /** Optional: let the same watchdog revive the QQ bridge. */
   bridge: BridgeConfig;
+  /** Optional: let the same watchdog run the nightly consolidation once a day. */
+  sleep: SleepConfig;
   /** Optional semantic search (local embedding + sqlite-vec hybrid ranking). */
   semantic: SemanticConfig;
   /** Absolute path of the config.json this instance was loaded from. */
@@ -82,12 +84,6 @@ export interface ShortTermConfig {
   ttlHours: number;
   /** Upper bound after repeated recall (hours). */
   maxTtlHours: number;
-  /** How far back the daily review looks (hours). */
-  reviewLookbackHours: number;
-  /** Max items returned by one review. */
-  reviewLimit: number;
-  /** Minimum gap between two reviews for the same scene (hours). */
-  reviewIntervalHours: number;
 }
 
 export interface ArchiveConfig {
@@ -189,9 +185,6 @@ const DEFAULTS: Omit<ServerConfig, 'dataDir' | 'memoriesDir' | 'indexFile' | 'to
     enabled: true,
     ttlHours: 24,
     maxTtlHours: 168,
-    reviewLookbackHours: 72,
-    reviewLimit: 30,
-    reviewIntervalHours: 20,
   },
   archive: { enabled: false, keepMonths: 12 },
   backup: { enabled: true, dir: resolve(PACKAGE_ROOT, '..', 'backups', 'memory-hub'), keepDays: 14 },
@@ -201,6 +194,11 @@ const DEFAULTS: Omit<ServerConfig, 'dataDir' | 'memoriesDir' | 'indexFile' | 'to
     probeUrl: 'http://127.0.0.1:3100/',
     retryMinutes: 10,
     startTimeoutSeconds: 20,
+  },
+  sleep: {
+    enabled: false,
+    at: '03:00',
+    retryMinutes: 30,
   },
   semantic: {
     enabled: false,
@@ -272,6 +270,7 @@ export function loadConfig(overrides: PartialConfig = {}): ServerConfig {
   merged.archive = normalizeArchive(merged.archive, fileConfig.archive);
   merged.backup = normalizeBackup(merged.backup, fileConfig.backup);
   merged.bridge = normalizeBridge(merged.bridge, fileConfig.bridge);
+  merged.sleep = normalizeSleep(merged.sleep, fileConfig.sleep);
   merged.semantic = normalizeSemantic(merged.semantic, fileConfig.semantic);
   if (!isAbsolute(merged.semantic.modelDir)) merged.semantic.modelDir = resolve(PACKAGE_ROOT, merged.semantic.modelDir);
   if (process.env.MEMD_SEMANTIC === '1' || process.env.MEMD_SEMANTIC === 'true') merged.semantic.enabled = true;
@@ -302,9 +301,6 @@ function normalizeShortTerm(
     enabled: base.enabled !== false,
     ttlHours: clamp(base.ttlHours, 24, 0.1, 24 * 30),
     maxTtlHours: clamp(base.maxTtlHours, 168, 0.1, 24 * 365),
-    reviewLookbackHours: clamp(base.reviewLookbackHours, 72, 1, 24 * 14),
-    reviewLimit: Math.trunc(clamp(base.reviewLimit, 30, 1, 100)),
-    reviewIntervalHours: clamp(base.reviewIntervalHours, 20, 1, 24 * 7),
   };
 }
 
@@ -347,6 +343,42 @@ export function normalizeBridge(value: Partial<BridgeConfig> | undefined, fromFi
     probeUrl: text(base.probeUrl, DEFAULTS.bridge.probeUrl),
     retryMinutes: Math.trunc(num(base.retryMinutes, DEFAULTS.bridge.retryMinutes, 1, 1440)),
     startTimeoutSeconds: Math.trunc(num(base.startTimeoutSeconds, DEFAULTS.bridge.startTimeoutSeconds, 5, 120)),
+  };
+}
+
+/**
+ * 夜间整理配置（默认关）。整理本身由 `scripts/sleep-consolidate.mjs` 做——
+ * 它唤起一个 `sleep-consolidator` preset 的 DSH 会话，把当天记忆交给它整理。
+ * 这段配置只被 `scripts/supervisor.mjs` 读：memd 自己不用，也不该为它改动。
+ */
+export interface SleepConfig {
+  /** 开不开。关着的时候 supervisor 完全不碰整理。 */
+  enabled: boolean;
+  /** 每天几点跑，`HH:mm`（本地时间）。 */
+  at: string;
+  /** 失败后隔多久再试（分钟）；跑成功则当天不再触发。 */
+  retryMinutes: number;
+}
+
+/**
+ * 夜间整理配置的收紧：时刻必须是合法 `HH:mm`，重试间隔夹在 5–1440 分钟，
+ * 手写 config.json 写歪了也不会变成「每分钟起一次整理会话」。
+ */
+export function normalizeSleep(
+  value: Partial<SleepConfig> | undefined,
+  fromFile: Partial<SleepConfig> | undefined,
+): SleepConfig {
+  const base: Partial<SleepConfig> = { ...DEFAULTS.sleep, ...(value ?? {}), ...(fromFile ?? {}) };
+  const at = typeof base.at === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(base.at.trim())
+    ? base.at.trim()
+    : DEFAULTS.sleep.at;
+  const retry = typeof base.retryMinutes === 'number' && Number.isFinite(base.retryMinutes)
+    ? Math.trunc(base.retryMinutes)
+    : DEFAULTS.sleep.retryMinutes;
+  return {
+    enabled: base.enabled === true,
+    at,
+    retryMinutes: Math.min(1440, Math.max(5, retry)),
   };
 }
 

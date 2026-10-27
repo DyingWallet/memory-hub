@@ -51,7 +51,12 @@ test('disclose 只返回目标群的消息，不串私聊', async () => {
   const body = response.json() as { group: string; count: number; results: { id: string; render: { text: string } }[] };
   assert.equal(body.group, `qq:group:${GROUP_ID}`);
   assert.ok(body.count > 0, 'group messages are returned');
-  assert.ok(body.results.every((item) => item.id.includes(`qq:group:${GROUP_ID}`)), JSON.stringify(body.results.map((r) => r.id)));
+  // id 统一成 `fact-qq-group-<id>-<time36>-<rand4>`（scene 里的冒号被归一化成减号），
+  // 所以这里按两种写法都认，断言的是「只回目标群」，不是某个固定前缀。
+  assert.ok(
+    body.results.every((item) => new RegExp(`qq[:\\-]group[:\\-]${GROUP_ID}`).test(item.id)),
+    JSON.stringify(body.results.map((r) => r.id)),
+  );
   assert.equal(
     body.results.some((item) => /私聊里说的是别的事/.test(item.render.text)),
     false,

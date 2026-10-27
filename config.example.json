@@ -49,6 +49,11 @@
     "retryMinutes": 10,
     "startTimeoutSeconds": 20
   },
+  "sleep": {
+    "enabled": false,
+    "at": "03:00",
+    "retryMinutes": 30
+  },
   "semantic": {
     "enabled": false,
     "alpha": 0.5,
