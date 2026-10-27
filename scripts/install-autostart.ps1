@@ -18,7 +18,7 @@
 # Scheduler flashes a console window for any console program it starts directly.
 # A 1-minute task makes that flash very visible.
 #
-# pet-brain has NO task here: it follows the DSH lifecycle (qq-bridge\start-stack.ps1
+# pet-brain has NO task here: it follows the DSH lifecycle (memory-hub\scripts\start-stack.ps1
 # step 2.7 starts it, dsh-pet-configurable-llm/scripts/install-revive-task.ps1 keeps
 # it alive while DSH runs).
 #

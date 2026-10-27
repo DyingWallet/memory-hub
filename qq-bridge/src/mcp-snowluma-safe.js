@@ -19,6 +19,7 @@ import { z } from 'zod';
 // 在 MCP 里拦会连「安全拒绝理由」都拿不到，反而让模型无法把话说清楚。
 import { SENSITIVE_RE } from './sensitive.js';
 import { serializeModelData } from './qq-model-view.js';
+import { resolveConsolePort } from './ports.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -105,7 +106,7 @@ async function onebot(action, params = {}) {
 
 // 桥接控制台/内部 Agent API 访问：二代仿真模式的状态工具都通过这里读写桥接内存态。
 function agentApiBase() {
-  const port = Number(getConfig().consolePort) || 3100;
+  const port = resolveConsolePort(getConfig());
   return `http://127.0.0.1:${port}`;
 }
 function readConsoleToken() {

@@ -28,6 +28,7 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createManagedProcess } from './managed-process.mjs';
 import { inspectSnowLumaDir, snowlumaLaunchSpec, checkSnowLumaUpdate, migrateSnowLumaData, pickFolderDialog, migrationWarning, SNOWLUMA_RELEASES_PAGE } from './snowluma-install.mjs';
+import { resolveConsolePort } from '../ports.js';
 import { redactCredentials, redactKnown } from '../lib/redact.mjs';
 import { inspectNapCat, napcatLaunchSpec, napcatDefaultHome, NAPCAT_DEFAULT_WEBUI_PORT, napcatFileVersion, napcatRuntimeVersion, checkNapCatUpdate, validateNapCatSettings, NAPCAT_RELEASES_PAGE, NAPCAT_MAC_INSTALLER_PAGE, napcatQrStatus, readNapCatQr, napcatLoggedIn } from './napcat-launch.mjs';
 import { pickDialog } from './pick-dialog.mjs';
@@ -116,7 +117,7 @@ function consoleToken(cfg) {
   const fromCfg = String(cfg?.consoleToken ?? '').trim();
   return fromCfg || readText(path.join(STATE_DIR, 'console-token'));
 }
-function consolePort(cfg) { return Number(cfg?.consolePort) > 0 ? Number(cfg.consolePort) : 3100; }
+function consolePort(cfg) { return resolveConsolePort(cfg); }
 
 async function bridgeApi(route, { method = 'GET', body } = {}) {
   const cfg = bridgeConfig();

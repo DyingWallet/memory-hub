@@ -192,7 +192,7 @@ npm install        # 安装依赖（postinstall 会自动修补 @snowluma/sdk �
 | `deny.*` | 黑名单，优先于白名单 |
 | `ackMessage` | 消息投递后的立即回复，空字符串关闭 |
 | `sendDelayMs` | QQ 连续发送间隔，防止触发频率限制 |
-| `consolePort` | 本地控制台端口，默认 `3100` |
+| `consolePort` | 本地控制台端口，默认 `3100`。**端口只改这一处**：`src/ports.js`、`scripts/ports.ps1`、`scripts/stop-bridge.ps1` 都从这里读；整栈启动与自检（`memory-hub\scripts\start-stack.ps1`、`restart-stack.ps1`、`post-upgrade.ps1`）同样从 `config.json` 读，不再各自硬编码 |
 | `consoleToken` | 控制台访问令牌；留空时启动自动生成并保存到 `state/console-token` |
 
 > ⚠️ `allowAllWhenEmpty: true` 表示「白名单没填就全部放行」——把 agent 接入 QQ 等于把账号控制权交给了模型，建议先填白名单。

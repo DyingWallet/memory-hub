@@ -22,6 +22,14 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+
+# memd port comes from config.json (port); default 8787. Never hardcode it here.
+$memdPort = 8787
+try {
+  $memdCfg = Get-Content -LiteralPath (Join-Path $root 'config.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+  if ($memdCfg.port) { $memdPort = [int]$memdCfg.port }
+} catch { }
+
 $node = $env:MEMD_NODE
 if (-not $node -or -not (Test-Path -LiteralPath $node)) {
   # Order: MEMD_NODE -> workspace tools\node (portable) -> DSH bundled -> PATH
@@ -100,7 +108,7 @@ if ($Semantic) {
   if ($LASTEXITCODE -ne 0) { Fail 'fetch-model failed' }
   & $node (Join-Path $root 'scripts\set-semantic.mjs') --on
   if ($LASTEXITCODE -ne 0) { Fail 'set-semantic failed' }
-  if (Test-NetConnection 127.0.0.1 -Port 8787 -InformationLevel Quiet -WarningAction SilentlyContinue) {
+  if (Test-NetConnection 127.0.0.1 -Port $memdPort -InformationLevel Quiet -WarningAction SilentlyContinue) {
     & $node (Join-Path $root 'scripts\embed.mjs')
     if ($LASTEXITCODE -ne 0) { Write-Host 'embed failed (memd may need a restart to pick up semantic.enabled)' -ForegroundColor Yellow }
   }

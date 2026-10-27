@@ -58,10 +58,18 @@ robocopy @common | Select-Object -Last 15
 $code = $LASTEXITCODE
 if ($code -ge 8) { Write-Error "robocopy failed ($code)" }
 
+# Bridge console port comes from the target config.json (consolePort). The
+# deployed config.json is runtime-owned and never synced, so read it there.
+$bridgePort = 3100
+try {
+  $cfg = Get-Content -LiteralPath (Join-Path $Target 'config.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+  if ($cfg.consolePort) { $bridgePort = [int]$cfg.consolePort }
+} catch { }
+
 if ($Restart) {
   Write-Host ''
-  Write-Host '--- restarting bridge (stop whatever listens on 3100) ---'
-  $listeners = Get-NetTCPConnection -LocalPort 3100 -State Listen -ErrorAction SilentlyContinue
+  Write-Host "--- restarting bridge (stop whatever listens on $bridgePort) ---"
+  $listeners = Get-NetTCPConnection -LocalPort $bridgePort -State Listen -ErrorAction SilentlyContinue
   foreach ($l in $listeners) {
     Stop-Process -Id $l.OwningProcess -Force -ErrorAction SilentlyContinue
     Write-Host "stopped pid $($l.OwningProcess)"
@@ -74,6 +82,6 @@ if ($Restart) {
 Write-Host ''
 Write-Host "done (robocopy $code). state/ config.json node_modules/ logs/ were not touched."
 if (-not $Restart) {
-  Write-Host 'If the bridge is running, restart it to pick up the new code: stop the process on 3100, then start.bat.'
+  Write-Host "If the bridge is running, restart it to pick up the new code: stop the process on $bridgePort, then start.bat."
 }
 exit 0
