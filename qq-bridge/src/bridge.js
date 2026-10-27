@@ -16,7 +16,7 @@ import { extractPresetPrefix, presetPromptBlockers, presetPromptWarnings, render
 import { GEN1_ROLE_LINE_RE, parseRoleSections, roleCharStats, roleSectionReport, selectRoleText } from './role-card.js';
 import { fileURLToPath } from 'node:url';
 import { SnowLumaWebSocketClient, text } from '@snowluma/sdk';
-import { NodeApiClient, unwrap, createTurnCollector, discoverDshLaunchToken } from './dsh-client.js';
+import { NodeApiClient, unwrap, createTurnCollector, discoverDshLaunchToken, resolveDshHome } from './dsh-client.js';
 import { mdToPlain, splitForQQ, truncateText, truncateTextTail } from './md-to-plain.js';
 import { SENSITIVE_RE } from './sensitive.js';
 import { looksLikeUnfinished } from './v2-wait.js';
@@ -32,6 +32,7 @@ import { createPersonaReader } from './persona-block.js';
 import { discoverSnowLumaConnection, persistSnowLumaEndpoint, persistToken } from './snowluma-conn.js';
 import { hardenDir, manualDirCommand } from './state-acl.mjs';
 import { extractForwardIds, forwardIdFromData, sanitizeForwardId, formatForwardResponse } from './forward.js';
+import { resolveConsolePort } from './ports.js';
 import {
   createSlowFetchCache,
   pendingReplyText,
@@ -750,7 +751,7 @@ function loadConfig() {
     ackMessage: file.ackMessage ?? '🤔 收到，正在思考…',
     sendDelayMs: file.sendDelayMs ?? 300,
     questionTimeoutMs: file.questionTimeoutMs ?? 5 * 60 * 1000,
-    consolePort: file.consolePort ?? 3100,
+    consolePort: resolveConsolePort(file),
     consoleToken: file.consoleToken ?? '',
     // 价目表覆盖项（可选）。留空即用 src/model-prices.js 的官方默认价。
     pricing: file.pricing ?? null,
@@ -1207,7 +1208,7 @@ const LOCK_FILE = path.join(STATE_DIR, 'bridge.lock');
 function consolePortInUse() {
   try {
     const cfg = readJsonSafe(path.join(ROOT, 'config.json'), {});
-    const port = Number(cfg?.consolePort) || 3100;
+    const port = resolveConsolePort(cfg);
     if (process.platform === 'win32') {
       const out = execFileSync('netstat', ['-ano', '-p', 'TCP'], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] });
       return new RegExp(`[:.]${port}\\s+\\S+\\s+LISTENING`, 'i').test(out);
@@ -2597,6 +2598,16 @@ async function main() {
   const v2TurnStartAt = new Map(); // sessionId -> timestamp：reserved2 turn 开始时间，用于判断是否“无行动”
   const toolCallNames = new Map(); // sessionId -> Map<callId, toolName>：用于结果日志关联工具名
   const pendingSendToolCalls = new Map(); // sessionId -> Set<callId>：等待 tool/result 的发送类调用
+  /**
+   * key -> 连续空回合次数：用来识别「会话已归档」（DSH 的 session/list 不暴露归档状态）。
+   * 放在这里而不是 ensureConversationSession 旁边，是为了让 retireSession 也能清——
+   * 会话因模式切换 / reset 退役后，残留的计数会让新会话被提前判成失效。
+   */
+  const emptyTurnStreak = new Map();
+  /** key -> 「这个会话是因归档重建的」：下一条 prompt 要带一句「别重复回复」。 */
+  const archiveRebuiltKeys = new Set();
+  /** sessionId -> 上一个 turn 跑了多少毫秒。空回合分支用它区分「归档会话」与「纯工具回合」。 */
+  const lastTurnElapsed = new Map();
   // reserved2 防“忘记设置唤醒条件”：key -> 当前是否等待 AI 处理唤醒回合 / 本回合已更新唤醒配置 / 连续未设置次数
   const pendingWakeKeys = new Set();
   // key -> 开始等待的时间戳（带租约）：正在执行 qq_wait_for_messages 长轮询的会话，防止同一会话并发挂起。
@@ -2919,7 +2930,7 @@ async function main() {
   const QUEUE_HINT_COOLDOWN_MS = 30_000;
   const queueRetries = new Map(); // key -> 连续补投失败次数（用于退避/暂停恢复）
 
-  // reset 竞态导致 ensureSession 抛「会话创建期间已重置」时，把消息放回队列稍后重试。
+  // reset 竞态导致 ensureConversationSession 抛「会话创建期间已重置」时，把消息放回队列稍后重试。
   // 已在队列中的相同文本不重复入队。
   const enqueueForRetry = (key, promptText, opts = {}) => {
     const items = queued.get(key) ?? [];
@@ -3076,7 +3087,7 @@ async function main() {
   function modePreset(key, mode, cfg) {
     if (mode === 'closed-agent') {
       // v0.3.0：closed-agent 的 preset 由权限级别决定（L1 = 只读工具白名单 preset）。
-      // 级别未知/计划不成立时返回 undefined，由 ensureSession fail-closed。
+      // 级别未知/计划不成立时返回 undefined，由 ensureConversationSession fail-closed。
       const plan = closedAgentPlan();
       return plan.ok ? (plan.agentPreset || undefined) : undefined;
     }
@@ -3161,6 +3172,11 @@ async function main() {
     // 按 key 记账的内存态在**有映射和无映射时都要清**：一条被移出白名单、
     // 但从未成功建过会话的 key 同样会留下限流时间戳与失败标记。
     forgetConversationCaches(key);
+    // 归档识别的两套状态也要清：残留的空回合计数会让新会话被提前判失效，
+    // 残留的「刚重建」标记会把提示带进一条无关的消息。
+    emptyTurnStreak.delete(key);
+    archiveRebuiltKeys.delete(key);
+    if (sessionId) lastTurnElapsed.delete(sessionId);
     if (!sessionId) return;
     reverse.delete(sessionId);
     collectors.delete(sessionId);
@@ -3662,7 +3678,7 @@ async function main() {
   }
 
   function startConsoleServer() {
-    const port = cfg.consolePort ?? 3100;
+    const port = resolveConsolePort(cfg);
     // 控制台鉴权：优先用 config.consoleToken，未配置则自动生成并持久化，不再默认无鉴权。
     // 使用 let 以便控制台内手动修改令牌后热更新。
     const configuredToken = String(cfg.consoleToken ?? '').trim();
@@ -4941,7 +4957,7 @@ async function main() {
           let sessionId = null;
           let popSilent = null;
           try {
-            sessionId = await ensureSession(key);
+            sessionId = await ensureConversationSession(key);
             const silentId = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
             const arr = social.silentTurns.get(sessionId) ?? [];
             social.silentTurns.set(sessionId, [...arr, { id: silentId, ts: Date.now() }]);
@@ -8108,7 +8124,7 @@ async function main() {
     return server;
   }
 
-  // 会话代际：reset/清空工作区时递增，防止在途 ensureSession 把旧会话"复活"
+  // 会话代际：reset/清空工作区时递增，防止在途 ensureConversationSession 把旧会话"复活"
   let sessionEpoch = 0;
 
   // 待应答的提问/审批：convKey -> pending
@@ -8985,7 +9001,79 @@ async function main() {
     return 'failed';
   }
 
-  async function ensureSession(key) {
+  /**
+   * DSH 里「归档」的会话不会出现在 `session/list`，但对它 selectModel 依然成功。
+   * 结果是桥接一直对着一个归档会话发消息：回合立刻结束、没有文本，看起来像
+   * 「模型没回复」，也永远不会建新会话。复用映射前校验一次，30 秒缓存，
+   * 免得每条消息多一个 RPC。
+   */
+  const sessionReusableCache = new Map(); // sessionId -> { at, reusable }
+  /**
+   * DSH 的归档状态存在 `~/.dsh/storages/workspace.json` 的
+   * `global.archivedSessionIds`——这是唯一权威来源。
+   *
+   * 为什么不能只看 `session/list`：归档会话**照样在 items 里**，而且
+   * `selectModel` 也照样成功，只有 prompt 之后的 turn 立刻空完成。所以
+   * list 只能证明「会话文件还在」，证明不了「它没被归档」。
+   *
+   * 读不到（DSH 版本变化 / 文件被锁 / 首次启动）时返回 null，调用方退回 list 判断。
+   */
+  function archivedSessionIdSet() {
+    try {
+      const file = path.join(resolveDshHome(), 'storages', 'workspace.json');
+      const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const ids = parsed?.global?.archivedSessionIds;
+      return Array.isArray(ids) ? new Set(ids) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function isSessionReusable(sessionId) {
+    const now = Date.now();
+    const hit = sessionReusableCache.get(sessionId);
+    if (hit && now - hit.at < 30_000) return hit.reusable;
+
+    // 权威判断：DSH 自己的归档表。
+    const archived = archivedSessionIdSet();
+    if (archived) {
+      const alive = !archived.has(sessionId);
+      sessionReusableCache.set(sessionId, { at: now, reusable });
+      if (!alive) log(`会话 ${sessionId} 已在 DSH 的归档表里`);
+      return alive;
+    }
+
+    // 降级：只能证明「会话还在」，证明不了「没归档」。
+    log('⚠️ 读不到 DSH 的归档表，退回 session/list 判断（对归档会话不准）');
+    const present = async () => {
+      const listed = unwrap(await api.sessions.list({}), 'session.list');
+      // DSH 的 `session/list` 返回的是 `{ items: [...] }`（见 /api/workspace/reset 那段的
+      // `list.items ?? []`），不是 `{ sessions }`。字段名读错会得到空集合。
+      const ids = new Set((listed?.items ?? listed?.sessions ?? []).map((item) => item.sessionId));
+      return ids.has(sessionId);
+    };
+    try {
+      if (await present()) {
+        sessionReusableCache.set(sessionId, { at: now, reusable: true });
+        return true;
+      }
+      // 不在列表：可能是归档，也可能是 DSH 刚重启、会话还没加载完（第一次 list
+      // 可能在加载中返回空）。隔 1.5 秒再确认一次，两次都看不到才认账。
+      await sleep(1500);
+      if (await present()) {
+        sessionReusableCache.set(sessionId, { at: now, reusable: true });
+        return true;
+      }
+      sessionReusableCache.set(sessionId, { at: now, reusable: false });
+      return false;
+    } catch (error) {
+      // 列表取不到（旧 DSH / 瞬时失败）时不能误杀已有映射。
+      log(`校验会话是否仍在 DSH 失败 ${sessionId}: ${error?.message ?? error}`);
+      return true;
+    }
+  }
+
+  async function ensureConversationSession(key) {
     const epoch = sessionEpoch;
     const policy = sessionPolicy(key);
     if (!isSessionAllowedInCurrentMode(key)) throw new Error(`当前模式不允许会话 ${key}`);
@@ -8998,9 +9086,16 @@ async function main() {
         const applied = await ensureChatModel(existing);
         // DSH 侧会话已不存在（DSH 重启、异常退出、归档竞态）：本地映射已经失效，
         // 必须退役并重建，否则每条消息都会对着一个不存在的会话重试 selectModel。
+        // 「已归档」走的是另一条路：selectModel 仍然成功，只有 list 里看不到它。
         if (applied === 'not-found') {
           log(`会话 ${key} 在 DSH 侧已不存在，退役本地映射并在本次调用中重建`);
           retireSession(key);
+          // add 必须在 retire 之后：retireSession 会清掉这个标记（它属于「上一个会话」）。
+          archiveRebuiltKeys.add(key);
+        } else if (!(await isSessionReusable(existing))) {
+          log(`会话 ${key} 不在 DSH 活动列表里（多半已归档），退役本地映射并在本次调用中重建`);
+          retireSession(key);
+          archiveRebuiltKeys.add(key);
         } else {
           if (epoch !== sessionEpoch || !isCurrentSession(key, existing)) throw new Error('会话创建期间已重置或权限已变化');
           return existing;
@@ -10208,7 +10303,7 @@ async function main() {
     }
     let sessionId;
     try {
-      sessionId = await ensureSession(key);
+      sessionId = await ensureConversationSession(key);
     } catch (error) {
       if (String(error?.message ?? error).includes('会话创建期间已重置')) {
         enqueueForRetry(key, promptText, opts);
@@ -10303,6 +10398,11 @@ async function main() {
       if (wakeSnapshot) {
         promptText += `\n\n【本次消息快照】\n${JSON.stringify(wakeSnapshot)}\n以上消息已提供，无需重复查询；partial=true 时用 qq_get_unread_messages(afterSeq=readThroughSeq) 继续读取。先处理当前消息；回复前如需确认后续补充，用 qq_wait_for_messages(purpose="reply") 补足短静默，已安静够久会立即返回，不要先长等。收尾只确认你已处理的 readThroughSeq（本地 seq，非 QQ messageId），传给 qq_mark_read 或 qq_set_wake_config 的 throughSeq；新到消息留待处理。`;
       }
+    }
+    // 因归档重建的会话：新会话没有历史，`resetConversationIntro` 又把「看过哪些」
+    // 清空了，所以最近几条会重新进上下文。明确告诉模型别对已回过的消息再回一遍。
+    if (archiveRebuiltKeys.delete(key)) {
+      promptText += '\n\n【会话刚重建】上一个 DSH 会话已被归档，这条消息由一个全新会话处理。请先对照 readThroughSeq 和最近消息：已经回复过的不要再回一次，没回过的补上。';
     }
     const modelText = withSlangContext(withHandover(key, promptText));
     let content = [{ type: 'text', text: modelText }];
@@ -10527,7 +10627,7 @@ async function main() {
       const summaryMedia = entry.items.flatMap((m) => Array.isArray(m.media) ? m.media : []);
       let sessionId;
       try {
-        sessionId = await ensureSession(k);
+        sessionId = await ensureConversationSession(k);
       } catch (error) {
         log(`摘要投喂创建会话失败 (${k}): ${error?.message ?? error}`);
         continue;
@@ -12521,7 +12621,7 @@ async function main() {
 
     let sessionId;
     try {
-      sessionId = await ensureSession(key);
+      sessionId = await ensureConversationSession(key);
     } catch (error) {
       if (String(error?.message ?? error).includes('会话创建期间已重置')) {
         enqueueForRetry(key, promptText, { media: mediaList });
@@ -12988,6 +13088,10 @@ async function main() {
                   log(`[reserved2] ${key} 回合结束但缺少 turn/start（重连补发），跳过无行动计数`);
                 }
               }
+              // 空回合判定要用「这一轮跑了多久」，而 v2TurnStartAt 马上就被删了，
+              // 先把时长记下来。（归档会话的 turn 是瞬间结束的，正常回合至少几秒。）
+              const turnStarted = v2TurnStartAt.get(frame.sessionId);
+              if (turnStarted) lastTurnElapsed.set(frame.sessionId, Date.now() - turnStarted);
               v2TurnStartAt.delete(frame.sessionId);
               collectors.delete(frame.sessionId);
               turnLeaseNoted.delete(frame.sessionId);
@@ -13131,6 +13235,7 @@ async function main() {
                     continue;
                   }
                   const timeline = planSocialTimeline(plain, cfg.social);
+                  emptyTurnStreak.delete(key);
                   const messages = timeline.main;
                   log(`agent 回复 (${key}) ${plain.length} 字 → ${messages.length} 条`);
                   appendActivity(`${key} agent 回复：${messages[0].slice(0, 80)}${messages.length > 1 ? '（分' + messages.length + '条）' : ''}${messages[0].length > 80 ? '…' : ''}`);
@@ -13202,6 +13307,27 @@ async function main() {
               } else if (!ended.text.trim()) {
                 // completed 但没文本（纯工具调用回合）
                 log(`回合完成但无文本 (${key})`);
+                // 归档会话的症状正好也是这个：每条消息都「完成、没有文本、也没有工具」。
+                // DSH 的 `session/list` 不暴露归档状态（已归档的照样在 items 里），
+                // 所以只能从行为上认。两个信号：
+                //   1. 回合**瞬间**结束（< 3 秒）——归档会话没有 agent 在工作，直接退役；
+                //   2. 跑了正常时长却没文本——多半是纯工具回合，攒够 3 次才退役，避免误伤。
+                const elapsed = lastTurnElapsed.get(frame.sessionId) ?? Number.POSITIVE_INFINITY;
+                lastTurnElapsed.delete(frame.sessionId);
+                if (elapsed < 3000) {
+                  log(`会话 ${key} 回合 ${elapsed}ms 就结束且无文本（归档会话特征），退役映射，下一条消息重建`);
+                  retireSession(key);
+                  archiveRebuiltKeys.add(key);
+                } else {
+                  const streak = (emptyTurnStreak.get(key) ?? 0) + 1;
+                  emptyTurnStreak.set(key, streak);
+                  if (streak >= 3) {
+                    emptyTurnStreak.delete(key);
+                    log(`会话 ${key} 连续 ${streak} 个空回合，判定会话已失效并退役，下一条消息重建`);
+                    retireSession(key);
+                    archiveRebuiltKeys.add(key);
+                  }
+                }
                 if (isFarewell) {
                   const st = socialState(key);
                   if (st.phase === 'exiting') {
