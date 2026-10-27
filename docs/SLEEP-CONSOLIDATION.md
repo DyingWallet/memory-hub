@@ -50,10 +50,10 @@
 
 | 内容 | 来源 | 说明 |
 |---|---|---|
-| 当日记忆清单 | `/v1/timeline` 当天 + `/v1/recent` | 每条带 `scene` / `audience` / `privacy` |
-| 相关长期记忆 | 按当日高频实体做 `/v1/search` | 用于关联、判断重复与更新 |
-| 近期决策 | `memories/40-decisions/` 最近 5 条 | `read` |
-| 记忆索引 | `memories/index.md` | `read` |
+| 当日记忆清单 | 直接读 `facts/*.jsonl`（不依赖 memd） | 每条带 `scene` / `audience` / `privacy`；墓碑先扫成集合再剔除 |
+| 最近长期记忆 | `/v1/recent`（k=10） | 用于判断重复与更新。**没用 `/v1/search`**：没有可靠的当日实体抽取，硬搜出来是噪声 |
+| 近期决策 | `memories/40-decisions/` 最近 5 条（标题 + 200 字） | 避免把已经定过的事当待办再整理一遍 |
+| 记忆索引 | 只给路径，由 agent 按需 `read` | — |
 
 ### 3.3 纪律（写进 prompt）
 
@@ -62,6 +62,25 @@
 - **audience 由整理者判断**：涉及第三人具体言行 → 必须包含来源场景；关于主人自己 → `main`；跨场景共同事实 → 可写多个场景。
 - 更新旧事实用 `supersedes`；确认过时的用 `forget`。
 - 每条写 `reason`，便于复查。
+- **工程决策、方案定稿已写进 `docs/` 或 `memories/40-decisions/` 的，不重复记正文**——只在记忆里留一条「某天定了什么」的索引（一句话 + 指向哪份文档），方便召回时知道去哪查。
+- **不设数量上限**：今天有几条值得留就写几条，不凑数、也不必压到某个数量。
+- **每条 `memory_write` 都带 `source: "sleep"`**——这是回滚抓手：写错了按来源整批 forget，不用一条条翻。
+
+### 3.4 周期性提炼（周 / 月 / 年）
+
+日整理回答「今天发生了什么」，回答不了「这周的主线是什么」——那需要跨文档看因果，单条记忆里没有。所以同一个脚本加了 `--period`：
+
+| period | 输入 | 产出 | 触发（都在 `config.sleep.at` 之后） |
+|---|---|---|---|
+| `daily`（默认） | 当天全部记忆 | 值得长期留的事实 | 每天 |
+| `weekly` | 最近 7 天的决策文档 + 长期记忆 | 1–3 条「主线」 | **周一** |
+| `monthly` | 最近 31 天 | 1–3 条「主线」 | **1 号** |
+| `yearly` | 最近 366 天 | 1–3 条「主线」 | **1 月 1 日** |
+
+- 综合提炼只看**长期**记忆：短期聊天对「主线」没贡献，只会把上下文撑爆。
+- 产出 `kind: knowledge`、`tags` 带「weekly/monthly/yearly」「主线」、`source: sleep`。
+- 四个周期各有独立的 state 键（`lastSleepSuccessDate_<period>` 等）与整理会话，互不干扰。
+- 触发由 `supervisor.mjs` 的第五步统一管：四个周期逐个检查，串行跑。
 
 ## 四、桌宠记忆
 
@@ -97,6 +116,7 @@
 - 请求加 `format: "block"`（不传则行为不变）；
 - 响应新增 `block: string`，`results` / `live` 仍返回（调试与兜底）；
 - 调用端原样把 `block` 塞进 prompt，不再做任何格式化。
+- **`/v1/recent` 也一样**（2026-10-28 补）：传 `format:"block"` 返回渲染好的「【最近记下的】」段落，桌宠不再自己拼标题和截断。三端（桌宠 / QQ / 将来的第三个）至此全部走服务端渲染。
 
 **边界：渲染搬服务端，取数留端。** 看哪个 scene、k 多大、要不要 live、要不要 owner 披露，仍然由端决定；过滤、排序、截断、标记由 memd 做。
 
@@ -150,7 +170,7 @@ dsh-pet-configurable-llm/src/dsh/
 | 1 | `selectModel` 失败只警告 | **显式报错** | 建会话时抛错，请求返回 502；不再静默落到 DSH 默认模型 |
 | 2 | 会话失效靠错误文案匹配 | **改判错误码** | `unwrap` 抛出带 `code` 的 Error；`promptOnce` 把 `code` 透传到重试判断（当前被吞成 `message`）；`sessionNotFound` 判 `code === 'session/not-found'`，删文本正则 |
 | 3 | `/v1/models` 不反映真实模型 | **从 DSH 取** | 调 `session.modelCatalog`（回退 `session/models`）并缓存；`/v1/models` 仍返回**可请求的 id**（`config.models` 的键），每个条目附 `x_dsh` 映射；`/status` 暴露 DSH 完整目录 |
-| 5 | body 无上限 | **1 MB 上限** | `readBody` 超限返回 413 |
+| 5 | body 无上限 | **2 MB 上限**（`server.mjs` 的 `BODY_LIMIT = 2MB`，比原计划的 1 MB 宽） | `readBody` 超限返回 413 |
 | 6 | 日志无轮转 | **按大小轮转** | 10 MB × 1 份，写入前 stat 判断后 rename |
 | 4 | 单模型映射 | 保持 | — |
 | 7 | 无配置热更新 | 保持 | — |
@@ -173,10 +193,12 @@ dsh-pet-configurable-llm/src/dsh/
 
 ## 八、改动清单
 
+> 状态（2026-10-27 22:40 核对）：表里是「方案要求改什么」，**未落地的单列在表后**。
+
 | 仓库 | 文件 | 改动 |
 |---|---|---|
 | memory-hub | `packages/adapter-dsh/src/mcp-server.ts` | 补 forget / supersedes / privacy 枚举 |
-| memory-hub | `packages/protocol/src/schemas.ts` | `RecallRequest.format?`、`RecallResponse.block?` |
+| memory-hub | `packages/protocol/src/schemas.ts` | `RecallRequest.format?`、`RecallResponse.block?`、`SOURCE_VALUES` 加 `sleep` |
 | memory-hub | `packages/server/src/recall-format.ts` | 新建：纯函数渲染记忆块 |
 | memory-hub | `packages/server/src/routes.ts` | recall 末尾调渲染，塞 `block` |
 | memory-hub | `packages/adapter-qq/src/memory-client.ts` | 删格式化，取 `block` |
@@ -197,6 +219,15 @@ dsh-pet-configurable-llm/src/dsh/
 | dsh-pet-configurable-llm | `src/memory.mjs` | recallK 3→5、maxChars 800→1500；加 `/v1/recent`；删格式化，改取 `block` |
 | dsh-pet-configurable-llm | `preset/pet-chat.patch.yml` | prompt 里删「读记忆卡」 |
 | dsh-pet-configurable-llm | `README.md` | 写清「memd 可选」 |
+
+### 落地情况（2026-10-27 23:30 复核，全部清零）
+
+| 项 | 现状 |
+|---|---|
+| `scripts/verify-recall.mjs` 加基线模式 | ✅ `--baseline` / `--update`，基线存 `data/recall-baseline.json` |
+| `adapter-qq` 改取 `block` | ✅ 17:22 起原样用服务端渲染，不再自拼 |
+| pet 补 `/v1/recent` | ✅ 三路取数齐了 |
+| `migrate-ids.mjs` 重映射 `idem:*` meta | ✅ 迁移前导出、按映射写回；`dedupe:*` 由 `rebuildDedupeKeys` 从 JSONL 重算 |
 
 ## 九、风险
 
@@ -219,7 +250,8 @@ dsh-pet-configurable-llm/src/dsh/
 | 写 `secret` | `secret:write` | root 令牌（MCP / 主会话） |
 | 读 `secret` | `secret:read` | 仅 root 令牌；群、第三人私聊、pet 一律不读 |
 
-- audience 钉死在 `secretAudiences`（默认 `main` + `qq:owner`），不随来源场景扩散。
+- audience 钉死在 `secretAudiences`（默认 `main`；本机没改配置），不随来源场景扩散。
+- 带 `*` 的令牌（`dsh-desktop`、`qq-owner`）读得到 secret——这是「探查权」，不是漏洞，**不要为此收紧 `qq-owner`**。
 - 由我判断是否在回答里提及；默认不复述原文，只当背景。
 
 ### 11.2 后端改动
@@ -243,21 +275,22 @@ dsh-pet-configurable-llm/src/dsh/
 <source>-<scene>-<time36>-<rand4>
 例：fact-main-m8x2k-7f3a
     fact-qq-owner-m8x2k-1c9d
-    doc-<pathHash8>-<ord>
+    doc-<pathHash8>
 ```
 
-- `source`：`fact` / `doc` / `sleep` / `import`。
-- `scene` 归一化：`main`、`qq-owner`、`qq-group-650866701`、`pet`。
-- 文档用路径 hash，重命名不变。
+- `source`：`fact` / `doc` / `import`。**`sleep` 已取消**——整理者走普通 `memory_write`，source 按场景记 `main` / `qq`。
+- `scene` 归一化：`main`、`qq-owner`、`qq-group-650866701`、`pet`；`:` 反成 `-`，所以 id 段数不固定。
+- 文档用路径 hash，重命名不变；不带序号（路径 hash 已经唯一）。
 
 ### 12.2 迁移步骤（一次性，趁数据量小）
 
 1. 停 memd；
 2. 备份 `memories/facts/`（现 1300+ 行含 tombstone）；
 3. 脚本生成 `old → new` 映射表（全部 id 列出）；
-4. 重写 JSONL：替换 `id`、`supersedes`、`source_message_id`；
+4. 重写 JSONL：替换 `id` 与 `supersedes`。**不要动 `source_message_id`**——它是 provider id，不是记忆 id，改了等于换掉幂等键。
 5. 删 `index.db`，重建；
-6. 校验：条数、tombstone 数、`supersedes` 引用完整、`idem:*` meta 已重映射。
+6. 校验：条数、tombstone 数、`supersedes` 引用完整。
+7. **去重键**：重建索引前先导出 `idem:*`（key 是客户端传的 idempotency_key，只在 meta 里，重建后就没了），重建后按 id 映射写回；`dedupe:*` 从 JSONL 重算（`indexer.ts` 的 `rebuildDedupeKeys`）。**省掉这一步，迁移完的内容去重就失效**——同一段内容再写一次不会被认成重复。
 
 ### 12.3 风险
 
@@ -267,19 +300,27 @@ dsh-pet-configurable-llm/src/dsh/
 
 ## 十三、检索基线
 
+> 状态：**已实现**（2026-10-27 23:30）。`verify-recall.mjs` 现在两种模式：不带参数查「有没有坏」，`--baseline` 查「有没有变差」。
+
 ### 13.1 做法
 
 - 固定 12 条查询（中文短语 / 长口语 / 时间线类 / 跨场景 / 近期）。
-- 每条记录「期望命中的 id 集合」。
-- 每次运行对比：期望 id 是否仍在 top-10、排名升降。
-- `--update` 写新基线。
+- 每条记 **top-3 锚点 id**（不是全部命中，也不是只记 top-1）。
+- 锚点**去掉 chunk 的 `#序号`**，落到文档/记忆本身——否则文档一更新分块重排，锚点就集体失效。
+- 每次运行对比：锚点是否仍在 top-10，主锚点（原 top-1）排名升降。
+- `node scripts/verify-recall.mjs --baseline --update` 重写基线。
 
-### 13.2 输出
-
+### 13.2 输出（实测）
 ```text
-12 查询：9 保持，2 上升，1 下降
-  q7「昨晚实现了什么」：top3 → 未命中（期望 f_xxx）
+未命中  q01「记忆对账」  1→出局
+下降  q02「桌宠」  1→3 2→2 3→1
+下降  q03「QQ 桥接」  1→1 2→出局 3→出局
+保持  q04「夜间整理」  1→1 2→2 3→3
+
+12 查询：9 保持，0 上升，2 下降，1 未命中
 ```
+
+**判定看主锚点**：平均法会把「1↔3 互换」判成持平，而那正是最该报的退化。主锚点没动、但辅助锚点全掉出 top-10，也算下降。
 
 ### 13.3 定位
 
@@ -288,14 +329,16 @@ dsh-pet-configurable-llm/src/dsh/
 
 ## 十四、验收
 
-1. **手动跑一次**：建会话 → 整理 → 检查写回的事实（数量、audience、reason）。
-2. **无 memd**：停 memd，桌宠回复正常、无记忆注入、无报错。
-3. **审计**：`audit.jsonl` 能看到整理会话的 write 记录与来源。
-4. **回滚**：整理产出带 `source: sleep` 标记，可整批 forget。
-5. **pet 自包含**：把 `qq-bridge/` 临时改名，pet 仍能启动并完成一次对话。
-6. **secret 边界**：主会话写入一条 secret → main 读得到；群令牌、pet 令牌读不到。
-7. **ID 迁移**：迁移前后条数、tombstone 数一致；随机抽 10 条校验 `supersedes` 引用未断。
-8. **基线**：`verify-recall --baseline` 能输出「保持/上升/下降」对比。
+| # | 验收项 | 状态（2026-10-27 22:40） |
+|---|---|---|
+| 1 | 手动跑一次：建会话 → 整理 → 检查写回（数量、audience、reason） | ✅ 22:12 跑通，99 秒，写 10 条 |
+| 2 | 无 memd：桌宠回复正常、无记忆注入、无报错 | ❌ 未测 |
+| 3 | 审计：`audit.jsonl` 能看到整理会话的 write 记录与来源 | ⚠️ 有 write 记录，但**分不出是不是整理写的** |
+| 4 | 回滚：整理产出带 `source: sleep`，可整批 forget | ✅ 已实现（2026-10-27 22:53）；root 写入实测 `source=sleep`，非 root 传的话被忽略 |
+| 5 | pet 自包含：`qq-bridge/` 改名后仍能启动并对话 | ❌ 未测 |
+| 6 | secret 边界：main 读得到；群、pet 读不到 | ✅ pet 实测读不到；qq-owner 能读（探查权） |
+| 7 | ID 迁移：前后条数、tombstone 数一致；`supersedes` 未断 | ✅ 1669 行重写，0 冲突 |
+| 8 | 基线：`verify-recall --baseline` 输出保持/上升/下降 | ✅ 已实现；负向测试（假 id / 反转锚点 / 辅助锚点全缺）三种都判对 |
 
 ## 为什么推倒上一版
 
