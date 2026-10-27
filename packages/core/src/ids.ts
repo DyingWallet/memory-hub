@@ -9,11 +9,30 @@ export function shortHash(input: string, bytes = 6): string {
 }
 
 /**
- * Fact id: `f_<epoch-ms>_<8 hex>`. Sortable by time, globally unique enough for
- * an append-only local log, and short enough to quote in transcripts.
+ * Fact id: `<source>-<scene>-<time36>-<rand4>`（2026-10-27 统一规则）。
+ *
+ * 与 `scripts/migrate-ids.mjs` 的映射格式一致——迁移之后新写入的 id 不会再
+ * 分裂成另一种形状。旧的 `f_<epoch>_<hex>` 只存在于历史数据里。
  */
-export function newFactId(now: number = Date.now()): string {
-  return `f_${now}_${randomBytes(4).toString('hex')}`;
+export function newFactId(options: { now?: number; scene?: string; source?: string } = {}): string {
+  const now = options.now ?? Date.now();
+  const source = options.source ?? 'fact';
+  const scene = normalizeSceneForId(options.scene);
+  const time = Math.max(1, Math.floor(now / 1000)).toString(36);
+  const rand = randomBytes(2).toString('hex').slice(0, 4);
+  return `${source}-${scene}-${time}-${rand}`;
+}
+
+/** 场景归一化：`qq:group:123` → `qq-group-123`。id 与迁移脚本共用同一规则。 */
+export function normalizeSceneForId(scene?: string): string {
+  if (!scene) return 'none';
+  const cleaned = String(scene)
+    .replace(/:/g, '-')
+    .replace(/[^a-zA-Z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 40);
+  return cleaned || 'none';
 }
 
 /** Deterministic ids for migrated rows (`import:<scene>:<hash>`). */

@@ -898,7 +898,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       const now = Date.now();
       const record: FactRecord = {
         schema_version: 1,
-        id: newFactId(now),
+        id: newFactId({ now, scene: auth.scene }),
         ts: new Date(now).toISOString(),
         kind: body.kind,
         text: body.text,
@@ -1186,7 +1186,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       if (body.note && body.note.text.trim().length > 0) {
         const note: FactRecord = {
           schema_version: 1,
-          id: newFactId(now),
+          id: newFactId({ now, scene: auth.scene }),
           ts: new Date(now).toISOString(),
           kind: body.note.kind ?? 'note',
           text: body.note.text.trim(),

@@ -145,7 +145,7 @@ test('QQ group write is appended to JSONL and becomes searchable in that scene',
   });
   assert.equal(response.statusCode, 200);
   const body = response.json();
-  assert.ok(body.id.startsWith('f_'));
+  assert.match(body.id, /^fact-qq-group-/);
 
   const after = readFileSync(join(fixture.factsDir, '2026-10.jsonl'), 'utf8').split('\n').filter(Boolean).length;
   assert.equal(after, before + 1);
