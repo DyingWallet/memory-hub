@@ -26,7 +26,7 @@
 | 量 | 范围 | 来源 | 变不变 | 管什么 |
 |---|---|---|---|---|
 | `importance` | 0–3 | 整理会话写入时标注 | **不变** | 这条该记多久 |
-| `strength` | ≥0 | 痕迹叠加（见 §3.1） | **每次使用变** | 熟不熟 |
+| `strength` | ≥0 | 痕迹衰减（见 §3.1） | 随时间变 | 熟不熟 |
 | `openLoop` | 0 / 1 | 整理会话判定 | 直到收尾 | 这段话说完了没 |
 
 `importance` 的四档不是线性的：**0/1/2 是「沉得慢」，3 是「几乎不沉」**（50 年半衰期，见 §3.1）。所以标 3 要非常克制——它不是「很重要」，是「忘了会出事」。
@@ -42,15 +42,18 @@
 ```js
 const TAU = 14;                                   // 天
 // importance = 3 走「几乎不衰减」档：50 年半衰期，而不是线性外推的 56 天
-const tau = importance >= 3 ? 18250 : TAU * (1 + importance);
+const baseTau = importance >= 3 ? 18250 : TAU * (1 + importance);
+// 用得多 → 沉得慢。对数放大，边际递减：n=10 约 2.2 倍，n=100 约 3.3 倍
+const tau = baseTau * (1 + 0.5 * Math.log(1 + recall_count));
 
 strength(now) =
     exp(-(now - createdAt) / tau)                 // ① 写下来那一刻的痕迹
-  + Σ_i exp(-(now - t_use_i) / tau)               // ② 每次被采用的痕迹
-  + (closedAt ? exp(-(now - closedAt) / tau) : 0) // ③ 收尾那一下（见 §4）
+  + (closedAt ? exp(-(now - closedAt) / tau) : 0) // ② 收尾那一下（见 §4）
 ```
 
-三条痕迹都随 `tau` 衰减，`tau` 被 `importance` 放大：
+**两条痕迹，不是三条。** 早期版本用「每次召回叠一道痕迹」（spacing effect 的原样实现），但它需要每次召回的时间戳；只用 `recall_count` 近似会系统性高估——把一年前衰减掉的痕迹当成昨天刚发生的。
+
+改成**放大 `tau`** 之后，表达的语义变成「用得多 → 沉得慢」，而不是「用得多 → 强度高」。代价是失去了「密集使用 vs 稀疏使用」的区分，收益是不需要 `touches` 表、没有分布偏差、`log` 天然封顶。
 
 | importance | tau | 1 年后还剩 | 大约多久沉到 1/e |
 |---|---|---|---|
@@ -238,7 +241,7 @@ GET /v1/search?q=...&explain=1
 
 ```
 importance  0-3      写入时标，永不变     → 决定 tau（0/1/2: 14×(1+imp) 天；3: 18250 天）
-strength    ≥0       痕迹叠加，每次算      → ×(1 + 0.30·tanh(strength/3))
+strength    ≥0       痕迹衰减，每次算      → ×(1 + 0.30·tanh(strength/3))
 openLoop    0/1      话没说完              → ×(1 + 0.30·openLoop)
 closedAt    时间/空   收尾时写              → 给 strength 加一条痕迹
 

@@ -16,6 +16,14 @@ export interface SearchHit {
   /** 'owner' | 'self' | 'other' — whose memory this is. */
   subject: string;
   score: number;
+  /** 仅 `?explain=1` 时返回：加权分量，用于排查「为什么这条排第一」。 */
+  explain?: {
+    baseScore: number;
+    strength: number;
+    importance: number;
+    openLoop: number;
+    finalScore: number;
+  };
 }
 
 interface ChunkRow {
@@ -29,7 +37,53 @@ interface ChunkRow {
   stage: string | null;
   expires_at: number | null;
   subject: string | null;
+  /** 加权模型字段（JOIN docs 带出，chunks 不复制）。 */
+  importance: number | null;
+  open_loop: number | null;
+  closed_at: number | null;
+  recall_count: number | null;
   rank: number;
+}
+
+/* ---------------- 记忆加权（docs/MEMORY-WEIGHTING.md） ---------------- */
+
+const DAY_MS = 86_400_000;
+const TAU_BASE_DAYS = 14;
+/** importance=3 走「几乎不衰减」档：50 年半衰期。 */
+const TAU_NEVER_DAYS = 18250;
+/** 用得多 → 沉得慢。log 放大，边际递减，最多约 2 倍。 */
+const RECALL_LOG_GAIN = 0.5;
+/** 强度与未闭合的乘数系数。刻意压小——加权只做微调，不翻盘。 */
+const WEIGHT_BETA = 0.3;
+const WEIGHT_K = 3;
+const WEIGHT_DELTA = 0.3;
+
+/** 这条记忆当前的衰减时间常数（天）。 */
+export function importanceTauDays(importance: number, recallCount: number): number {
+  const base = importance >= 3 ? TAU_NEVER_DAYS : TAU_BASE_DAYS * (1 + importance);
+  return base * (1 + RECALL_LOG_GAIN * Math.log(1 + Math.max(0, recallCount)));
+}
+
+/**
+ * 强度：两条痕迹叠加——写入那一刻、收尾那一下。都随 `tau` 衰减。
+ * 不存库，每次现算；`reindex` 后数值必然一致。
+ */
+export function memoryStrength(input: {
+  importance: number;
+  recallCount: number;
+  createdAt: number;
+  closedAt?: number | null;
+  now: number;
+}): number {
+  const tau = importanceTauDays(input.importance, input.recallCount) * DAY_MS;
+  let strength = Math.exp(-(input.now - input.createdAt) / tau);
+  if (input.closedAt) strength += Math.exp(-(input.now - input.closedAt) / tau);
+  return strength;
+}
+
+/** 检索分乘数。`baseScore` 是门槛，乘数只作用于已经命中相关性的行。 */
+export function weightMultiplier(strength: number, openLoop: number): number {
+  return (1 + WEIGHT_BETA * Math.tanh(strength / WEIGHT_K)) * (1 + WEIGHT_DELTA * openLoop);
 }
 
 export interface SearchParams {
@@ -52,6 +106,8 @@ export interface SearchParams {
    * pass the original message text here.
    */
   semanticQuery?: string;
+  /** `?explain=1`：在每条命中上附带加权分量，用于排查排序。 */
+  explain?: boolean;
 }
 
 export interface SearchOutcome {
@@ -129,6 +185,19 @@ export function searchChunks(db: Db, params: SearchParams): SearchOutcome {
         score += covered * COVERAGE_BOOST;
       }
     }
+    // 记忆加权：baseScore 是门槛，乘数只作用于已经命中相关性的行。
+    const baseScore = score;
+    const importance = row.importance ?? 1;
+    const openLoop = row.open_loop ?? 0;
+    const strength = memoryStrength({
+      importance,
+      recallCount: row.recall_count ?? 0,
+      // fact 的 updated_at 就是它的 ts（原始写入时刻），没有更早的时间可用。
+      createdAt: row.updated_at,
+      closedAt: row.closed_at,
+      now,
+    });
+    const finalScore = baseScore * weightMultiplier(strength, openLoop);
     return {
       id: row.id,
       path: row.path,
@@ -140,7 +209,10 @@ export function searchChunks(db: Db, params: SearchParams): SearchOutcome {
       stage: row.stage === 'short' ? 'short' : 'long',
       expires_at: row.expires_at ?? null,
       subject: row.subject ?? 'owner',
-      score,
+      score: finalScore,
+      ...(params.explain
+        ? { explain: { baseScore, strength, importance, openLoop, finalScore } }
+        : {}),
     } satisfies SearchHit;
   });
 
@@ -175,9 +247,12 @@ function runMatch(
   values.push(limit);
 
   const sql = `
-    SELECT c.id, c.path, c.title, c.heading, c.text, c.kind, c.updated_at, c.stage, c.expires_at, c.subject, bm25(chunks_fts) AS rank
+    SELECT c.id, c.path, c.title, c.heading, c.text, c.kind, c.updated_at, c.stage, c.expires_at, c.subject,
+           d.importance, d.open_loop, d.closed_at, d.recall_count,
+           bm25(chunks_fts) AS rank
     FROM chunks_fts
     JOIN chunks c ON c.rowid = chunks_fts.rowid
+    JOIN docs d ON d.id = c.doc_id
     WHERE chunks_fts MATCH ? AND ${clauses.join(' AND ')}
     ORDER BY rank
     LIMIT ?`;

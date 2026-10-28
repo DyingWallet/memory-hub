@@ -103,6 +103,19 @@ export const TMemoryResult = Type.Object(
     expires_at: Type.Optional(Type.String()),
     /** Set when this item became visible because its owner brought it up in this scene. */
     disclosure: Type.Optional(Type.Union([Type.Literal('owner_initiated')])),
+    /** 仅请求体 `explain: 1` 时返回：加权分量，用于排查「为什么这条排第一」。 */
+    explain: Type.Optional(
+      Type.Object(
+        {
+          baseScore: Type.Number(),
+          strength: Type.Number(),
+          importance: Type.Integer(),
+          openLoop: Type.Integer(),
+          finalScore: Type.Number(),
+        },
+        { additionalProperties: false },
+      ),
+    ),
   },
   { additionalProperties: false },
 );
@@ -272,6 +285,8 @@ export const TSearchRequest = Type.Object(
     max_chars: Type.Optional(Type.Integer({ minimum: 40, maximum: 6000 })),
     /** Only memories about this subject (`owner` / `self` / `other`). */
     subject: Type.Optional(TSubject),
+    /** 1 = 在每条结果上附带加权分量（baseScore / strength / importance / openLoop）。 */
+    explain: Type.Optional(Type.Integer({ minimum: 0, maximum: 1 })),
   },
   { additionalProperties: false },
 );
@@ -553,6 +568,15 @@ export const TFactRecord = Type.Object(
     expires_at: Type.Optional(Type.String({ maxLength: 40 })),
     /** How many times this memory was recalled (spacing effect extends TTL). */
     recall_count: Type.Optional(Type.Integer({ minimum: 0 })),
+    /**
+     * 记忆加权模型（docs/MEMORY-WEIGHTING.md）：0-3，写入时标注。
+     * 0/1/2 是「沉得慢」，3 是「几乎不沉」（50 年半衰期）。缺省按 1。
+     */
+    importance: Type.Optional(Type.Integer({ minimum: 0, maximum: 3 })),
+    /** 0/1，话没说完。只影响相关时的排序，不催办。 */
+    open_loop: Type.Optional(Type.Integer({ minimum: 0, maximum: 1 })),
+    /** 收尾时间（ISO）。参与 strength 的第二条痕迹。 */
+    closed_at: Type.Optional(Type.String({ maxLength: 40 })),
     persisted_at: Type.Optional(Type.String({ maxLength: 40 })),
     source_message_id: Type.Optional(Type.String({ maxLength: 200 })),
     /**
@@ -581,6 +605,12 @@ export const TWriteRequest = Type.Object(
     supersedes: Type.Optional(Type.String({ maxLength: 200 })),
     stage: Type.Optional(TStage),
     expires_at: Type.Optional(Type.String({ maxLength: 40 })),
+    /** 记忆加权模型：0-3，缺省 1。见 docs/MEMORY-WEIGHTING.md。 */
+    importance: Type.Optional(Type.Integer({ minimum: 0, maximum: 3 })),
+    /** 0/1，话没说完。只影响相关时的排序。 */
+    open_loop: Type.Optional(Type.Integer({ minimum: 0, maximum: 1 })),
+    /** 收尾时间（ISO），参与 strength 的第二条痕迹。 */
+    closed_at: Type.Optional(Type.String({ maxLength: 40 })),
     source_message_id: Type.Optional(Type.String({ maxLength: 200 })),
     meta: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
     idempotency_key: Type.Optional(Type.String({ maxLength: 200 })),

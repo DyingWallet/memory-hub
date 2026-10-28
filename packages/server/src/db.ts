@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS docs (
   stage      TEXT NOT NULL DEFAULT 'long', -- 'short' | 'long'
   expires_at INTEGER,                     -- epoch ms for short memories
   recall_count INTEGER NOT NULL DEFAULT 0,
+  importance INTEGER NOT NULL DEFAULT 1,  -- 0-3, 写入时标注；3 走「几乎不衰减」档
+  open_loop  INTEGER NOT NULL DEFAULT 0,  -- 0/1, 话没说完
+  closed_at  INTEGER,                     -- 收尾时间（ms），算第三条痕迹
   persisted_at INTEGER,
   subject    TEXT NOT NULL DEFAULT 'owner', -- 'owner' | 'self' | 'other'
   supersedes TEXT,                        -- id of the memory this one replaced
@@ -119,6 +122,12 @@ function migrateColumns(db: Db): void {
   add('docs', 'stage', "TEXT NOT NULL DEFAULT 'long'");
   add('docs', 'expires_at', 'INTEGER');
   add('docs', 'recall_count', 'INTEGER NOT NULL DEFAULT 0');
+  // 记忆加权模型（docs/MEMORY-WEIGHTING.md）的三个字段。默认值刻意取中性：
+  // importance=1 是「有点信息量」这一档，open_loop=0，closed_at=NULL。
+  // 旧记录全按默认值参与加权，不需要数据迁移。
+  add('docs', 'importance', 'INTEGER NOT NULL DEFAULT 1');
+  add('docs', 'open_loop', 'INTEGER NOT NULL DEFAULT 0');
+  add('docs', 'closed_at', 'INTEGER');
   add('docs', 'persisted_at', 'INTEGER');
   // Old rows get the column default 'owner', which is exactly right: everything
   // written before `subject` existed is about the owner.

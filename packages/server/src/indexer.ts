@@ -219,6 +219,12 @@ interface ReplaceDocInput {
   stage?: 'short' | 'long';
   expiresAt?: number | null;
   recallCount?: number;
+  /** 0-3；见 docs/MEMORY-WEIGHTING.md。默认 1（旧记录也按这个参与加权）。 */
+  importance?: number;
+  /** 0/1，话没说完；只影响相关时的排序。 */
+  openLoop?: number;
+  /** 收尾时间（epoch ms），参与 strength 的第二条痕迹。 */
+  closedAt?: number | null;
   persistedAt?: number | null;
   /** 'owner' | 'self' | 'other'; defaults to 'owner'. */
   subject?: string;
@@ -234,13 +240,14 @@ function replaceDoc(db: Db, input: ReplaceDocInput): void {
   try {
     deleteDocRows(db, input.id);
     db.prepare(
-      `INSERT INTO docs(id, doc_type, path, title, kind, audience, privacy, source, scene, hash, updated_at, stage, expires_at, recall_count, persisted_at, subject, supersedes, source_message_id)
-       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO docs(id, doc_type, path, title, kind, audience, privacy, source, scene, hash, updated_at, stage, expires_at, recall_count, importance, open_loop, closed_at, persisted_at, subject, supersedes, source_message_id)
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          doc_type=excluded.doc_type, path=excluded.path, title=excluded.title, kind=excluded.kind,
          audience=excluded.audience, privacy=excluded.privacy, source=excluded.source,
          scene=excluded.scene, hash=excluded.hash, updated_at=excluded.updated_at,
          stage=excluded.stage, expires_at=excluded.expires_at, recall_count=excluded.recall_count,
+         importance=excluded.importance, open_loop=excluded.open_loop, closed_at=excluded.closed_at,
          persisted_at=excluded.persisted_at, subject=excluded.subject, supersedes=excluded.supersedes,
          source_message_id=excluded.source_message_id`,
     ).run(
@@ -258,6 +265,9 @@ function replaceDoc(db: Db, input: ReplaceDocInput): void {
       input.stage ?? 'long',
       input.expiresAt ?? null,
       input.recallCount ?? 0,
+      input.importance ?? 1,
+      input.openLoop ?? 0,
+      input.closedAt ?? null,
       input.persistedAt ?? null,
       input.subject ?? 'owner',
       input.supersedes ?? null,
@@ -464,6 +474,10 @@ function upsertFact(db: Db, config: ServerConfig, record: FactRecord, relPath: s
     stage: record.stage === 'short' ? 'short' : 'long',
     expiresAt: record.expires_at ? Date.parse(record.expires_at) : null,
     recallCount: record.recall_count ?? 0,
+    // 记忆加权模型三字段。旧记录缺这些字段时取中性默认值，不写迁移脚本。
+    importance: record.importance ?? 1,
+    openLoop: record.open_loop === 1 ? 1 : 0,
+    closedAt: record.closed_at ? Date.parse(record.closed_at) || null : null,
     persistedAt: record.persisted_at ? Date.parse(record.persisted_at) : null,
     subject: record.subject ?? 'owner',
     supersedes: record.supersedes,

@@ -488,7 +488,7 @@ function sourceForScene(scene: string): TFactRecord['source'] {
   /* search                                                           */
   /* ---------------------------------------------------------------- */
   app.post<{
-    Body: { query: string; k?: number; scene?: string; kinds?: MemoryKind[]; path_prefix?: string; max_chars?: number; subject?: 'owner' | 'self' | 'other' };
+    Body: { query: string; k?: number; scene?: string; kinds?: MemoryKind[]; path_prefix?: string; max_chars?: number; subject?: 'owner' | 'self' | 'other'; explain?: number };
     Reply: SearchResponse;
   }>(
     routeByOperationId('search').path,
@@ -514,6 +514,7 @@ function sourceForScene(scene: string): TFactRecord['source'] {
         ...(body.kinds ? { kinds: body.kinds } : {}),
         ...(body.path_prefix ? { pathPrefix: body.path_prefix } : {}),
         ...(body.subject ? { subject: body.subject } : {}),
+        ...(body.explain === 1 ? { explain: true } : {}),
       }, k);
       finish('search', auth, started, outcome.hits.map((hit) => hit.id), body.query);
       const ordered = orderByStageWeight(outcome.hits, config.searchShortWeight);
@@ -840,6 +841,12 @@ function sourceForScene(scene: string): TFactRecord['source'] {
       supersedes?: string;
       stage?: 'short' | 'long';
       expires_at?: string;
+      /** 记忆加权模型：0-3，缺省 1。见 docs/MEMORY-WEIGHTING.md。 */
+      importance?: number;
+      /** 0/1，话没说完。 */
+      open_loop?: number;
+      /** 收尾时间（ISO）。 */
+      closed_at?: string;
       source_message_id?: string;
       meta?: Record<string, unknown>;
       idempotency_key?: string;
@@ -928,6 +935,10 @@ function sourceForScene(scene: string): TFactRecord['source'] {
         subject,
         ...(body.supersedes ? { supersedes: body.supersedes } : {}),
         ...(body.meta ? { meta: body.meta } : {}),
+        // 加权模型三字段：写进 JSONL，索引重建时原样读回。
+        ...(body.importance !== undefined ? { importance: body.importance } : {}),
+        ...(body.open_loop !== undefined ? { open_loop: body.open_loop } : {}),
+        ...(body.closed_at ? { closed_at: body.closed_at } : {}),
       };
 
       if (body.stage === 'short') {
