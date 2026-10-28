@@ -30,6 +30,20 @@ node -e "JSON.parse(require('fs').readFileSync('qq-bridge/config.example.json','
 - **scene**：`group:<id> → qq:group:<id>`；`private:<ownerQQ> → qq:owner`；其余 → `qq:private:<qq>`。模型不能传 scene。
 - **降级**：`enabled=false`、产物缺失、memd 挂掉，全部 no-op，桥接行为与改动前一致。
 
+## 认人：看 QQ 号（2026-10-28）
+
+名字不可靠——群名片会改、昵称会撞、群里还会用外号（群里管主人叫「阳光」，名片却是「阳光开朗大男孩er~~」）。所以身份判定只在两处做，都靠号：
+
+| 位置 | 判据 | 渲染 |
+|---|---|---|
+| 发言者 | `String(event.user_id) === String(cfg.ownerQQ)` | 群上下文「【管理员】名字(QQ xxx)：内容」 |
+| 被 @ 者 | `String(at.qq) === String(cfg.ownerQQ)` | 「@名字（管理员）」 |
+
+- `appendRecentMessage` 新增 `userId` 参数并存进消息；`buildContextBlock` 渲染时带 `(QQ xxx)`。
+- `segmentsToText` 的 `at` 分支在解析出名字之后仍保留 QQ 号用于判定，调用点传入 `ownerQQ`。
+- 快照（`/api/socialV2` 的 unread/recent）本来就有 `userId`，`compactModelMessage` 只删 `isOwner: false`，所以 `isOwner: true` 会保留。
+- preset 侧配了一句【认人：看号不看名】，并明确「QQ 号只给自己判断用，不要写进对群友的回复」。
+
 ## 主人主动提起 → 临时可见（2026-10-24）
 
 - 桥接把最近消息里发送者是 `ownerQQ` 的标成 `from_owner: true` 传给 `/v1/recall`（模型不能自己传）。

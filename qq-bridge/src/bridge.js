@@ -1376,7 +1376,7 @@ function withTimeout(promise, ms, label) {
 }
 
 async function segmentsToText(segments, options = {}) {
-  const { resolveAtName, resolveReply, includeReply = true } = options ?? {};
+  const { resolveAtName, resolveReply, includeReply = true, ownerQQ = null } = options ?? {};
   // 有些 OneBot 实现直接把纯文本消息放在 message 字段里（string）
   if (typeof segments === 'string') return segments.trim();
   const out = [];
@@ -1388,10 +1388,13 @@ async function segmentsToText(segments, options = {}) {
         if (d.qq === 'all') {
           out.push('@全体成员');
         } else {
-          // 优先把 @ 对象解析成群名片/昵称，解析不到再回退成 QQ 号
+          // 优先把 @ 对象解析成群名片/昵称，解析不到再回退成 QQ 号。
+          // 身份判定只看 QQ 号：被 @ 的是管理员本人时额外标注，免得模型按名字猜。
           let name = null;
           try { name = resolveAtName ? await resolveAtName(String(d.qq)) : null; } catch { name = null; }
-          out.push(name ? `@${name}` : `@${d.qq}`);
+          const label = name ? `@${name}` : `@${d.qq}`;
+          const isOwnerAt = ownerQQ != null && String(d.qq) === String(ownerQQ);
+          out.push(isOwnerAt ? `${label}（管理员）` : label);
         }
         break;
       }
@@ -10129,7 +10132,7 @@ async function main() {
     return false;
   }
 
-  function appendRecentMessage(key, sender, textContent, plainText, quoteTargetIsSelf = false, isOwner = false, media = [], messageRef = '') {
+  function appendRecentMessage(key, sender, textContent, plainText, quoteTargetIsSelf = false, isOwner = false, media = [], messageRef = '', userId = '') {
     if (!social.recentMessages.has(key)) social.recentMessages.set(key, []);
     const arr = social.recentMessages.get(key);
     arr.push({
@@ -10138,6 +10141,8 @@ async function main() {
       plain: truncateText(String(plainText ?? textContent), 200),
       quoteTargetIsSelf: !!quoteTargetIsSelf,
       isOwner: !!isOwner,
+      // 认人看 QQ 号而不是名字：群名片/昵称随时可改、也可能撞名。
+      ...(userId ? { userId: String(userId) } : {}),
       media: Array.isArray(media) ? media : [],
       messageId: messageRef ? String(messageRef) : '',
       hasMedia: Array.isArray(media) && media.length > 0,
@@ -10158,7 +10163,10 @@ async function main() {
 
   function buildContextBlock(key) {
     const ctx = (social.recentMessages.get(key) ?? []).slice(-Number(cfg.social?.contextWindow ?? 15));
-    return ctx.map((m) => `${m.isOwner ? '【管理员】' : ''}${m.sender}：${m.text}${mediaHintFor(key, m.messageId, m.media)}`).join('\n') || '（无）';
+    return ctx.map((m) => {
+      const who = `${m.isOwner ? '【管理员】' : ''}${m.sender}${m.userId ? `(QQ ${m.userId})` : ''}`;
+      return `${who}：${m.text}${mediaHintFor(key, m.messageId, m.media)}`;
+    }).join('\n') || '（无）';
   }
 
   // 触发进入活跃（启动阶段 → 活跃阶段）
@@ -10999,7 +11007,8 @@ async function main() {
       const sender = raw.sender?.card || raw.sender?.nickname || String(raw.sender?.user_id ?? raw.user_id ?? '未知');
       const text = await segmentsToText(raw.message ?? [], {
         resolveAtName: kind === 'group' ? (qq) => resolveGroupMemberName(convId, qq) : null,
-        includeReply: false
+        includeReply: false,
+        ownerQQ: cfg.ownerQQ
       });
       const senderUserId = raw.sender?.user_id ?? raw.user_id ?? null;
       // 被引用消息里的合并转发 id：归属已在上面校验过（同群 / 同一私聊），登记为本会话可见，
@@ -12294,8 +12303,8 @@ async function main() {
     };
     // textContent 带引用对象信息，供 DSH 判断“这句话在对谁说”；
     // plainContent 只保留当前消息自己的文字，用于命令/指向性判断，避免被引用原文干扰。
-    const textContent = await segmentsToText(event.message ?? [], { resolveAtName, resolveReply });
-    const plainContent = await segmentsToText(event.message ?? [], { resolveAtName, includeReply: false });
+    const textContent = await segmentsToText(event.message ?? [], { resolveAtName, resolveReply, ownerQQ: cfg.ownerQQ });
+    const plainContent = await segmentsToText(event.message ?? [], { resolveAtName, includeReply: false, ownerQQ: cfg.ownerQQ });
     const mediaList = extractMediaFromSegments(event.message ?? []);
     const messageRef = String(event.message_id ?? event.msg_id ?? event.message_seq ?? '');
     const seqRef = event.message_seq != null ? String(event.message_seq) : '';
@@ -12532,7 +12541,7 @@ async function main() {
     // 仿真群友模式：reserved 走状态机（观望/活跃/试探/退场）
     if (isSocialEnabled()) {
       const sender = kind === 'group' ? (event.sender?.card || event.sender?.nickname || String(event.user_id)) : '私聊';
-      appendRecentMessage(key, sender, textContent, plainContent, quoteTargetIsSelf, isOwner, mediaList, messageRef); // AI 始终感知
+      appendRecentMessage(key, sender, textContent, plainContent, quoteTargetIsSelf, isOwner, mediaList, messageRef, event.user_id); // AI 始终感知
       const st = socialState(key);
 
       // 退场中：收尾发言发出前不再接话，新消息进入摘要

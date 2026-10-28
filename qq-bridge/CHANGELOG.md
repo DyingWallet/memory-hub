@@ -3,6 +3,14 @@
 本仓库（qq-bridge-enhanced）基于上游 [Derpyu520/qq-bridge](https://github.com/Derpyu520/qq-bridge) `v0.2.0-r3`。
 上游更早的版本历史见 [docs/guides/DSH_020_ADAPTATION.md](docs/guides/DSH_020_ADAPTATION.md) 与上游 Release 页面。
 
+## v1.0.5（未发布）—— 2026-10-28
+
+### 修复：群里认不出「谁是主人」——改成看 QQ 号，不看名字
+- 老的社会上下文结构（`appendRecentMessage`）**根本没存 `userId`**，所以群上下文块里每条只有名字。现在存了，`buildContextBlock` 渲染成「名字(QQ xxx)：内容」，管理员额外带【管理员】前缀。
+- `segmentsToText` 的 at 段原来是「能解析出名字就只显示名字」，**QQ 号在这一步丢了**。现在解析出 at 对象后比对 `ownerQQ`，被 @ 的是管理员时标成「@名字（管理员）」。
+- 三个 `segmentsToText` 调用点（消息正文 / plainContent / 引用解析）都传入 `ownerQQ`。
+- preset 新增【认人：看号不看名】：名字会改、会撞名、会被叫外号——群里管他叫「阳光」不等于他的名片就叫阳光；判断身份一律看 QQ 号，且 QQ 号只用于自己判断，不写进对群友的回复。
+
 ## v1.0.4（未发布）—— 2026-10-28
 
 ### 新增：唤醒时注入「最近记得的事」
