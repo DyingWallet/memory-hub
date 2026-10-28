@@ -24,6 +24,7 @@
 | 长期事实 / 文档 | `memories/**/*.md`、`facts/*.jsonl` | 检索到才给，`/v1/search`、`/v1/recall`、`/v1/timeline` |
 | 短期聊天 | 同一份 JSONL，`stage=short` + TTL | 24 小时内可召回，过期自动失效 |
 | 身份与受众 | `memories/user/identity.md`、`memories/audiences/`（可选） | `/v1/bootstrap` 拉取（MCP 工具 `memory_bootstrap`），会话启动时给一次 |
+| 最近记得的事 | 同一份 JSONL 的最近 8 条长期记忆 | 每次唤醒追加一次（`/v1/recent`，10 分钟缓存），补「召回按 query 命中、跑题就空」的盲区 |
 
 ## 快速开始
 

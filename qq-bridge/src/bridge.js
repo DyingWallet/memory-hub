@@ -9038,7 +9038,7 @@ async function main() {
     const archived = archivedSessionIdSet();
     if (archived) {
       const alive = !archived.has(sessionId);
-      sessionReusableCache.set(sessionId, { at: now, reusable });
+      sessionReusableCache.set(sessionId, { at: now, reusable: alive });
       if (!alive) log(`会话 ${sessionId} 已在 DSH 的归档表里`);
       return alive;
     }
@@ -10374,6 +10374,10 @@ async function main() {
       const isOwnerChat = key === `private:${cfg.ownerQQ}`;
       const recallIntent = isOwnerChat ? detectGroupRecallIntent(lastUserText) : {};
       let memoryBlock = await memory.recallBlock(key, recentForRecall, recallIntent);
+      // 最近记得的事：不看 query，只看写入时间。recallBlock 用最近两条消息做检索，
+      // query 一旦跑题就整块为空；这张摘要补的就是那个缺口（「上周答应过什么」）。
+      const recentFactsBlock = await memory.recentFacts(key);
+      if (recentFactsBlock) memoryBlock = memoryBlock ? `${memoryBlock}\n\n${recentFactsBlock}` : recentFactsBlock;
       // 群友私聊问「刚才群里聊了什么」：先校验成员，再披露那个群的最近消息。
       // owner 自己的路径在上面（scope=groups），这里只处理别人。
       if (!isOwnerChat && String(key).startsWith('private:')) {
@@ -11617,10 +11621,12 @@ async function main() {
     log,
   });
   // 私密语气只给主人私聊；群聊和他人私聊永远读不到这里。
-  // 内容和对外版在同一个 AGENTS.md 里（「七、私密」），桥接按 section 抽。
+  // 内容和对外版在同一个 AGENTS.md 里，桥接按 section 抽。
+  // 关键词必须带中文序号：sectionBody 是「包含 + 命中第一个」，只写「私密」会先命中
+  // 「一、语气（非私密场景默认）」。改 AGENTS.md 的节号时，这里必须同步。
   const privateReader = createPersonaReader({
     file: path.join(ROOT, '..', 'AGENTS.md'),
-    sections: ['七、私密'],
+    sections: ['二、私密'],
     log,
   });
 

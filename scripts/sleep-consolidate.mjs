@@ -322,6 +322,20 @@ async function promptAndWait(api, sessionId, text, timeoutMs = 15 * 60_000) {
   }
 }
 
+/** DSH 的归档状态存在 `~/.dsh/storages/workspace.json` 的 `global.archivedSessionIds`。
+ *  归档会话照样在 `session/list` 里，prompt 也照样接受，只有 turn 会立刻空完成——
+ *  所以光看 list 判断不出来，必须查这张表。读不到时返回 null，调用方退回 list 判断。 */
+function archivedSessionIdSet() {
+  try {
+    const file = join(homedir(), '.dsh', 'storages', 'workspace.json');
+    const parsed = JSON.parse(readFileSync(file, 'utf8'));
+    const ids = parsed?.global?.archivedSessionIds;
+    return Array.isArray(ids) ? new Set(ids) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function ensureConsolidationSession(api, workspacePath) {
   if (existsSync(stateFile)) {
     try {
@@ -333,7 +347,13 @@ async function ensureConsolidationSession(api, workspacePath) {
           // DSH 的 `session/list` 返回 `{ items }`；读 `sessions` 会得到空集合，于是每次
           // 都判定旧整理会话「不存在」而新建一个，历史上下文永远续不上。
           const ids = (listed?.items ?? listed?.sessions ?? []).map((item) => item.sessionId);
-          if (ids.includes(saved.sessionId)) return saved.sessionId;
+          // 归档会话也在 items 里，必须再查归档表，否则复用只会拿到一个空完成的 turn。
+          const archived = archivedSessionIdSet();
+          if (archived?.has(saved.sessionId)) {
+            log(`整理会话 ${saved.sessionId} 已被 DSH 归档，重建（复用只会拿到空完成的 turn）`);
+          } else if (ids.includes(saved.sessionId)) {
+            return saved.sessionId;
+          }
         } catch {
           // 列表拿不到就重建
         }

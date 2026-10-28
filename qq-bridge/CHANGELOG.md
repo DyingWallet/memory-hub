@@ -3,6 +3,19 @@
 本仓库（qq-bridge-enhanced）基于上游 [Derpyu520/qq-bridge](https://github.com/Derpyu520/qq-bridge) `v0.2.0-r3`。
 上游更早的版本历史见 [docs/guides/DSH_020_ADAPTATION.md](docs/guides/DSH_020_ADAPTATION.md) 与上游 Release 页面。
 
+## v1.0.4（未发布）—— 2026-10-28
+
+### 新增：唤醒时注入「最近记得的事」
+- `memory-bridge.js` 新增 `recentFacts(key, {k})`：调 `/v1/recent`（k 默认 8）取最近写入的长期记忆，拼成 `【最近记得的事】` 区块，10 分钟缓存，任何失败返回空串。
+- `bridge.js` 在 `recallBlock` 之后追加这个区块。分工是：召回负责「相关问题」，摘要负责「最近发生」——`recallBlock` 用最近两条消息做 query，跑题时整块为空。
+- 配置无需改动。memd 不可用或 `memory.enabled=false` 时行为与之前完全一致。
+
+### 修复：归档会话被当成可复用，唤醒投递整段失败
+- `isSessionReusable` 里 `sessionReusableCache.set(sessionId, { at: now, reusable })` 少写了 `: alive`，`reusable` 在函数作用域里不存在，命中归档判断分支时抛 `ReferenceError: reusable is not defined`。**唤醒投递失败，消息只进未读、一条都不回**，而日志只有一行。2026-10-28 实测累计 129 次，全部会话静默一整天。
+
+### 新增：收尾规则（qq-chat-v2 preset）
+- `【收尾：留一句下次接的话】`：收尾前先用 `qq_memory_append(pendingThought)` 或 `activeTopic.pendingQuestion` 留下「下次接什么」，再走沉睡前观察、`mark_read` / `set_wake_config`。点明 `pendingThought` 默认 2 小时过期，跨夜要传 `extra.expiresAtMs`。
+
 ## v1.0.3 —— 2026-10-21
 
 在 v1.0.2 的基础上的修复版本：**切换 agent 等级不再失忆**；引用一条（较早的）合并转发时，AI 能看到并打开里面的内容，这条消息也不再卡 30 秒；普通图片不再被误当成表情。

@@ -28,6 +28,8 @@ import { idemKey, mirrorKey, forgetKeys } from './idem.js';
 import { createMirrorJournal } from './mirror-journal.js';
 
 const RECALL_CACHE_MS = 5000;
+/** 【最近记得的事】的缓存：比召回长，因为它按时间兜底、不随 query 变。 */
+const RECENT_CACHE_MS = 10 * 60_000;
 
 /**
  * 条目身份：`{id, rev, target}`。没有 id 的历史条目走内容指纹。
@@ -79,6 +81,7 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
   let modulePromise = null;
   let broken = false;
   const recallCache = new Map();
+  const recentCache = new Map();
   // 失败流水 + 遗忘队列。journal 关掉等于回到「失败只打一行日志」的旧行为，
   // 只留给排障用；默认开。
   const journal = memoryConfig.journal === false ? null : createMirrorJournal({ root, log });
@@ -217,6 +220,41 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
       } catch (error) {
         log.warn?.(`[memory] recall failed: ${error?.message ?? error}`);
         return '';
+      }
+    },
+
+    /**
+     * `【最近记得的事】` 常驻摘要。
+     *
+     * 和 recallBlock 的分工：recallBlock 用最近两条消息做 query，命中的是「相关问题」；
+     * 这里不看 query、只看写入时间，兜住「上周答应过什么」这类召回盲区——query 跑题时
+     * recallBlock 会整块为空，而这张摘要仍然在。
+     *
+     * 10 分钟缓存（不随 query 变，长一点省 RPC）；任何失败都返回 '' 或上次的结果——
+     * 它挂在唤醒链路上，抛出去就是一条消息都回不了。
+     */
+    async recentFacts(key, options = {}) {
+      if (!enabled || broken) return '';
+      const cacheKey = `recent|${key}`;
+      const cached = recentCache.get(cacheKey);
+      if (cached && Date.now() - cached.at < RECENT_CACHE_MS) return cached.text;
+      try {
+        const scene = sceneOf(key, cfg?.ownerQQ);
+        const api = await getClient(scene);
+        if (!api || typeof api.recent !== 'function') return '';
+        const items = await api.recent(scene, clampInt(options.k ?? 8, 1, 10));
+        const lines = (Array.isArray(items) ? items : [])
+          .map((item) => String(item?.title || item?.text || '').replace(/\s+/g, ' ').trim())
+          .filter(Boolean)
+          .slice(0, 8)
+          .map((text) => `- ${text.slice(0, 80)}`);
+        const block = lines.length > 0 ? `【最近记得的事】\n${lines.join('\n')}` : '';
+        recentCache.set(cacheKey, { text: block, at: Date.now() });
+        if (recentCache.size > 50) recentCache.clear();
+        return block;
+      } catch (error) {
+        log.warn?.(`[memory] recent failed: ${error?.message ?? error}`);
+        return cached?.text ?? '';
       }
     },
 

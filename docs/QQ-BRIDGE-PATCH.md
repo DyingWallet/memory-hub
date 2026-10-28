@@ -8,7 +8,7 @@
 | 文件 | 改动 |
 |---|---|
 | `qq-bridge/src/memory/memory-bridge.js` | 新增（从 `memory-hub/packages/adapter-qq/bridge/memory-bridge.js` 复制） |
-| `qq-bridge/src/bridge.js` | 7 处：import、`cfg.memory` 默认值、`createMemoryBridge` 初始化、`buildWakePromptV2/Core` 第三参数、`longMemoryLine` 拼接、唤醒前 `recallBlock`、`memory-append` 后 `mirrorWrite` |
+| `qq-bridge/src/bridge.js` | 8 处：import、`cfg.memory` 默认值、`createMemoryBridge` 初始化、`buildWakePromptV2/Core` 第三参数、`longMemoryLine` 拼接、唤醒前 `recallBlock`、唤醒前 `recentFacts`（2026-10-28）、`memory-append` 后 `mirrorWrite` |
 | `qq-bridge/config.example.json` | 新增 `memory` 段（默认 `enabled: false`） |
 | `qq-bridge/start-stack.ps1` | 第 2.6 步调用 `memory-hub/scripts/start.ps1`，memd 随 stack 自启（失败不阻断） |
 
@@ -25,6 +25,7 @@ node -e "JSON.parse(require('fs').readFileSync('qq-bridge/config.example.json','
 ## 行为
 
 - **唤醒**：`deliverPromptNow` 用最近 2 条非自己消息调 `/v1/recall`，把 `【长期记忆】/【相关记忆】` 插在会话记忆之后、人物档案之前。800ms 超时、每 key 5 秒缓存、失败返回空串。
+- **最近记得的事**（2026-10-28）：唤醒时额外调一次 `/v1/recent`（k=8，按 scene 过滤），拼成 `【最近记得的事】` 接在召回块后面。它**不看 query、只看写入时间**——`recallBlock` 用最近两条消息做检索，query 一跑题就整块为空，这张摘要补的就是那个缺口（「上周答应过什么」）。10 分钟缓存（不随 query 变），失败返回空串或上次结果，不阻断唤醒。
 - **写入镜像**：`/api/socialV2/memory-append` 成功后 fire-and-forget `POST /v1/write`，`(scene, category, target, text)` 哈希做幂等键；失败只记日志。
 - **scene**：`group:<id> → qq:group:<id>`；`private:<ownerQQ> → qq:owner`；其余 → `qq:private:<qq>`。模型不能传 scene。
 - **降级**：`enabled=false`、产物缺失、memd 挂掉，全部 no-op，桥接行为与改动前一致。
