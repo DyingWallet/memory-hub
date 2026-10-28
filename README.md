@@ -90,6 +90,8 @@ node packages\admin\dist\cli.js health
 
 默认取 5 条、最多 10 条；`searchShortWeight = 1` 关闭降权。
 
+> **加权模型（未实现）**：[`docs/MEMORY-WEIGHTING.md`](docs/MEMORY-WEIGHTING.md) 定义了相关分之外的四个因子——重要性、紧迫性、使用强度、未闭合——以及它们如何互相影响。当前检索只有「相关 + stage 降权」，这些还没接。
+
 ## 记忆生命周期
 
 ```text
