@@ -1226,6 +1226,9 @@ function toMemoryResult(hit: SearchHit, disclosure?: 'owner_initiated'): MemoryR
     subject: hit.subject as 'owner' | 'self' | 'other',
     ...(hit.expires_at ? { expires_at: new Date(hit.expires_at).toISOString() } : {}),
     ...(disclosure ? { disclosure } : {}),
+    // 加权分量：只在请求体 explain=1 时由 searchChunks 填进来；这里是白名单式挑字段，
+    // 漏了这一行会让 explain 静默消失（2026-10-29 实测踩过）。
+    ...(hit.explain ? { explain: hit.explain } : {}),
   };
 }
 
@@ -1246,20 +1249,26 @@ function touchRecall(db: Db, ids: string[], config: ServerConfig): void {
   const now = Date.now();
   const base = config.shortTerm.ttlHours * 3_600_000;
   const cap = config.shortTerm.maxTtlHours * 3_600_000;
+  // 传进来的是 search 命中的 chunk id：fact 的 chunk id 恰好等于 doc id，
+  // 但 md 文档的 chunk id 是 `${docId}#${index}`——而 recall_count 在 docs 上。
+  // 先解析成 doc_id，解析不到就当作已经是 doc id（fact 的情况）。
+  const resolveDoc = db.prepare('SELECT doc_id FROM chunks WHERE id = ?');
   const bump = db.prepare('UPDATE docs SET recall_count = recall_count + 1 WHERE id = ?');
   const readShort = db.prepare("SELECT recall_count FROM docs WHERE id = ? AND stage = 'short'");
   const updateShort = db.prepare('UPDATE docs SET expires_at = ? WHERE id = ?');
   const updateChunks = db.prepare('UPDATE chunks SET expires_at = ? WHERE doc_id = ?');
-  for (const id of ids) {
-    bump.run(id);
+  for (const rawId of ids) {
+    const hit = resolveDoc.get(rawId) as { doc_id?: string } | undefined;
+    const docId = hit?.doc_id ?? rawId;
+    bump.run(docId);
     if (!config.shortTerm.enabled) continue;
-    const row = readShort.get(id) as { recall_count?: number } | undefined;
+    const row = readShort.get(docId) as { recall_count?: number } | undefined;
     if (!row) continue;
     // bump 已经 +1，读到的就是新计数。
     const count = row.recall_count ?? 1;
     const expiresAt = Math.min(now + base * 2 ** count, now + cap);
-    updateShort.run(expiresAt, id);
-    updateChunks.run(expiresAt, id);
+    updateShort.run(expiresAt, docId);
+    updateChunks.run(expiresAt, docId);
   }
 }
 
