@@ -1,6 +1,6 @@
 # MEMORY-WEIGHTING.md — 记忆加权模型
 
-> 状态：**模型定稿，未实现**（2026-10-28 修订：去掉任务层，只留记忆层）。
+> 状态：**已实现**（2026-10-29）。代码见 `packages/server/src/{db,indexer,search}.ts`、`packages/protocol/src/schemas.ts`。
 > 一句话：检索分数不该只看「相关不相关」，还要看**这条该记多久、熟不熟、话有没有说完**。
 
 ---

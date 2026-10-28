@@ -740,11 +740,8 @@ function sourceForScene(scene: string): TFactRecord['source'] {
         results = (await runSearch(searchParams, k)).hits.map((hit) => toMemoryResult(hit));
       }
       markSuperseded(db, results);
-      touchShortTerm(
-        db,
-        results.filter((result) => result.stage === 'short').map((result) => result.id),
-        config,
-      );
+      // 所有命中的记忆都记召回次数（加权模型用它放大 tau），不只是短期记忆。
+      touchRecall(db, results.map((result) => result.id), config);
       finish('recall', auth, started, results.map((result) => result.id));
       return {
         keywords,
@@ -1236,20 +1233,32 @@ function toMemoryResult(hit: SearchHit, disclosure?: 'owner_initiated'): MemoryR
  * Forgetting curve: every recall strengthens a short-term memory. The interval
  * doubles with each recall (spacing effect) and is capped by `maxTtlHours`.
  */
-function touchShortTerm(db: Db, ids: string[], config: ServerConfig): void {
-  if (!config.shortTerm.enabled || ids.length === 0) return;
+/**
+ * 召回后更新计数。
+ *
+ * 两件事分开做：
+ * 1. **所有**记忆的 `recall_count` +1——加权模型拿它放大 `tau`（用得多 → 沉得慢）。
+ *    不受 `shortTerm` 开关影响：加权跟短期缓存是两回事。
+ * 2. **短期**记忆额外延长 TTL（原行为，受 `shortTerm` 开关和封顶约束）。
+ */
+function touchRecall(db: Db, ids: string[], config: ServerConfig): void {
+  if (ids.length === 0) return;
   const now = Date.now();
   const base = config.shortTerm.ttlHours * 3_600_000;
   const cap = config.shortTerm.maxTtlHours * 3_600_000;
-  const read = db.prepare("SELECT recall_count FROM docs WHERE id = ? AND stage = 'short'");
-  const updateDocs = db.prepare('UPDATE docs SET recall_count = ?, expires_at = ? WHERE id = ?');
+  const bump = db.prepare('UPDATE docs SET recall_count = recall_count + 1 WHERE id = ?');
+  const readShort = db.prepare("SELECT recall_count FROM docs WHERE id = ? AND stage = 'short'");
+  const updateShort = db.prepare('UPDATE docs SET expires_at = ? WHERE id = ?');
   const updateChunks = db.prepare('UPDATE chunks SET expires_at = ? WHERE doc_id = ?');
   for (const id of ids) {
-    const row = read.get(id) as { recall_count?: number } | undefined;
+    bump.run(id);
+    if (!config.shortTerm.enabled) continue;
+    const row = readShort.get(id) as { recall_count?: number } | undefined;
     if (!row) continue;
-    const count = (row.recall_count ?? 0) + 1;
+    // bump 已经 +1，读到的就是新计数。
+    const count = row.recall_count ?? 1;
     const expiresAt = Math.min(now + base * 2 ** count, now + cap);
-    updateDocs.run(count, expiresAt, id);
+    updateShort.run(expiresAt, id);
     updateChunks.run(expiresAt, id);
   }
 }

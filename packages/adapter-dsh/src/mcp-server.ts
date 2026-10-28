@@ -285,10 +285,45 @@ export function createMemoryMcpServer(client: MemoryApi, options: McpServerOptio
           .describe(
             '来源标记，只有 root 令牌能设。夜间整理必须传 "sleep"——这样写错了能按来源整批 forget；不传则按场景记 main/qq',
           ),
+        importance: z
+          .number()
+          .int()
+          .min(0)
+          .max(3)
+          .optional()
+          .describe(
+            '这条该记多久：0=说完就过，1=有点信息量，2=偏好/决定/别人说的要紧事，3=忘了会伤到他（身份/关系/健康/约定）。默认 1；标 3 要非常克制。',
+          ),
+        open_loop: z
+          .number()
+          .int()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe('1 = 这段对话没说完（说了没下文 / 问了没答 / 答应了没提）。只在相关时让这条更容易被想起，不催办。'),
+        closed_at: z
+          .string()
+          .max(40)
+          .optional()
+          .describe('收尾时间（ISO）。配 open_loop:0 一起用，表示「这件事接上了」。'),
         scene: sceneArg,
       },
     },
-    async ({ kind, text, tags, privacy, audience, subject, idempotency_key, supersedes, source, scene }) => {
+    async ({
+      kind,
+      text,
+      tags,
+      privacy,
+      audience,
+      subject,
+      idempotency_key,
+      supersedes,
+      source,
+      importance,
+      open_loop,
+      closed_at,
+      scene,
+    }) => {
       if (!writeEnabled) {
         return fail(new Error('write is disabled in the plugin config'));
       }
@@ -304,6 +339,9 @@ export function createMemoryMcpServer(client: MemoryApi, options: McpServerOptio
             ...(idempotency_key ? { idempotency_key } : {}),
             ...(supersedes ? { supersedes } : {}),
             ...(source ? { source } : {}),
+            ...(importance !== undefined ? { importance } : {}),
+            ...(open_loop !== undefined ? { open_loop } : {}),
+            ...(closed_at ? { closed_at } : {}),
             ...(scene ? { scene } : {}),
           }),
         );
