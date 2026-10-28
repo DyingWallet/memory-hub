@@ -9,7 +9,7 @@ import { createRequire } from 'node:module';
 import type { SemanticConfig } from './config.js';
 import type { Db } from './db.js';
 import { EmbeddingRuntime } from './embedding.js';
-import { searchChunks, type SearchHit, type SearchOutcome, type SearchParams } from './search.js';
+import { memoryStrength, searchChunks, weightMultiplier, type SearchHit, type SearchOutcome, type SearchParams } from './search.js';
 import { visibilityClause } from './visibility.js';
 
 const TABLE = 'chunk_vecs';
@@ -217,7 +217,7 @@ export class SemanticIndex {
       const rows = this.rowsByIds(candidates.map((candidate) => candidate.id), params);
       const byId = new Map(candidates.map((candidate) => [candidate.id, candidate.cosine]));
       const semanticHits: SearchHit[] = rows
-        .map((row) => this.toHit(row, byId.get(row.id) ?? 0, params.maxChars))
+        .map((row) => this.toHit(row, byId.get(row.id) ?? 0, params.maxChars, params.explain === true))
         .sort((a, b) => b.score - a.score);
 
       const hits = mergeHybrid(fts.hits, semanticHits, this.config.alpha, k);
@@ -306,6 +306,11 @@ export class SemanticIndex {
     updated_at: number;
     stage: string | null;
     expires_at: number | null;
+    /** 加权模型字段（JOIN docs 带出）。 */
+    importance: number | null;
+    open_loop: number | null;
+    closed_at: number | null;
+    recall_count: number | null;
   }[] {
     if (ids.length === 0) return [];
     const visibility = visibilityClause(params.token, params.scene, 'c', {
@@ -314,8 +319,10 @@ export class SemanticIndex {
     });
     const placeholders = ids.map(() => '?').join(', ');
     const values: (string | number)[] = [...ids, ...visibility.params];
-    let sql = `SELECT c.id, c.path, c.title, c.heading, c.text, c.kind, c.updated_at, c.stage, c.expires_at, c.subject
-       FROM chunks c WHERE c.id IN (${placeholders}) AND ${visibility.where}`;
+    let sql = `SELECT c.id, c.path, c.title, c.heading, c.text, c.kind, c.updated_at, c.stage, c.expires_at, c.subject,
+         d.importance, d.open_loop, d.closed_at, d.recall_count
+       FROM chunks c JOIN docs d ON d.id = c.doc_id
+       WHERE c.id IN (${placeholders}) AND ${visibility.where}`;
     if (params.kinds && params.kinds.length > 0) {
       sql += ` AND c.kind IN (${params.kinds.map(() => '?').join(', ')})`;
       values.push(...params.kinds);
@@ -339,6 +346,10 @@ export class SemanticIndex {
       stage: string | null;
       expires_at: number | null;
       subject: string | null;
+      importance: number | null;
+      open_loop: number | null;
+      closed_at: number | null;
+      recall_count: number | null;
     }[];
   }
 
@@ -354,11 +365,30 @@ export class SemanticIndex {
       stage: string | null;
       expires_at: number | null;
       subject?: string | null;
+      importance?: number | null;
+      open_loop?: number | null;
+      closed_at?: number | null;
+      recall_count?: number | null;
     },
     score: number,
     maxChars: number,
+    explain = false,
   ): SearchHit {
     const text = row.text.length > maxChars ? `${row.text.slice(0, maxChars)}…` : row.text;
+    // 记忆加权必须同时作用于两条检索路径，否则 mergeHybrid 里 FTS 那半边带权重、
+    // 语义这半边不带，加权等于半残。
+    const baseScore = score;
+    const importance = row.importance ?? 1;
+    const openLoop = row.open_loop ?? 0;
+    const now = Date.now();
+    const strength = memoryStrength({
+      importance,
+      recallCount: row.recall_count ?? 0,
+      createdAt: row.updated_at,
+      closedAt: row.closed_at,
+      now,
+    });
+    const finalScore = baseScore * weightMultiplier(strength, openLoop);
     return {
       id: row.id,
       path: row.path,
@@ -370,7 +400,10 @@ export class SemanticIndex {
       stage: row.stage === 'short' ? 'short' : 'long',
       expires_at: row.expires_at ?? null,
       subject: row.subject ?? 'owner',
-      score,
+      score: finalScore,
+      ...(explain
+        ? { explain: { baseScore, strength, importance, openLoop, finalScore } }
+        : {}),
     };
   }
 
