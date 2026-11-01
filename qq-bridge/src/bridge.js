@@ -3691,7 +3691,12 @@ async function main() {
     let drawFileCfg = {};
     try {
       const p = path.join(ROOT, 'config.draw.json');
-      if (fs.existsSync(p)) drawFileCfg = JSON.parse(fs.readFileSync(p, 'utf8')) ?? {};
+      if (fs.existsSync(p)) {
+        // 剥 BOM：PowerShell 的 Set-Content -Encoding UTF8 会写 UTF-8 BOM，
+        // JSON.parse 直接抛 "Unexpected token '﻿'"，而出图会静默退回默认值。
+        const text = fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, '');
+        drawFileCfg = JSON.parse(text) ?? {};
+      }
     } catch (e) {
       log(`[draw] config.draw.json 读取失败，用默认值：${e?.message ?? e}`);
     }
