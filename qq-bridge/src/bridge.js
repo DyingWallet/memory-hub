@@ -9826,10 +9826,13 @@ async function main() {
       // qq:mirror:<scene>:<category>:<id>:<rev>。旧文件没有这个字段，读的时候按 1 处理；
       // 这里每次都写，方便迁移脚本与对账判断文件代际。
       const obj = { schemaVersion: 2, paused: socialV2.paused, conversations: Object.create(null) };
+      // 落盘上限同样读配置：这里原本硬编码 200，导致「内存里 446 条、写盘只剩 200 条」，
+      // 表现为导入的历史在重启后神秘消失。上限只有一个来源：config.socialV2.context.recentLimit。
+      const saveRecentCap = Number(cfg.socialV2?.context?.recentLimit) || 200;
       for (const [key, st] of socialV2.conversations) {
         obj.conversations[key] = {
           wakeConfig: st.wakeConfig,
-          recentMessages: st.recentMessages.slice(-200),
+          recentMessages: st.recentMessages.slice(-saveRecentCap),
           unread: st.unread.slice(-100),
           lastWakeReason: st.lastWakeReason,
           lastAiReplyAt: st.lastAiReplyAt,
