@@ -778,6 +778,99 @@ if (cfg.socialV2?.tools?.sendPoke !== false) {
   );
 }
 
+// ── 出图工具（QQ 侧） ────────────────────────────────────────────────────────
+// 设计要点：
+//   1. 工具不判断「画的是谁」——那是 agent 的语义工作，通过选预设表达；
+//      预设名自带 character（xixi / generic）与 nsfw 标记，服务端按矩阵硬校验。
+//   2. 拒绝与限流都是 200 响应，让 agent 用自然语言接话，不当成接口故障。
+//   3. 出图串行、最长 4 分钟，所以 timeoutMs 给到 300s。
+if (cfg.draw?.enabled !== false) {
+  const drawPresetFile = cfg.draw?.presetFile || path.join(ROOT, '..', 'models', 'scripts', 'draw_presets.json');
+
+  function readDrawPresets() {
+    try {
+      const raw = JSON.parse(fs.readFileSync(drawPresetFile, 'utf8'));
+      // qqExposed:false 的预设只用于本地生成训练素材，不列给模型。
+      return Object.entries(raw.presets ?? {})
+        .filter(([, p]) => p.qqExposed !== false)
+        .map(([name, p]) => ({
+          name,
+          label: p.label ?? name,
+          character: p.character,
+          nsfw: Boolean(p.nsfw)
+        }));
+    } catch {
+      return [];
+    }
+  }
+
+  server.tool(
+    'qq_draw',
+    '画一张图并发到当前会话。\n\n' +
+      '**选预设之前先判断画的是谁**：\n' +
+      '· 画汐（叫她的名字 / 外号 / 说「画你自己」「画你」这类指代）→ 用 character=xixi 的预设\n' +
+      '· 画别的角色（「画个女孩」「来个二次元妹子」、在说别人）→ 用 any:sfw / any:nsfw\n' +
+      '· 说不清画谁 → 先别调工具，反问一句「画谁呀」\n\n' +
+      '**汐的 NSFW 预设（apron / lingerie）只有主人私聊能出**。群聊或他人私聊调用会被服务端拒绝，' +
+      '返回 code=refuse_xixi_nsfw、tone=shy_angry_tsun —— 这时候**用汐的语气回怼**（害羞+生气+嫌弃），' +
+      '不解释、不道歉、不要重试，图不会被生成。\n\n' +
+      '不传 preset 时只返回可用预设清单，不出图。',
+    {
+      key: z.string().describe('会话 key，格式 group:群号 或 private:QQ号'),
+      token: z.string().describe('会话令牌（见唤醒提示中的【会话令牌】）'),
+      preset: z.string().optional().describe('预设名；不传则只列出可用预设'),
+      extra: z.string().max(120).optional().describe('追加描述，例如「坐在窗边看书」「回头笑一下」；不要写身份特征（蓝发/鳍耳），预设里已经带了'),
+      userId: z.string().optional().describe('群聊里发话那个人的 QQ 号（用于按人算配额）。私聊可省；不传时按会话算额度，等于全群共用一份')
+    },
+    async ({ key, token, preset, extra, userId }) => {
+      if (!preset) {
+        const list = readDrawPresets();
+        return { content: [{ type: 'text', text: serializeModelData({ ok: true, presets: list }) }] };
+      }
+      try {
+        // 直连而不是走 agentApi：后者把 200+{ok:false} 当成异常抛出，
+        // 会丢掉 code / message，模型只能看到「未说明原因」然后瞎猜（曾误报成「服务卡住」）。
+        // 出图这里业务失败（冷却/配额/拒绝）必须原样返回给模型。
+        const res = await fetch(`${agentApiBase()}/api/draw`, {
+          method: 'POST',
+          headers: agentHeaders({ 'x-agent-token': token }),
+          body: JSON.stringify({ key, token, preset, extra: extra ?? '', userId: userId ?? '' }),
+          signal: AbortSignal.timeout(300000)
+        });
+        let data = null;
+        try {
+          data = await res.json();
+        } catch {
+          data = null;
+        }
+        if (!res.ok) {
+          const msg = errorText(data?.error, `桥接 API HTTP ${res.status}`);
+          // 令牌失效最常见的诱因是会话刚被重置，直接点明，别让它猜成服务故障
+          const hint = res.status === 403 && /token|令牌/i.test(msg) ? '（会话可能刚被重置，请让用户重发一句）' : '';
+          return { content: [{ type: 'text', text: `出图失败：${msg}${hint}` }], isError: true };
+        }
+        if (data?.ok === false && data?.code === 'refuse_xixi_nsfw') {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: serializeModelData({
+                  ok: false,
+                  code: 'refuse_xixi_nsfw',
+                  guidance: '用汐的语气回绝：害羞+生气+嫌弃，不解释、不道歉、不再尝试。图不会生成。'
+                })
+              }
+            ]
+          };
+        }
+        return { content: [{ type: 'text', text: serializeModelData(data) }] };
+      } catch (error) {
+        return { content: [{ type: 'text', text: `出图失败：${error?.message ?? error}` }], isError: true };
+      }
+    }
+  );
+}
+
 server.tool(
   'qq_wait_for_messages',
   '等待分两种用途。首答前已读消息、只想确认有没有补充：用 purpose="reply"，按最后来信时间补足 quietMs 静默，已安静足够就立即返回；读取/思考时新到的消息也会返回，新消息重算静默。timeoutMs 是最长预算，不要求等满；预算到但 quiet=false 不代表对方已说完。此用途绝不代替沉睡前观察。等对方继续说、等回复或睡前观察：用默认 purpose="messages"；先等新消息，收到后才按 quietMs 等静默，没有新消息会等到 timeoutMs，单传 quietMs 不会缩短总等待。静默下限由后台配置，默认 10000ms。直接看 newMessages、unreadCount 和 readThroughSeq，返回消息无需重复查询；仍有未展示未读才补读。决定潜水/收尾时才用默认用途加 timeoutMs=300000 完成沉睡前观察，不能把 5 分钟观察放在首答之前；短等待不能代替。全程无人说话返回 preSleepWaitSatisfied=true；观察期间来了新消息返回 preSleepWaitObserved=true，读后不需参与可收尾，参与回复则下次收尾重新观察。preSleepWaitRemainingMs 仅供准备收尾时参考。',

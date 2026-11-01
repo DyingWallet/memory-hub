@@ -1,0 +1,11 @@
+{
+  "_comment": "QQ 侧出图配置。桥接启动时读一次，改完要重启桥接生效。",
+  "enabled": true,
+  "scriptPath": "D:\\deepseek_workspace\\models\\scripts\\qq_draw.mjs",
+  "presetFile": "D:\\deepseek_workspace\\models\\scripts\\draw_presets.json",
+  "outputDir": "D:\\deepseek_workspace\\outputs\\qq",
+  "maxQueue": 5,
+  "timeoutMs": 240000,
+  "_quota_note": "quotaOverride 为 null 时使用 src/draw/policy.js 的 QUOTA_TABLE 默认值：普通 15张/日 + 10分钟冷却；any:nsfw 3张/日 + 30分钟冷却；每群 60/10 张；主人 100 张软上限 + 30秒冷却。要临时放开再填对象即可。",
+  "quotaOverride": null
+}

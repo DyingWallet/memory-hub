@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "qq-bridge",
   "version": "1.0.3",
   "private": true,
@@ -11,6 +11,7 @@
   "scripts": {
     "start": "node src/bridge.js",
     "test:audit": "node scripts/test-audit.mjs",
+    "test:draw": "node scripts/test-draw.mjs",
     "test:regressions": "node scripts/test-audit-regressions.mjs",
     "test:issues": "node scripts/test-issue-regressions.mjs",
     "test:media-search": "node scripts/test-media-search.mjs",

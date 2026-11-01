@@ -280,3 +280,13 @@ node scripts\setup-dsh-mcp.mjs --check
 node scripts\setup-dsh-plugin.mjs --check
 node scripts\setup-dsh-panel.mjs --check
 ```
+
+## 观察项（出图侧，暂不处理）
+
+- **手部质量**：Illustrious + xi_lora_v15 的画手是结构性弱点。已加负面（`fused fingers / malformed hands / long fingers` 等），能把「五根糊成三根」降到「大致合理」，但做不到精准。
+  - 触发条件：`holding X`、`fingers spread`、手在画面正中时最差。
+  - 暂不处理的原因：目前只在个例出现，不是普遍问题。
+  - 若后续超过三成出图有手问题，再做「手部重绘」（复用 `face_refine.py` 的区域重绘逻辑，加 `--hand` 模式）。
+  - 观察入口：`models/probe/*` 下按日期分目录的出图。
+
+- **尾巴方向的绝对控制**：仍无法用 tag 指定左右，只能靠人物朝向间接影响（2026-11-01 结论）。

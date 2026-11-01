@@ -33,6 +33,7 @@ import { discoverSnowLumaConnection, persistSnowLumaEndpoint, persistToken } fro
 import { hardenDir, manualDirCommand } from './state-acl.mjs';
 import { extractForwardIds, forwardIdFromData, sanitizeForwardId, formatForwardResponse } from './forward.js';
 import { resolveConsolePort } from './ports.js';
+import { createDrawService } from './draw/index.js';
 import {
   createSlowFetchCache,
   pendingReplyText,
@@ -3682,6 +3683,50 @@ async function main() {
 
   function startConsoleServer() {
     const port = resolveConsolePort(cfg);
+
+    // QQ 侧出图服务：策略矩阵 / 配额 / 全局串行队列都在这里，
+    // 配额落盘到 state/draw-quota.json，桥接重启后恢复。
+    // 配置优先级：config.draw.json（可写）> config.json 的 draw 段 > 代码默认值。
+    // 之所以单独放一个文件：config.json 被 hardenDir 加固成只读，改不动。
+    let drawFileCfg = {};
+    try {
+      const p = path.join(ROOT, 'config.draw.json');
+      if (fs.existsSync(p)) drawFileCfg = JSON.parse(fs.readFileSync(p, 'utf8')) ?? {};
+    } catch (e) {
+      log(`[draw] config.draw.json 读取失败，用默认值：${e?.message ?? e}`);
+    }
+    const drawCfg = { ...drawFileCfg, ...(cfg.draw ?? {}) };
+    let drawService = null;
+    let drawInitError = null;
+    function getDrawService() {
+      if (drawCfg.enabled === false) return null;
+      if (drawService) return drawService;
+      try {
+        drawService = createDrawService({
+          stateDir: path.resolve(STATE_DIR),
+          ownerQQ: cfg.ownerQQ,
+          drawCfg: {
+            scriptPath: drawCfg.scriptPath,
+            presetFile: drawCfg.presetFile,
+            maxQueue: drawCfg.maxQueue,
+            timeoutMs: drawCfg.timeoutMs,
+            quotaOverride: drawCfg.quotaOverride
+          },
+          log: (event, meta) => log(`[draw] ${event} ${JSON.stringify(meta ?? {})}`)
+        });
+        log(`[draw] 出图服务就绪，预设 ${drawService.stats().presets} 个`);
+      } catch (e) {
+        drawInitError = e?.stack ?? String(e);
+        log(`[draw] 初始化失败（出图不可用）：${e?.message ?? e}`);
+        try {
+          fs.appendFileSync(path.join(ROOT, 'logs', 'draw-init.log'), `[${new Date().toISOString()}] ${drawInitError}\n\n`);
+        } catch {
+          /* 日志都写不了就算了 */
+        }
+        drawService = null;
+      }
+      return drawService;
+    }
     // 控制台鉴权：优先用 config.consoleToken，未配置则自动生成并持久化，不再默认无鉴权。
     // 使用 let 以便控制台内手动修改令牌后热更新。
     const configuredToken = String(cfg.consoleToken ?? '').trim();
@@ -3876,6 +3921,7 @@ async function main() {
         }
         if (!hasToken) {
           const tokenlessAgentAllowed = url.pathname === '/api/status'
+            || url.pathname === '/api/draw'
             || url.pathname.startsWith('/api/send/')
             || url.pathname.startsWith('/api/images/');
           if (!tokenlessAgentAllowed) {
@@ -3942,6 +3988,7 @@ async function main() {
         // 其余（人格/提示词/思考强度/白名单/重启…）一律 403——避免以后新增管理端点时忘记拉黑。
         if (req.headers['x-agent-token']) {
           const agentAllowed = url.pathname === '/api/status'
+            || url.pathname === '/api/draw'
             || url.pathname.startsWith('/api/socialV2/')
             || url.pathname.startsWith('/api/send/')
             || url.pathname.startsWith('/api/images/')
@@ -7846,6 +7893,102 @@ async function main() {
           return;
         }
 
+        // ── 出图端点（QQ 侧）：策略 → 配额 → 串行队列 → 出图 → 发图 ─────────
+        if (req.method === 'POST' && url.pathname === '/api/draw') {
+          const body = await readBody();
+          const token = String(body.token ?? '').trim();
+          const key = String(body.key ?? '').trim();
+          const preset = String(body.preset ?? '').trim();
+          const extra = String(body.extra ?? '').trim();
+          if (currentMode === 'chat' || currentMode === 'reserved') {
+            sendJson({ ok: false, error: '出图仅限 closed-agent / reserved2 模式使用' }, 403);
+            return;
+          }
+          if (socialV2.paused && token) {
+            sendJson({ ok: false, error: 'AI 已暂停，当前不允许出图' }, 403);
+            return;
+          }
+          if (currentMode === 'reserved2' && !token) {
+            sendJson({ ok: false, error: 'reserved2 模式出图必须携带 agent token' }, 403);
+            return;
+          }
+          if (token && !agentTokenOk(key, token)) {
+            sendJson({ ok: false, error: 'agent token 无效' }, 403);
+            return;
+          }
+          const drawKeyMatch = /^(group|private):(\d+)$/.exec(key);
+          if (!drawKeyMatch) {
+            sendJson({ ok: false, error: 'key 格式无效' }, 400);
+            return;
+          }
+          const drawKind = drawKeyMatch[1];
+          const drawId = Number(drawKeyMatch[2]);
+          if (!Number.isFinite(drawId) || drawId <= 0 || !modeAllowed(key, drawKind, drawId, cfg, currentMode)) {
+            sendJson({ ok: false, error: '目标不在当前模式允许范围内' }, 403);
+            return;
+          }
+          const svc = getDrawService();
+          if (!svc) {
+            sendJson({ ok: false, error: '出图服务未启用或初始化失败（检查 config.draw）', detail: drawInitError ? drawInitError.split('\n').slice(0, 6).join(' | ') : null }, 503);
+            return;
+          }
+          // 配额按「人」算：群聊里必须知道是谁在要图，否则会退化成全群共用一份额度
+          // （曾因此让第二个群友直接撞上前一个人的 10 分钟冷却）。
+          const rawUserId = String(body.userId ?? '').trim();
+          const userId = /^\d+$/.test(rawUserId) ? rawUserId : drawKeyMatch[2];
+          let result;
+          try {
+            result = await svc.draw({ key, userId, preset, extra });
+          } catch (error) {
+            log(`[draw] 执行异常 ${key}: ${error?.message ?? error}`);
+            sendJson({ ok: false, error: `出图失败：${error?.message ?? error}` }, 500);
+            return;
+          }
+          if (!result?.ok) {
+            // 拒绝与限流都走 200：让 agent 用自然语言回话，而不是当成接口故障。
+            if (result?.error) {
+              try {
+                fs.appendFileSync(
+                  path.join(ROOT, 'logs', 'draw-error.log'),
+                  `[${new Date().toISOString()}] ${key} ${preset} code=${result.code} ${result.error}\n`
+                );
+              } catch {
+                /* ignore */
+              }
+            }
+            sendJson({
+              ok: false,
+              key,
+              code: result?.code ?? 'draw_failed',
+              tone: result?.tone ?? null,
+              message: result?.message ?? null,
+              error: result?.error ?? null,
+              scene: result?.scene ?? null,
+              remaining: result?.remaining ?? null,
+              waitMs: result?.waitMs ?? null
+            });
+            return;
+          }
+          try {
+            const base64 = fs.readFileSync(result.file).toString('base64');
+            await onebotSendImage(drawKind, drawId, base64);
+            log(`[draw] ${key} ${preset} 出图并发送成功 seed=${result.seed}`);
+            sendJson({
+              ok: true,
+              key,
+              preset,
+              file: result.file,
+              seed: result.seed,
+              character: result.character,
+              nsfw: Boolean(result.nsfw)
+            });
+          } catch (error) {
+            log(`[draw] 发图失败 ${key}: ${error?.message ?? error}`);
+            sendJson({ ok: false, code: 'send_failed', file: result.file, error: `图已生成但发送失败：${error?.message ?? error}` }, 500);
+          }
+          return;
+        }
+
         // ── 统一发送端点（MCP 旧发送工具也走这里） ───────────────────────────
         if (req.method === 'POST' && (url.pathname === '/api/send/group' || url.pathname === '/api/send/private' || url.pathname === '/api/send/reply')) {
           const body = await readBody();
@@ -8427,6 +8570,29 @@ async function main() {
     if (!res.ok || body.status !== 'ok' || body.retcode !== 0) {
       const hint = res.status === 426 ? '（HTTP 426：snowluma.httpUrl 可能指向了 WebSocket 端口，请检查 config.json 的 snowluma.httpUrl 是否为 OneBot HTTP API 地址）' : '';
       throw new Error(`OneBot ${action} 失败: ${body.wording || body.retcode || res.status}${hint}`);
+    }
+    return body.data;
+  }
+
+  // 出图专用：把本地 PNG 以 base64 图片段发出去。
+  // 不走 onebotSend 是因为那函数只拼文本段，且会做令牌检查与 CQ 转义。
+  async function onebotSendImage(kind, id, base64) {
+    const action = kind === 'private' ? 'send_private_msg' : 'send_group_msg';
+    const segment = [{ type: 'image', data: { file: `base64://${base64}` } }];
+    const params = kind === 'private' ? { user_id: Number(id), message: segment } : { group_id: Number(id), message: segment };
+    const httpUrl = String(cfg.snowluma?.httpUrl || 'http://127.0.0.1:3000').replace(/\/+$/, '');
+    const res = await fetch(`${httpUrl}/${action}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(cfg.snowluma?.accessToken ? { authorization: `Bearer ${cfg.snowluma.accessToken}` } : {})
+      },
+      body: JSON.stringify(params),
+      signal: AbortSignal.timeout(30000)
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.status !== 'ok' || body.retcode !== 0) {
+      throw new Error(`OneBot ${action} 发图失败: ${body.wording || body.retcode || res.status}`);
     }
     return body.data;
   }

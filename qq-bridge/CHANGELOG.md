@@ -1,8 +1,32 @@
-# CHANGELOG
+﻿# CHANGELOG
 
 本仓库（qq-bridge-enhanced）基于上游 [Derpyu520/qq-bridge](https://github.com/Derpyu520/qq-bridge) `v0.2.0-r3`。
 上游更早的版本历史见 [docs/guides/DSH_020_ADAPTATION.md](docs/guides/DSH_020_ADAPTATION.md) 与上游 Release 页面。
 
+## v1.0.6（未发布）—— 2026-11-01
+
+### 新增：QQ 侧出图（qq_draw）
+- 新增 `src/draw/`：「策略 → 配额 → 全局串行队列 → 出图 → 发图」五段式。
+  - `policy.js` 二维矩阵：`character`（xixi / generic）× `nsfw`。**只锁一格：汐 + NSFW 仅主人私聊**，其余（汐 SFW、路人 SFW/NSFW）群聊与私聊都放行。
+  - `quota.js` 每人每日 / 每群每日 / 冷却，落盘 `state/draw-quota.json`；`config.draw.json` 的 `quotaOverride` 可临时放开（测试期用过，已回调为默认）。
+  - `queue.js` 全局串行，深度 5，满了直接拒绝（ComfyUI 单实例，多开必崩）。
+  - `runner.js` spawn 出图 CLI，读结果文件而不是 stdout。
+  - `presets.js` / `send-image.js` 预设视图与发图逻辑。
+- `bridge.js` 新增 `POST /api/draw` 与 `onebotSendImage()`；agent 端点白名单放行 `/api/draw`（带令牌与无令牌两条）。
+- `mcp-snowluma-safe.js` 新增 `qq_draw` 工具：不传 preset 只列清单；`refuse_xixi_nsfw` 返回 `tone: shy_angry_tsun` 让模型用汐的语气回绝。
+- `qq-chat-v2` preset 新增第 17 条【出图】：选预设规则、extra 必须英文 Danbooru 标签、视角/动作写 extra、拒绝与冷却的说话方式。
+- 新增 `scripts/test-draw.mjs`（18 项自检）与 `npm run test:draw`。
+
+### 修复：出图相关的五个坑（记录以免重蹈）
+1. `/api/draw` 不在 agent 端点白名单 → 403「该接口仅控制台可用」。
+2. `startConsoleServer` 里引用了别处的局部变量 `stateDir` → `ReferenceError`，改用 `path.resolve(STATE_DIR)`。
+3. 业务失败（冷却/配额）被 MCP 的 `agentApi` 当异常抛出，`code/message` 丢失，模型误报「服务卡住」→ 改为直连 fetch，原样返回。
+4. 受限环境下管道 stdio 会 `spawn EPERM`、`%TEMP%` 与 `state/` 都会 `mkdir/mkdtemp EPERM` → 结果文件改到 `outputs/qq/.results/`，由子进程创建。
+5. 失败启动会重新生成 consoleToken 并覆盖 `state/console-token`，控制台页面需要重新输入。
+
+### 变更：预设只对 QQ 暴露一部分
+- `apron` / `apron:back` / `apron:bend` 标记 `qqExposed: false`：它们固定白底、会顶掉场景要求，只保留给本地生成训练素材。
+- QQ 侧成人向改走 `scene:nsfw`（带场景）或 `custom:xixi:nsfw`（自由描述）。
 ## v1.0.5（未发布）—— 2026-10-28
 
 ### 修复：群里认不出「谁是主人」——改成看 QQ 号，不看名字
