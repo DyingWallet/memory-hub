@@ -785,7 +785,7 @@ if (cfg.socialV2?.tools?.sendPoke !== false) {
 //   2. 拒绝与限流都是 200 响应，让 agent 用自然语言接话，不当成接口故障。
 //   3. 出图串行、最长 4 分钟，所以 timeoutMs 给到 300s。
 if (cfg.draw?.enabled !== false) {
-  const drawPresetFile = cfg.draw?.presetFile || path.join(ROOT, '..', 'models', 'scripts', 'draw_presets.json');
+  const drawPresetFile = cfg.draw?.presetFile || path.join(ROOT, 'tools', 'draw', 'draw_presets.json');
 
   function readDrawPresets() {
     try {

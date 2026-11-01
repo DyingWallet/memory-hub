@@ -1,7 +1,7 @@
 // 预设表的桥接侧视图（只读缓存 + 校验）
 import { readFileSync } from 'node:fs';
 
-const PRESET_FILE = 'D:\\deepseek_workspace\\models\\scripts\\draw_presets.json';
+const PRESET_FILE = 'D:\\deepseek_workspace\\qq-bridge\\tools\\draw\\draw_presets.json';
 
 export function loadPresets(file = PRESET_FILE) {
   const raw = JSON.parse(readFileSync(file, 'utf8'));

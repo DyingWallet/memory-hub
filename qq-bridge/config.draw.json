@@ -1,8 +1,8 @@
-{
+﻿{
   "_comment": "QQ 侧出图配置。桥接启动时读一次，改完要重启桥接生效。",
   "enabled": true,
-  "scriptPath": "D:\\deepseek_workspace\\models\\scripts\\qq_draw.mjs",
-  "presetFile": "D:\\deepseek_workspace\\models\\scripts\\draw_presets.json",
+  "scriptPath": "D:\\deepseek_workspace\\qq-bridge\\tools\\draw\\qq_draw.mjs",
+  "presetFile": "D:\\deepseek_workspace\\qq-bridge\\tools\\draw\\draw_presets.json",
   "outputDir": "D:\\deepseek_workspace\\outputs\\qq",
   "maxQueue": 5,
   "timeoutMs": 240000,

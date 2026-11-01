@@ -1,4 +1,4 @@
-// 出图执行器：spawn models/scripts/qq_draw.mjs，读它写出的结果文件。
+// 出图执行器：spawn tools/draw/qq_draw.mjs，读它写出的结果文件。
 //
 // 为什么不用 stdout 拿结果：受限环境下（以及部分 Windows 控制台）管道读子进程输出会 EPERM / 乱码，
 // 所以子进程把结果写成 JSON 文件，这边只读文件。
@@ -10,7 +10,7 @@ import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 const DEFAULTS = {
-  scriptPath: 'D:\\deepseek_workspace\\models\\scripts\\qq_draw.mjs',
+  scriptPath: 'D:\\deepseek_workspace\\qq-bridge\\tools\\draw\\qq_draw.mjs',
   nodePath: process.execPath,
   timeoutMs: 240_000,
   // 结果文件目录：**不能用系统临时目录，也不能用 state/**。

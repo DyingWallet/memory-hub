@@ -1,0 +1,294 @@
+{
+  "_comment": "QQ 侧出图预设。character=xixi 才挂 v15；generic 走基座直出。nsfw=true 的预设只在主人私聊放行（汐），generic 的 nsfw 群聊可见。",
+  "model": "Illustrious-XL\\Illustrious-XL-v1.1.safetensors",
+  "defaults": {
+    "size": "2:3",
+    "steps": 30,
+    "cfg": 5.5,
+    "sampler": "euler_ancestral",
+    "scheduler": "normal"
+  },
+  "negatives": {
+    "xi_sfw": "lowres, bad anatomy, bad hands, extra fingers, fused fingers, missing fingers, too many fingers, malformed hands, deformed hands, long fingers, claws, mutated hands, worst quality, low quality, jpeg artifacts, blurry, pink ears, cat ears, animal ears, pointy ears, elf ears, horns, human ears, flat color, oversaturated, thick outlines, text, watermark, signature, scenery, landscape, indoors, room, furniture, picture frame, plant, two tails, multiple tails, extra tails, split tail, double tail, forked tail, detached tail, tail on both sides, tail from hip, two flukes, floating tail",
+    "xi_outfit": "maid outfit, apron, maid headdress, frills, snake tail, whip tail, thin pointed tail, two figures, multiple girls, extra legs, extra limbs, lowres, bad anatomy, worst quality, low quality, text, watermark, signature, two tails, multiple tails, extra tails, split tail, double tail, forked tail, detached tail, tail on both sides, tail from hip, two flukes, floating tail, extra fingers, fused fingers, missing fingers, too many fingers, malformed hands, deformed hands, long fingers, claws, mutated hands",
+    "xi_nsfw": "dress, skirt, bra, panties, maid outfit, two figures, multiple girls, extra legs, extra limbs, censor bar, mosaic, censored, text, watermark, lowres, bad anatomy, worst quality, two tails, multiple tails, extra tails, split tail, double tail, forked tail, detached tail, tail on both sides, tail from hip, two flukes, floating tail, extra fingers, fused fingers, missing fingers, too many fingers, malformed hands, deformed hands, long fingers, claws, mutated hands",
+    "generic": "lowres, bad anatomy, bad hands, worst quality, low quality, jpeg artifacts, blurry, text, watermark, signature, extra legs, extra limbs, multiple views, mutilated",
+    "generic_nsfw": "(worst quality, low quality:1.3), (bad anatomy:1.2), bad hands, extra fingers, fused fingers, extra limbs, extra legs, malformed limbs, deformed, disfigured, mutated, blurry, jpeg artifacts, 3d, realistic, photo, realistic photo, sketch, monochrome, child, loli, shota, aged down, text, watermark, signature, logo, censor bar, mosaic, censored, pixelated, bad face, ugly face, asymmetric eyes, oversaturated, color cast, magenta cast, flat shading, flat color",
+    "xi_scene": "lowres, bad anatomy, bad hands, extra fingers, fused fingers, missing fingers, too many fingers, malformed hands, deformed hands, long fingers, claws, mutated hands, worst quality, low quality, jpeg artifacts, blurry, pink ears, cat ears, animal ears, pointy ears, elf ears, horns, human ears, flat color, oversaturated, thick outlines, text, watermark, signature, two tails, multiple tails, extra tails, split tail, double tail, forked tail, detached tail, tail on both sides, tail from hip, two flukes, floating tail",
+    "xi_scene_nsfw": "dress, skirt, bra, panties, maid outfit, two figures, multiple girls, extra legs, extra limbs, censor bar, mosaic, censored, text, watermark, lowres, bad anatomy, worst quality, two tails, multiple tails, extra tails, split tail, double tail, forked tail, detached tail, tail on both sides, tail from hip, two flukes, floating tail, extra fingers, fused fingers, missing fingers, too many fingers, malformed hands, deformed hands, long fingers, claws, mutated hands"
+  },
+  "presets": {
+    "stand": {
+      "character": "xixi",
+      "nsfw": false,
+      "label": "单人立绘",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "negative": "xi_sfw",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, standing, looking at viewer, white background, simple background, full body, masterpiece, best quality",
+      "qqExposed": true
+    },
+    "side": {
+      "character": "xixi",
+      "nsfw": false,
+      "label": "侧面立绘",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "negative": "xi_sfw",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, side view, standing, white background, full body, masterpiece, best quality",
+      "qqExposed": true
+    },
+    "back": {
+      "character": "xixi",
+      "nsfw": false,
+      "label": "背面立绘",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "negative": "xi_sfw",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, from behind, standing, tail from lower back, tail fin, fluke, white background, full body, masterpiece, best quality",
+      "qqExposed": true
+    },
+    "daily": {
+      "character": "xixi",
+      "nsfw": false,
+      "label": "日常场景",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "negative": "xi_sfw",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, {extra}, warm light, indoors, masterpiece, best quality",
+      "qqExposed": true
+    },
+    "chibi": {
+      "character": "xixi",
+      "nsfw": false,
+      "label": "Q 版表情包",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "size": "1:1",
+      "steps": 24,
+      "negative": "xi_sfw",
+      "prompt": "xixi, 1girl, solo, chibi, blue hair, fin ears, cute, simple background, upper body, masterpiece, best quality",
+      "qqExposed": true
+    },
+    "outfit:yukata": {
+      "character": "xixi",
+      "nsfw": false,
+      "label": "浴衣",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "negative": "xi_outfit",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, yukata, floral pattern, obi, no apron, no maid headdress, tail from lower back, tail fin, fluke, from behind, standing, full body, white background, masterpiece, best quality",
+      "qqExposed": true
+    },
+    "outfit:jk": {
+      "character": "xixi",
+      "nsfw": false,
+      "label": "JK 制服",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "negative": "xi_outfit",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, school uniform, sailor collar, pleated skirt, back vent, tail through vent, tail fin, fluke, no apron, standing, full body, white background, masterpiece, best quality",
+      "qqExposed": true
+    },
+    "outfit:lolita": {
+      "character": "xixi",
+      "nsfw": false,
+      "label": "洛丽塔",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "negative": "xi_outfit",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, lolita dress, layers of frills, back bow opening, tail from lower back, tail fin, fluke, no apron, from behind, standing, full body, white background, masterpiece, best quality",
+      "qqExposed": true
+    },
+    "outfit:gothic": {
+      "character": "xixi",
+      "nsfw": false,
+      "label": "哥特长裙",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "negative": "xi_outfit",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, gothic lolita dress, corset, back lacing, tail from lower back, tail fin, fluke, no apron, from behind, standing, full body, white background, masterpiece, best quality",
+      "qqExposed": true
+    },
+    "outfit:qipao": {
+      "character": "xixi",
+      "nsfw": false,
+      "label": "长旗袍",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "negative": "xi_outfit",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, long qipao, ankle-length, high side slit, tail through slit, tail fin, fluke, no apron, side view, standing, full body, white background, masterpiece, best quality",
+      "qqExposed": true
+    },
+    "gown": {
+      "character": "xixi",
+      "nsfw": false,
+      "label": "礼服",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 0.7,
+      "negative": "xi_outfit",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, ball gown, open back, long dress, no apron, no maid headdress, tail from lower back, tail fin, fluke, from behind, standing, full body, white background, masterpiece, best quality",
+      "qqExposed": true
+    },
+    "apron": {
+      "character": "xixi",
+      "nsfw": true,
+      "label": "裸体围裙",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "negative": "xi_nsfw",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, naked apron, only apron, apron on front, no bra, no panties, large breasts, white thighhighs, {extra}, standing, looking at viewer, single tail, one tail, tail fin, fluke, white background, masterpiece, best quality",
+      "qqExposed": false
+    },
+    "lingerie": {
+      "character": "xixi",
+      "nsfw": true,
+      "label": "内衣",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "negative": "xi_nsfw",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, white lace lingerie, garter belt, large breasts, {extra}, lingerie only, no dress, no apron, standing, looking at viewer, single tail, one tail, tail fin, fluke, white background, masterpiece, best quality",
+      "qqExposed": true
+    },
+    "any:sfw": {
+      "character": "generic",
+      "nsfw": false,
+      "label": "通用人物",
+      "lora": null,
+      "loraStrength": 0,
+      "size": "3:4",
+      "negative": "generic",
+      "prompt": "1girl, solo, {extra}, detailed face, beautiful eyes, masterpiece, best quality",
+      "qqExposed": true
+    },
+    "any:nsfw": {
+      "character": "generic",
+      "nsfw": true,
+      "label": "通用人物（成人向）",
+      "lora": null,
+      "loraStrength": 0,
+      "size": "2:3",
+      "negative": "generic_nsfw",
+      "prompt": "1girl, solo, adult, beautiful detailed face, long eyelashes, detailed eyes, glossy lips, blush, soft skin, detailed skin, collarbone, natural skin tone, {extra}, cowboy shot, soft lighting, depth of field, detailed shading, clean lineart, uncensored, correct anatomy, detailed navel, masterpiece, best quality, absurdres, newest",
+      "qqExposed": true
+    },
+    "apron:back": {
+      "character": "xixi",
+      "nsfw": true,
+      "label": "裸体围裙·背面",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "size": "2:3",
+      "negative": "xi_nsfw",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, naked apron, only apron, from behind, looking back over shoulder, bare back, bare buttocks, white thighhighs, single tail, one tail, tail fin, fluke, {extra}, standing, white background, masterpiece, best quality",
+      "qqExposed": false
+    },
+    "apron:bend": {
+      "character": "xixi",
+      "nsfw": true,
+      "label": "裸体围裙·俯身背面",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "size": "2:3",
+      "negative": "xi_nsfw",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, naked apron, only apron, bent over, from behind, looking back, bare back, bare buttocks, pussy, uncensored, white thighhighs, single tail, one tail, tail fin, fluke, {extra}, white background, masterpiece, best quality",
+      "qqExposed": false
+    },
+    "custom:xixi": {
+      "character": "xixi",
+      "nsfw": false,
+      "label": "自由提示词·汐",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "size": "2:3",
+      "maxExtra": 320,
+      "negative": "xi_scene",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, {extra}, single tail, one tail, tail fin, fluke, masterpiece, best quality",
+      "qqExposed": true
+    },
+    "custom:xixi:nsfw": {
+      "character": "xixi",
+      "nsfw": true,
+      "label": "自由提示词·汐（成人向）",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "size": "2:3",
+      "maxExtra": 320,
+      "negative": "xi_scene_nsfw",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, uncensored, {extra}, single tail, one tail, tail fin, fluke, masterpiece, best quality, absurdres",
+      "qqExposed": true
+    },
+    "custom:any": {
+      "character": "generic",
+      "nsfw": false,
+      "label": "自由提示词·通用",
+      "lora": null,
+      "loraStrength": 0,
+      "size": "2:3",
+      "maxExtra": 320,
+      "negative": "generic",
+      "prompt": "1girl, solo, {extra}, masterpiece, best quality, absurdres, newest",
+      "qqExposed": true
+    },
+    "custom:any:nsfw": {
+      "character": "generic",
+      "nsfw": true,
+      "label": "自由提示词·通用（成人向）",
+      "lora": null,
+      "loraStrength": 0,
+      "size": "2:3",
+      "maxExtra": 320,
+      "negative": "generic_nsfw",
+      "prompt": "1girl, solo, adult, uncensored, correct anatomy, {extra}, masterpiece, best quality, absurdres, newest",
+      "qqExposed": true
+    },
+    "scene": {
+      "character": "xixi",
+      "nsfw": false,
+      "label": "汐·场景",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "size": "2:3",
+      "maxExtra": 200,
+      "negative": "xi_scene",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, single tail, one tail, tail fin, fluke, masterpiece, best quality",
+      "qqExposed": true
+    },
+    "scene:nsfw": {
+      "character": "xixi",
+      "nsfw": true,
+      "label": "汐·场景（成人向）",
+      "lora": "xi_lora_v15.safetensors",
+      "loraStrength": 1.0,
+      "size": "2:3",
+      "maxExtra": 200,
+      "negative": "xi_scene_nsfw",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, uncensored, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, single tail, one tail, tail fin, fluke, masterpiece, best quality",
+      "qqExposed": true
+    },
+    "any:scene": {
+      "character": "generic",
+      "nsfw": false,
+      "label": "通用·场景",
+      "lora": null,
+      "loraStrength": 0,
+      "size": "2:3",
+      "maxExtra": 260,
+      "negative": "generic",
+      "prompt": "1girl, solo, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, masterpiece, best quality, absurdres, newest",
+      "qqExposed": true
+    },
+    "any:scene:nsfw": {
+      "character": "generic",
+      "nsfw": true,
+      "label": "通用·场景（成人向）",
+      "lora": null,
+      "loraStrength": 0,
+      "size": "2:3",
+      "maxExtra": 300,
+      "negative": "generic_nsfw",
+      "prompt": "1girl, solo, adult, uncensored, correct anatomy, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, masterpiece, best quality, absurdres, newest",
+      "qqExposed": true
+    }
+  }
+}
