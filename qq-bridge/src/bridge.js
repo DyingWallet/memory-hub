@@ -1939,7 +1939,13 @@ async function main() {
       at: Date.now()
     };
     st.recentMessages.push(entry);
-    if (st.recentMessages.length > 200) st.recentMessages = st.recentMessages.slice(-200);
+    // 上限统一读 config.socialV2.context.recentLimit（默认 100）。
+    // 这里原本硬编码 200，和配置里的 recentLimit 打架：配置调到 600，这条仍按 200 裁，
+    // 于是「导入完整一天历史」会被静默截断。现在只有配置一个来源。
+    {
+      const cap = Number(cfg.socialV2?.context?.recentLimit) || 100;
+      if (st.recentMessages.length > cap) st.recentMessages = st.recentMessages.slice(-cap);
+    }
     st.lastAiReplyAt = entry.at;
     st.lastActionAt = entry.at;
     st.wakeConfig.noActionCount = 0;
