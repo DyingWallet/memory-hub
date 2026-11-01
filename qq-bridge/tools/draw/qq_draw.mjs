@@ -132,7 +132,9 @@ async function main() {
   const seed = seedArg ? Number(seedArg) : null;
 
   const checkpoints = await listCheckpoints();
-  const model = presets.model ?? checkpoints[0];
+  // 底模解析顺序：预设自带 model > 顶层 model > ComfyUI 第一个可用。
+  // 有了它，「场景/成人向用 WAI、白底立绘用 Illustrious」可以按预设分别指定。
+  const model = p.model ?? presets.model ?? checkpoints[0];
   if (!Array.isArray(checkpoints) || !checkpoints.includes(model)) {
     fail('bad_model', `ComfyUI 里没有基座 ${model}；可用：${(checkpoints || []).join(', ')}`);
   }
