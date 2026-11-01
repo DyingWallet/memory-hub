@@ -13934,6 +13934,12 @@ async function main() {
     log(`SnowLuma 首次连接未成功（将在后台自动重连并尝试自愈 WS token）: ${error?.message ?? error}`);
   });
   log('桥接已启动。按 Ctrl+C 退出。');
+  // 启动时把缓存窗口打出来：排查「历史导入后被裁掉」时，第一个要看的就是这个值。
+  log(
+    `[context] recentLimit=${Number(cfg.socialV2?.context?.recentLimit) || 100}，` +
+      `contextWindow=${Number(cfg.socialV2?.context?.contextWindow) || 20}，` +
+      `wakeMessageLimit=${Number(cfg.socialV2?.context?.wakeMessageLimit) || 50}`,
+  );
   // 预热表情库：启动时同步一次 QQ 收藏表情，失败不阻塞（AI 首次调用工具时还会再试）。
   if (cfg.socialV2?.sticker?.enabled !== false) {
     syncStickerLibrary(true).catch((error) => log('启动预热表情库失败:', error?.message ?? error));
