@@ -17,7 +17,7 @@
                     ▼                                                          │
         scripts/sleep-consolidate.mjs                                          │
           ① 发现 DSH（resolveDshBaseUrl）                                     │
-          ② 建/复用「整理会话」（preset: sleep-consolidator）                  │
+          ② 每次新建「整理会话」（preset: sleep-consolidator，成功后归档上一次）  │
           ③ 拼上下文：当日记忆 + 相关长期记忆 + 近期决策 + 来源标记             │
           ④ sessions.prompt(整理指令)                                          │
           ⑤ 等 turn/end，记审计                                                │
@@ -46,6 +46,19 @@
 - **不注册** `pwsh`、`write`、`edit`、`subagent`
 - persona prefix：只写「你在做夜间整理」的职责与纪律，**不重复人格**（人格由 AGENTS.md 提供）
 
+### 3.1.1 会话策略：每次新建，成功后归档上一次
+
+**不复用会话**（2026-11-02 改）。请求是无状态的，历史按 O(N²) 累积——第 N 次整理要把前 N 次的全量 prompt 重发一遍。按 daily 单次约 1 万字符算，复用跑到第 12 天左右就会撞上 API 的输入上限。而整理是独立快照，旧 prompt 对查重没有增量价值：查重靠 prompt 里的「最近写入的长期记忆」+ `supersedes`。
+
+流程：
+
+1. 读 `session-<period>.json` 里的上一个 `sessionId`；
+2. 新建 workspace 会话（`workspace/create` + `sessions/create`）；
+3. 跑整理；
+4. **成功且回复非空**才 `workspace/archiveSession({ sessionId: previous })`；失败时保留上一个，下次跑再归档。
+
+`archiveSession` 在会话还有工作在跑时会拒绝（`workspace/session-active`）。整理跑完时 turn 已经结束，正常不会撞上；真撞上就只记一行日志，不影响本次结果。
+
 ### 3.2 上下文（每次整理注入）
 
 | 内容 | 来源 | 说明 |
@@ -68,18 +81,25 @@
 
 ### 3.4 周期性提炼（周 / 月 / 年）
 
-日整理回答「今天发生了什么」，回答不了「这周的主线是什么」——那需要跨文档看因果，单条记忆里没有。所以同一个脚本加了 `--period`：
+日整理回答「今天发生了什么」，回答不了「这周的主线是什么」——那需要跨条目的因果。所以同一个脚本加了 `--period`。
 
-| period | 输入 | 产出 | 触发（都在 `config.sleep.at` 之后） |
+**原料按层级往上收，不重新遍历原始数据**（2026-11-02 修）：
+
+| period | 输入（上一级的产出） | 产出 | 触发（都在 `config.sleep.at` 之后） |
 |---|---|---|---|
-| `daily`（默认） | 当天全部记忆 | 值得长期留的事实 | 每天 |
-| `weekly` | 最近 7 天的决策文档 + 长期记忆 | 1–3 条「主线」 | **周一** |
-| `monthly` | 最近 31 天 | 1–3 条「主线」 | **1 号** |
-| `yearly` | 最近 366 天 | 1–3 条「主线」 | **1 月 1 日** |
+| `daily`（默认） | 当天全部记忆（原始） | 值得长期留的事实，`tags` 含 `daily` | 每天 |
+| `weekly` | 本周的 `daily` 产出 | 1–3 条「主线」，`tags` 含 `weekly` | **周一** |
+| `monthly` | 本月的 `weekly` 产出 | 1–3 条「主线」，`tags` 含 `monthly` | **1 号** |
+| `yearly` | 本年的 `monthly` 产出 | 1–3 条「主线」，`tags` 含 `yearly` | **1 月 1 日** |
 
+- **为什么按层级**：weekly 如果直接遍历一周的每条聊天，等于把 7 次 daily 白做一遍，量级还随周期线性膨胀。实测 343 条原始记录 = 11.5 万字符，请求被 400 直接拒掉——2026-11-02 就是这么连挂两周的：weekly 114,938 字符、monthly 124,975 字符，两次都是 `INVALID_REQUEST`。
+- **怎么认出层级**：读 `facts/*.jsonl`，按 `source === 'sleep'` + `tags` 里的周期名过滤（`fromPeriod()`）。所以**每个周期写入时必须带自己的 tag**——这是链路能接上的唯一凭据。
+- **两级兜底**（`trimToBudget()` / `RAW_FALLBACK_MAX_CHARS = 30_000`）：
+  1. 没有带层级 tag 的产出（历史数据）→ 退回「所有 `source: sleep` 的整理产出」；
+  2. 连整理产出都没有（比如那天 daily 失败）→ 退回原始记忆，但从近到远截断到 3 万字符，绝不整段塞。
 - 综合提炼只看**长期**记忆：短期聊天对「主线」没贡献，只会把上下文撑爆。
-- 产出 `kind: knowledge`、`tags` 带「weekly/monthly/yearly」「主线」、`source: sleep`。
-- 四个周期各有独立的 state 键（`lastSleepSuccessDate_<period>` 等）与整理会话，互不干扰。
+- 决策文档（`40-decisions/`）仍作为旁证输入，只给标题 + 300 字，不参与「量级随周期膨胀」那条。
+- 四个周期各有独立的 state 键（`lastSleepSuccessDate_<period>` 等）与整理会话；**每次整理都新建会话**，`session-<period>.json` 只记上一次的 id，用于成功后归档。
 - 触发由 `supervisor.mjs` 的第五步统一管：四个周期逐个检查，串行跑。
 
 ## 四、桌宠记忆
@@ -238,6 +258,9 @@ dsh-pet-configurable-llm/src/dsh/
 | token 成本 | 一天一次；单次约 3–5 万 token（模型 + 上下文） |
 | preset 工具边界失效 | 只注册 read/glob/grep，MCP 工具走全局层；不给 shell |
 | DSH 接口漂移 | 复用切分出的 `src/dsh/client.mjs`（与桥接同源的 RPC 封装） |
+| 整理会话复用累积上下文 | 已修（2026-11-02）：改为每次新建会话，成功后归档上一次。原因见 3.1.1——复用是 O(N²)，第 N 天必然撞输入上限 |
+| 空回复被当成成功 | 已修（2026-11-02）：`turn/end` 带 `reason.kind === 'error'` 时抛错；reply 为空也抛错。两者都会走 `exit 4`，supervisor 会重试 |
+| 单次输入超过模型上限 | 已修：按层级取原料 + `RAW_FALLBACK_MAX_CHARS = 30_000` 截断（见 3.4） |
 
 ## 十一、secret 记忆通道
 

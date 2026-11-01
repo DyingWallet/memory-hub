@@ -35,6 +35,17 @@ const logDir = join(dataDir, 'sleep');
  * 每个周期有独立的整理会话（state 文件分开），上下文不互相污染。
  */
 const PERIOD_DAYS = { daily: 1, weekly: 7, monthly: 31, yearly: 366 };
+/**
+ * 总结链路的层级：每个周期只消费**上一级**的整理产出，不再重新遍历原始记忆。
+ *   weekly  ← 本周的 daily 产出
+ *   monthly ← 本月的 weekly 产出
+ *   yearly  ← 本年的 monthly 产出
+ * 2026-11-02 的两次 400 就是因为 weekly/monthly 直接塞了 343/345 条原始记录
+ * （11.5 万 / 12.5 万字符），把请求撑爆。链路按层级收敛后，原料量天然是量级下降的。
+ */
+const SOURCE_PERIOD = { weekly: 'daily', monthly: 'weekly', yearly: 'monthly' };
+/** 上级产出为空时（例如 daily 那天没跑）退回原始记录的字符预算。 */
+const RAW_FALLBACK_MAX_CHARS = 30_000;
 const periodArg = args.find((a) => a.startsWith('--period='));
 const period = periodArg ? periodArg.slice('--period='.length) : 'daily';
 if (!(period in PERIOD_DAYS)) {
@@ -59,6 +70,34 @@ function log(line) {
 function localDate(now) {
   const d = new Date(now);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** 一条记录是否带某个 tag（facts JSONL 的 tags 是数组；历史条目可能没有这个字段）。 */
+function hasTag(row, tag) {
+  return Array.isArray(row.tags) && row.tags.map(String).includes(tag);
+}
+
+/** 取某个下级周期的整理产出：source=sleep，且 tags 带该周期的层级标记。 */
+function fromPeriod(rows, tag) {
+  return rows.filter((row) => row.source === 'sleep' && hasTag(row, tag));
+}
+
+/**
+ * 兜底截断：只保留最近的记录，累加到字符预算为止。
+ * collectRange 返回升序；这里从尾部倒着取，保证丢掉的是最旧的部分。
+ * 计量按 renderList 的实际渲染长度（每条截 400）算，否则预算会偏低。
+ */
+function trimToBudget(rows, maxChars) {
+  const ordered = [...rows].sort((a, b) => Date.parse(a.ts ?? '') - Date.parse(b.ts ?? ''));
+  const kept = [];
+  let total = 0;
+  for (let i = ordered.length - 1; i >= 0; i -= 1) {
+    const size = Math.min(String(ordered[i].text ?? '').length, 400);
+    if (total + size > maxChars && kept.length > 0) break;
+    kept.push(ordered[i]);
+    total += size;
+  }
+  return { kept: kept.reverse(), dropped: ordered.length - kept.length };
 }
 
 /** 某个时间点之后的活记录（含来源场景与可见范围），直接读 JSONL，不依赖 memd 在跑。 */
@@ -229,28 +268,40 @@ function decisionsInRange(memoriesDir, sinceMs) {
   return out;
 }
 
-/** 周 / 月 / 年的综合提炼：读该周期的决策文档 + 长期记忆，写「主线」。 */
-function buildPeriodPrompt(rows, docs, range) {
+/**
+ * 周 / 月 / 年的综合提炼：读**下一级周期**的整理产出 + 该周期的决策文档，写「主线」。
+ * 原料由 SOURCE_PERIOD 决定，不再直接消费原始记忆——否则链路会退化成
+ * 「每周把整周的每条聊天重新遍历一遍」，既撑爆请求也丢掉了日整理已经做过的提炼。
+ */
+function buildPeriodPrompt(rows, docs, range, meta = {}) {
   const label = { weekly: '本周', monthly: '本月', yearly: '本年' }[period];
   const unit = { weekly: '这周', monthly: '这个月', yearly: '这一年' }[period];
+  const sourceLabel = { weekly: '日度整理', monthly: '周度整理', yearly: '月度整理' }[period];
   const docBlock =
     docs.length > 0
       ? docs.map((doc) => `- ${doc.day} ${doc.title}（${doc.file}）：${doc.body}`).join('\n')
       : '（这段时间没有新的决策文档）';
+  const sourceBlock = rows.length > 0 ? renderList(rows) : `（这段时间没有 ${sourceLabel}的产出）`;
+  const fallbackNote = meta.fallback
+    ? `\n注意：这个周期没有找到${sourceLabel}的产出，下面是退回原始记忆、按时间从近到远截取的 ${rows.length} 条，\n可能不完整；写「主线」时据此判断，并在总结里说明这个缺口。\n`
+    : '';
+  const sourceTitle = meta.fallback
+    ? `【${label}的原始记忆（退回）】（${rows.length} 条，跳过整理链路，按时间截取）`
+    : `【${label}的${sourceLabel}产出】（${rows.length} 条，已由下级周期提炼，不是原始聊天）`;
   return `你在做${label}的综合提炼（${range.from} ~ ${range.to}）。
 
-【${label}的决策文档】（${docs.length} 份）
+${sourceTitle}
+${sourceBlock}
+${fallbackNote}【${label}的决策文档】（${docs.length} 份）
 ${docBlock}
 
-【${label}写下的长期记忆】（${rows.length} 条）
-${renderList(rows)}
-
 任务：
-1. 提炼${unit}的**主线**：架构、项目、生活各有什么变化，一句话能讲清的那种。
-2. 找出**跨文档的因果**：哪次决定导致了后面哪次调整，谁推翻了谁。
+1. 从上表的${sourceLabel}产出里提炼${unit}的**主线**：架构、项目、生活各有什么变化，一句话能讲清的那种。不要再回到原始聊天里重找。
+2. 找出**跨条目的因果**：哪次决定导致了后面哪次调整，谁推翻了谁。
 3. 只写 1–3 条**综合判断**（kind 用 knowledge，tags 里带「${period}」「主线」），
    不要重复已有的单条记忆——它们在库里已经有了，这里要的是它们串起来的意思。
-4. 每条 memory_write 都带 \`source: "sleep"\`。
+4. 每条 memory_write 都带 \`source: "sleep"\`，且 \`tags\` 里带 \`"${period}"\`——
+   上级周期靠这个标记取本级的产出。
 5. 给一句简短总结：这${unit.slice(1)}的主线是什么。`;
 }
 
@@ -286,6 +337,8 @@ ${longBlock}${decisionBlock}
    这不是待办——它只让这条在相关时更容易被想起，**不催办**。
    判断标准：这条记忆里有没有一个「还悬着」的口子，而不是「有没有事要做」。
 7. **每一条 memory_write 都要带 \`source: "sleep"\`**——这是来源标记，写错了能按它整批撤回。
+   **同时 \`tags\` 里必须带 \`"daily"\`**：周整理靠这个标记取「日度总结」，
+   少了它，周整理只能退回遍历原始聊天（2026-11-02 的 400 就是这么撑爆的）。
 8. 今天有几条值得留就写几条，不要凑数，也不必压缩到某个数量。
 9. 处理完给一句简短总结：写了哪些、改写了哪些、忘了哪些。
    如果发现某条该标 3 你拿不准，在总结里单独点出来，不要自己拍板。
@@ -311,6 +364,14 @@ async function promptAndWait(api, sessionId, text, timeoutMs = 15 * 60_000) {
               // blocksToText 要的是 ContentBlock[]（message.content），不是 message 本身。
               output += blocksToText(event.data?.message?.content);
             } else if (event?.type === 'turn/end') {
+              // turn/end 有两种收尾：completed 和 error。只认 event 类型不认 reason 的话，
+              // 请求失败（4xx/超时）也会被当成「跑完了但没输出」——2026-11-02 的
+              // weekly/monthly 就是这样静默失败的（done ms=178 chars=0，脚本 exit 0）。
+              const reason = event.data?.reason;
+              if (reason?.kind === 'error') {
+                rejectTurn(new Error(String(reason?.error?.message ?? reason?.error?.code ?? 'turn failed')));
+                return;
+              }
               resolveTurn(output);
               return;
             } else if (event?.type === 'error' || event?.type === 'session/error') {
@@ -331,46 +392,28 @@ async function promptAndWait(api, sessionId, text, timeoutMs = 15 * 60_000) {
   }
 }
 
-/** DSH 的归档状态存在 `~/.dsh/storages/workspace.json` 的 `global.archivedSessionIds`。
- *  归档会话照样在 `session/list` 里，prompt 也照样接受，只有 turn 会立刻空完成——
- *  所以光看 list 判断不出来，必须查这张表。读不到时返回 null，调用方退回 list 判断。 */
-function archivedSessionIdSet() {
+/** 上一次整理会话的 id：本次成功跑完后归档它，避免会话堆积。 */
+function readPreviousSessionId() {
   try {
-    const file = join(homedir(), '.dsh', 'storages', 'workspace.json');
-    const parsed = JSON.parse(readFileSync(file, 'utf8'));
-    const ids = parsed?.global?.archivedSessionIds;
-    return Array.isArray(ids) ? new Set(ids) : null;
+    const saved = JSON.parse(readFileSync(stateFile, 'utf8'));
+    return typeof saved?.sessionId === 'string' && saved.sessionId ? saved.sessionId : null;
   } catch {
     return null;
   }
 }
 
-async function ensureConsolidationSession(api, workspacePath) {
-  if (existsSync(stateFile)) {
-    try {
-      const saved = JSON.parse(readFileSync(stateFile, 'utf8'));
-      if (saved?.sessionId) {
-        // 复用前确认它还在（DSH 重启后旧会话会失效）。
-        try {
-          const listed = unwrap(await api.sessions.list({}), 'session/list');
-          // DSH 的 `session/list` 返回 `{ items }`；读 `sessions` 会得到空集合，于是每次
-          // 都判定旧整理会话「不存在」而新建一个，历史上下文永远续不上。
-          const ids = (listed?.items ?? listed?.sessions ?? []).map((item) => item.sessionId);
-          // 归档会话也在 items 里，必须再查归档表，否则复用只会拿到一个空完成的 turn。
-          const archived = archivedSessionIdSet();
-          if (archived?.has(saved.sessionId)) {
-            log(`整理会话 ${saved.sessionId} 已被 DSH 归档，重建（复用只会拿到空完成的 turn）`);
-          } else if (ids.includes(saved.sessionId)) {
-            return saved.sessionId;
-          }
-        } catch {
-          // 列表拿不到就重建
-        }
-      }
-    } catch {
-      // 状态文件坏了：重建
-    }
-  }
+/**
+ * 每次整理都开一个新会话。
+ *
+ * 不复用的理由：请求是无状态的，上下文按 O(N²) 累积——第 N 次要把前 N 次的全量 prompt
+ * 重发一遍；而每次整理是独立快照，旧 prompt 除了撑大输入没有价值（查重靠 prompt 里的
+ * 「最近长期记忆」+ supersedes）。实测 daily 单次约 1 万字符，复用跑到第 12 天左右就会
+ * 撞上 API 的输入上限。
+ *
+ * @returns {{ sessionId: string, previousSessionId: string|null }} 上一个会话由调用方在成功后归档。
+ */
+async function createConsolidationSession(api, workspacePath) {
+  const previous = readPreviousSessionId();
   const workspace = unwrap(await api.workspace.create({ path: workspacePath }), 'workspace/create');
   const workspaceId = workspace?.workspace?.workspaceId;
   if (!workspaceId) throw new Error('workspace/create 没有返回 workspaceId');
@@ -386,8 +429,12 @@ async function ensureConsolidationSession(api, workspacePath) {
     // 改名失败不影响整理
   }
   mkdirSync(dirname(stateFile), { recursive: true });
-  writeFileSync(stateFile, `${JSON.stringify({ sessionId, createdAt: new Date().toISOString() }, null, 2)}\n`, 'utf8');
-  return sessionId;
+  writeFileSync(
+    stateFile,
+    `${JSON.stringify({ sessionId, previousSessionId: previous, createdAt: new Date().toISOString() }, null, 2)}\n`,
+    'utf8',
+  );
+  return { sessionId, previousSessionId: previous };
 }
 
 const now = Date.now();
@@ -396,10 +443,31 @@ let prompt;
 if (isSynthesis) {
   const since = now - PERIOD_DAYS[period] * 86_400_000;
   // 综合提炼只看长期：短期聊天对「主线」没有贡献，只会把上下文撑爆。
-  rows = collectRange(config.factsDir, since).filter((row) => row.stage !== 'short');
+  const all = collectRange(config.factsDir, since).filter((row) => row.stage !== 'short');
+  const sourcePeriod = SOURCE_PERIOD[period];
+  let fallback = false;
+  // 按层级取原料：本周的日整理产出 / 本月的周整理产出 / 本年的月整理产出。
+  rows = fromPeriod(all, sourcePeriod);
+  if (rows.length === 0) {
+    // 过渡兜底：2026-11-02 之前的整理产出还没有层级 tag，先退回「所有整理产出」。
+    // 等带 tag 的 daily 跑过一轮，这一层会自然失效。
+    const sleepRows = all.filter((row) => row.source === 'sleep');
+    if (sleepRows.length > 0) {
+      rows = sleepRows;
+      log(`${period} 没有带 ${sourcePeriod} 标记的产出，退回所有整理产出 ${rows.length} 条`);
+    }
+  }
+  if (rows.length === 0) {
+    // 下级没跑出东西（比如那天 daily 失败了）：退回原始记录，但必须限长——
+    // 无限长就是 2026-11-02 那次 400 的成因。
+    fallback = true;
+    const trimmed = trimToBudget(all, RAW_FALLBACK_MAX_CHARS);
+    rows = trimmed.kept;
+    log(`${period} 没有 ${sourcePeriod} 产出，退回原始记忆 ${rows.length} 条（丢弃 ${trimmed.dropped} 条）`);
+  }
   const docs = decisionsInRange(config.memoriesDir, since);
-  prompt = buildPeriodPrompt(rows, docs, { from: localDate(since), to: localDate(now) });
-  log(`${period} rows=${rows.length} docs=${docs.length}`);
+  prompt = buildPeriodPrompt(rows, docs, { from: localDate(since), to: localDate(now) }, { fallback });
+  log(`${period} source=${sourcePeriod} rows=${rows.length} docs=${docs.length} fallback=${fallback}`);
 } else {
   rows = collectToday(config.factsDir, now);
   // 整理者需要两样参照，否则判断不了「这条是不是已经记过」：
@@ -441,13 +509,30 @@ if (!presetIds.includes(PRESET)) {
 
 const workspacePath = resolve(config.memoriesDir, '..');
 let sessionId;
+let previousSessionId = null;
 try {
-  sessionId = await ensureConsolidationSession(api, workspacePath);
-  log(`session=${sessionId}`);
+  const created = await createConsolidationSession(api, workspacePath);
+  sessionId = created.sessionId;
+  previousSessionId = created.previousSessionId;
+  log(`session=${sessionId}${previousSessionId ? ` previous=${previousSessionId}` : ''}`);
   const startedAt = Date.now();
   const reply = await promptAndWait(api, sessionId, prompt);
+  if (reply.trim().length === 0) {
+    // turn 正常结束了，但一个字都没写。这不能算成功——2026-11-02 的 weekly/monthly
+    // 就是被这样记成 exit=0，supervisor 判成功、连挂两轮都没人发现。
+    throw new Error('整理会话返回空回复（turn 已结束但没有任何文本）');
+  }
   log(`done ms=${Date.now() - startedAt} chars=${reply.length}`);
   log(`reply: ${reply.replace(/\s+/g, ' ').slice(0, 400)}`);
+  // 成功后归档上一次的整理会话：每次新建，旧的留一个做排查就够，不在列表里堆积。
+  if (previousSessionId && previousSessionId !== sessionId) {
+    try {
+      await api.workspace.archiveSession({ sessionId: previousSessionId });
+      log(`已归档上一次的整理会话 ${previousSessionId}`);
+    } catch (error) {
+      log(`归档上一次会话失败（不影响本次结果）：${error?.message ?? error}`);
+    }
+  }
 } catch (error) {
   log(`failed: ${error?.message ?? error}`);
   // 脚本放弃等结果了，但 DSH 里的那个 turn 还在跑、还会继续写记忆。
