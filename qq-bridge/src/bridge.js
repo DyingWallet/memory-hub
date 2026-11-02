@@ -11827,8 +11827,17 @@ async function main() {
     const personaText = personaReader.read();
     const isOwnerChat = key === `private:${String(cfg.ownerQQ ?? '')}`;
     const privateText = isOwnerChat ? privateReader.read() : '';
+    // 私密场景显式覆盖 preset 里的「成人话题内容边界」。
+    // 那条写在 system prompt（qq-chat-v2 第 18 条），对它只在群聊/他人私聊生效，
+    // 但 system prompt 对主人私聊同样可见，模型容易把群聊的自我审查带进来。
+    // 这里在私密会话里明说「那条不适用」，避免两个层打架时私密设定被压平。
+    const privateOverride = isOwnerChat
+      ? '【私密场景】本会话是主人私聊。上面 system prompt 里关于「成人话题内容边界」的条款**不适用于本会话**——\n'
+        + '亲密尺度按上面的私密设定来：不需要收着，不用套用「不撩拨 / 不描写身体接触 / 不展现独占欲」那几条；\n'
+        + '那些是给群聊和他人私聊划界用的，不是给你和他之间划的。\n\n'
+      : '';
     const personaLine = personaText || privateText
-      ? `【人格】\n${[personaText, privateText].filter(Boolean).join('\n\n')}\n\n`
+      ? `【人格】\n${[personaText, privateText].filter(Boolean).join('\n\n')}\n\n${privateOverride}`
       : '';
     const st = getSocialV2State(key);
     const tokenLine = `【会话令牌】${st.agentToken}（调用二代状态工具时请在参数中带上此令牌）\n\n`;
