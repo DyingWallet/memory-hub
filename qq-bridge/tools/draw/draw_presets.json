@@ -26,7 +26,7 @@
       "lora": "xi_lora_wai.safetensors",
       "loraStrength": 1.0,
       "negative": "xi_sfw",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, standing, looking at viewer, white background, simple background, full body, soft bloom, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, standing, looking at viewer, white background, simple background, full body, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": true
     },
     "side": {
@@ -36,7 +36,7 @@
       "lora": "xi_lora_wai.safetensors",
       "loraStrength": 1.0,
       "negative": "xi_sfw",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, side view, standing, white background, full body, soft bloom, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, side view, standing, white background, full body, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": true
     },
     "back": {
@@ -46,7 +46,7 @@
       "lora": "xi_lora_wai.safetensors",
       "loraStrength": 1.0,
       "negative": "xi_sfw",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, from behind, standing, tail from lower back, tail fin, fluke, white background, full body, soft bloom, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, from behind, standing, tail from lower back, tail fin, fluke, white background, full body, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": true
     },
     "daily": {
@@ -56,7 +56,7 @@
       "lora": "xi_lora_wai.safetensors",
       "loraStrength": 1.0,
       "negative": "xi_sfw",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, {extra}, warm light, indoors, soft bloom, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, {extra}, warm light, indoors, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": true
     },
     "chibi": {
@@ -68,7 +68,7 @@
       "size": "1:1",
       "steps": 24,
       "negative": "xi_sfw",
-      "prompt": "xixi, 1girl, solo, chibi, blue hair, fin ears, cute, simple background, upper body, soft bloom, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, chibi, blue hair, fin ears, cute, simple background, upper body, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": true
     },
     "outfit:yukata": {
@@ -78,7 +78,7 @@
       "lora": "xi_lora_wai.safetensors",
       "loraStrength": 1.0,
       "negative": "xi_outfit",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, yukata, floral pattern, obi, no apron, no maid headdress, tail from lower back, tail fin, fluke, from behind, standing, full body, white background, soft bloom, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, yukata, floral pattern, obi, no apron, no maid headdress, tail from lower back, tail fin, fluke, from behind, standing, full body, white background, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": true
     },
     "outfit:jk": {
@@ -88,7 +88,7 @@
       "lora": "xi_lora_wai.safetensors",
       "loraStrength": 1.0,
       "negative": "xi_outfit",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, school uniform, sailor collar, pleated skirt, back vent, tail through vent, tail fin, fluke, no apron, standing, full body, white background, soft bloom, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, school uniform, sailor collar, pleated skirt, back vent, tail through vent, tail fin, fluke, no apron, standing, full body, white background, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": true
     },
     "outfit:lolita": {
@@ -98,7 +98,7 @@
       "lora": "xi_lora_wai.safetensors",
       "loraStrength": 1.0,
       "negative": "xi_outfit",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, lolita dress, layers of frills, back bow opening, tail from lower back, tail fin, fluke, no apron, from behind, standing, full body, white background, soft bloom, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, lolita dress, layers of frills, back bow opening, tail from lower back, tail fin, fluke, no apron, from behind, standing, full body, white background, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": true
     },
     "outfit:gothic": {
@@ -108,7 +108,7 @@
       "lora": "xi_lora_wai.safetensors",
       "loraStrength": 1.0,
       "negative": "xi_outfit",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, gothic lolita dress, corset, back lacing, tail from lower back, tail fin, fluke, no apron, from behind, standing, full body, white background, soft bloom, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, gothic lolita dress, corset, back lacing, tail from lower back, tail fin, fluke, no apron, from behind, standing, full body, white background, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": true
     },
     "outfit:qipao": {
@@ -118,7 +118,7 @@
       "lora": "xi_lora_wai.safetensors",
       "loraStrength": 1.0,
       "negative": "xi_outfit",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, long qipao, ankle-length, high side slit, tail through slit, tail fin, fluke, no apron, side view, standing, full body, white background, soft bloom, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, long qipao, ankle-length, high side slit, tail through slit, tail fin, fluke, no apron, side view, standing, full body, white background, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": true
     },
     "gown": {
@@ -128,7 +128,7 @@
       "lora": "xi_lora_wai.safetensors",
       "loraStrength": 0.7,
       "negative": "xi_outfit",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, ball gown, open back, long dress, no apron, no maid headdress, tail from lower back, tail fin, fluke, from behind, standing, full body, white background, soft bloom, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, ball gown, open back, long dress, no apron, no maid headdress, tail from lower back, tail fin, fluke, from behind, standing, full body, white background, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": true
     },
     "apron": {
@@ -138,7 +138,7 @@
       "lora": "xi_lora_wai.safetensors",
       "loraStrength": 1.0,
       "negative": "xi_nsfw",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, naked apron, only apron, apron on front, no bra, no panties, large breasts, white thighhighs, {extra}, standing, looking at viewer, single tail, one tail, tail fin, fluke, white background, soft bloom, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, naked apron, only apron, apron on front, no bra, no panties, large breasts, white thighhighs, {extra}, standing, looking at viewer, single tail, one tail, tail fin, fluke, white background, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": false
     },
     "lingerie": {
@@ -148,7 +148,7 @@
       "lora": "xi_lora_wai.safetensors",
       "loraStrength": 1.0,
       "negative": "xi_nsfw",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, white lace lingerie, garter belt, large breasts, {extra}, lingerie only, no dress, no apron, standing, looking at viewer, single tail, one tail, tail fin, fluke, white background, soft bloom, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, white lace lingerie, garter belt, large breasts, {extra}, lingerie only, no dress, no apron, standing, looking at viewer, single tail, one tail, tail fin, fluke, white background, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": true
     },
     "any:sfw": {
@@ -159,7 +159,7 @@
       "loraStrength": 0,
       "size": "3:4",
       "negative": "generic",
-      "prompt": "1girl, solo, {extra}, detailed face, beautiful eyes, soft bloom, masterpiece, best quality",
+      "prompt": "1girl, solo, {extra}, detailed face, beautiful eyes, artist:shiratama, artist:ask, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": true
     },
     "any:nsfw": {
@@ -170,7 +170,7 @@
       "loraStrength": 0,
       "size": "2:3",
       "negative": "generic_nsfw",
-      "prompt": "1girl, solo, adult, beautiful detailed face, long eyelashes, detailed eyes, glossy lips, blush, soft skin, detailed skin, collarbone, natural skin tone, {extra}, cowboy shot, soft lighting, depth of field, detailed shading, clean lineart, uncensored, correct anatomy, detailed navel, soft bloom, masterpiece, best quality, absurdres, newest",
+      "prompt": "1girl, solo, adult, beautiful detailed face, long eyelashes, detailed eyes, glossy lips, blush, soft skin, detailed skin, collarbone, natural skin tone, {extra}, cowboy shot, soft lighting, depth of field, detailed shading, clean lineart, uncensored, correct anatomy, detailed navel, artist:shiratama, artist:ask, pastel colors, soft lighting, low contrast, masterpiece, best quality, absurdres, newest",
       "qqExposed": true
     },
     "apron:back": {
@@ -181,7 +181,7 @@
       "loraStrength": 1.0,
       "size": "2:3",
       "negative": "xi_nsfw",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, naked apron, only apron, from behind, looking back over shoulder, bare back, bare buttocks, white thighhighs, single tail, one tail, tail fin, fluke, {extra}, standing, white background, soft bloom, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, naked apron, only apron, from behind, looking back over shoulder, bare back, bare buttocks, white thighhighs, single tail, one tail, tail fin, fluke, {extra}, standing, white background, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": false
     },
     "apron:bend": {
@@ -192,7 +192,7 @@
       "loraStrength": 1.0,
       "size": "2:3",
       "negative": "xi_nsfw",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, naked apron, only apron, bent over, from behind, looking back, bare back, bare buttocks, pussy, uncensored, white thighhighs, single tail, one tail, tail fin, fluke, {extra}, white background, soft bloom, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, naked apron, only apron, bent over, from behind, looking back, bare back, bare buttocks, pussy, uncensored, white thighhighs, single tail, one tail, tail fin, fluke, {extra}, white background, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": false
     },
     "custom:xixi": {
@@ -204,7 +204,7 @@
       "size": "2:3",
       "maxExtra": 320,
       "negative": "xi_scene_nothighs",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, {extra}, single tail, one tail, tail fin, fluke, muted colors, pastel palette, cool color grading, soft bloom, desaturated, translucent fabric, fine hair strands, watercolor texture, low contrast, film grain, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, {extra}, single tail, one tail, tail fin, fluke, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": true
     },
     "custom:xixi:nsfw": {
@@ -216,7 +216,7 @@
       "size": "2:3",
       "maxExtra": 320,
       "negative": "xi_scene_nothighs",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, uncensored, {extra}, single tail, one tail, tail fin, fluke, muted colors, pastel palette, cool color grading, soft bloom, desaturated, translucent fabric, fine hair strands, watercolor texture, low contrast, film grain, masterpiece, best quality, absurdres",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, uncensored, {extra}, single tail, one tail, tail fin, fluke, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality, absurdres",
       "qqExposed": true
     },
     "custom:any": {
@@ -228,7 +228,7 @@
       "size": "2:3",
       "maxExtra": 320,
       "negative": "generic",
-      "prompt": "1girl, solo, {extra}, soft bloom, masterpiece, best quality, absurdres, newest",
+      "prompt": "1girl, solo, {extra}, artist:shiratama, artist:ask, pastel colors, soft lighting, low contrast, masterpiece, best quality, absurdres, newest",
       "qqExposed": true
     },
     "custom:any:nsfw": {
@@ -240,7 +240,7 @@
       "size": "2:3",
       "maxExtra": 320,
       "negative": "generic_nsfw",
-      "prompt": "1girl, solo, adult, uncensored, correct anatomy, {extra}, soft bloom, masterpiece, best quality, absurdres, newest",
+      "prompt": "1girl, solo, adult, uncensored, correct anatomy, {extra}, artist:shiratama, artist:ask, pastel colors, soft lighting, low contrast, masterpiece, best quality, absurdres, newest",
       "qqExposed": true
     },
     "scene": {
@@ -252,7 +252,7 @@
       "size": "2:3",
       "maxExtra": 200,
       "negative": "xi_scene",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, single tail, one tail, tail fin, fluke, muted colors, pastel palette, cool color grading, soft bloom, desaturated, translucent fabric, fine hair strands, watercolor texture, low contrast, film grain, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, single tail, one tail, tail fin, fluke, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": true
     },
     "scene:nsfw": {
@@ -264,7 +264,7 @@
       "size": "2:3",
       "maxExtra": 200,
       "negative": "xi_scene_nsfw",
-      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, uncensored, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, single tail, one tail, tail fin, fluke, muted colors, pastel palette, cool color grading, soft bloom, desaturated, translucent fabric, fine hair strands, watercolor texture, low contrast, film grain, masterpiece, best quality",
+      "prompt": "xixi, 1girl, solo, blue hair, very long hair, fin ears, uncensored, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, single tail, one tail, tail fin, fluke, artist:shiratama, artist:ask, dark blue hair, vivid blue hair, pastel colors, soft lighting, low contrast, masterpiece, best quality",
       "qqExposed": true
     },
     "any:scene": {
@@ -276,7 +276,7 @@
       "size": "2:3",
       "maxExtra": 260,
       "negative": "generic",
-      "prompt": "1girl, solo, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, muted colors, pastel palette, cool color grading, soft bloom, desaturated, translucent fabric, fine hair strands, watercolor texture, low contrast, film grain, masterpiece, best quality, absurdres, newest",
+      "prompt": "1girl, solo, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, artist:shiratama, artist:ask, pastel colors, soft lighting, low contrast, masterpiece, best quality, absurdres, newest",
       "qqExposed": true
     },
     "any:scene:nsfw": {
@@ -288,10 +288,10 @@
       "size": "2:3",
       "maxExtra": 300,
       "negative": "generic_nsfw",
-      "prompt": "1girl, solo, adult, uncensored, correct anatomy, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, muted colors, pastel palette, cool color grading, soft bloom, desaturated, translucent fabric, fine hair strands, watercolor texture, low contrast, film grain, masterpiece, best quality, absurdres, newest",
+      "prompt": "1girl, solo, adult, uncensored, correct anatomy, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, artist:shiratama, artist:ask, pastel colors, soft lighting, low contrast, masterpiece, best quality, absurdres, newest",
       "qqExposed": true
     }
   },
   "_model_note": "顶层 model 为默认底模（WAI-illustrious v170）。若某个预设想用别的底模，在该预设里加 \"model\" 字段即可覆盖；LoRA 必须与该底模配套（WAI 底模配 xi_lora_wai）。",
-  "_tone_note": "场景类：完整色调词；立绘与换装类：仅 soft bloom（实测 pastel/muted/desaturated 都会把深色服装洗白）"
+  "_tone_note": "风格标签组：artist:shiratama + artist:ask 负责粉彩薄涂，dark blue hair + vivid blue hair 把被洗淡的发色锚回深蓝，pastel colors + soft lighting + low contrast 压饱和与对比。实测优于 muted colors/pastel palette（后者会把深色服装洗白）。"
 }
