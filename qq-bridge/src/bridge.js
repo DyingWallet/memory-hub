@@ -11622,7 +11622,12 @@ async function main() {
     const packet = { messages: [], recent: [], unreadCount: st.unread.length, includedUnreadCount: 0, readThroughSeq: readThroughSeqV2(st), partial: st.unread.length > 0 };
     const tryAdd = (field, msg) => {
       const previousThrough = packet.readThroughSeq;
-      packet[field].push(compactModelMessage(msg));
+      // 带图的消息在快照里补一个醒目标记：模型看到 [图片] 常常直接当没内容，
+      // 不回翻 persona 第 10 条去取图。这里就在它眼前说一句该干什么。
+      const enriched = msg?.hasMedia
+        ? { ...msg, mediaHint: '这条带图，先用 qq_get_message_images 看了再接话' }
+        : msg;
+      packet[field].push(compactModelMessage(enriched));
       packet.includedUnreadCount = packet.messages.length;
       packet.readThroughSeq = readThroughSeqV2(st, [...packet.messages, ...packet.recent]);
       packet.partial = packet.messages.length < st.unread.length;
