@@ -83,6 +83,21 @@ function fromPeriod(rows, tag) {
 }
 
 /**
+ * 审计：整理写出的条目不该直接对群/全局可见。
+ *
+ * 夜间整理是全局视角，能看到所有场景的内容；一旦把私聊原话写成 audience 含
+ * `qq:group:*` 或 `shared`，群里当场就能召回，说出去的话收不回来。
+ * 2026-11-02 出过一次：私聊里「而且能发自己的涩图哦」被整理成群可见的条目。
+ * 这里只报告、不改数据——发现后由人确认是误判还是真要广播。
+ */
+function auditGroupVisibleWrites(factsDir, sinceMs) {
+  return collectRange(factsDir, sinceMs)
+    .filter((row) => row.source === 'sleep')
+    .filter((row) => (row.audience ?? []).some((scope) => scope === 'shared' || String(scope).startsWith('qq:group:')))
+    .map((row) => `${row.id}(${(row.audience ?? []).join('|')})`);
+}
+
+/**
  * 兜底截断：只保留最近的记录，累加到字符预算为止。
  * collectRange 返回升序；这里从尾部倒着取，保证丢掉的是最旧的部分。
  * 计量按 renderList 的实际渲染长度（每条截 400）算，否则预算会偏低。
@@ -524,6 +539,11 @@ try {
   }
   log(`done ms=${Date.now() - startedAt} chars=${reply.length}`);
   log(`reply: ${reply.replace(/\s+/g, ' ').slice(0, 400)}`);
+  // 审计：整理写出的条目只要对群/全局可见，就有泄露风险，必须让人看见。
+  const groupVisible = auditGroupVisibleWrites(config.factsDir, startedAt - 60_000);
+  if (groupVisible.length > 0) {
+    log(`⚠️ 审计：${groupVisible.length} 条新写入对群/全局可见，需人工确认：${groupVisible.join(', ')}`);
+  }
   // 成功后归档上一次的整理会话：每次新建，旧的留一个做排查就够，不在列表里堆积。
   if (previousSessionId && previousSessionId !== sessionId) {
     try {
