@@ -45,9 +45,13 @@ export function checkDrawPolicy({ scene, character, nsfw }) {
 /**
  * 配额档位：不同预设不同额度。
  * owner 用软上限，其余按每人+每群双重限。
+ *
+ * isOwner 优先于 scene：主人在群里要图时 scene 是 group，会掉进 generic_nsfw 的
+ * 3 张/日，被自己的额度卡住。他要的是「我的限制」——所以按身份给 owner 档，
+ * 100 张/日 + 30 秒冷却，群额度也不设上限。
  */
-export function quotaTierOf({ scene, nsfw }) {
-  if (scene === SCENES.PRIVATE_OWNER) return 'owner';
+export function quotaTierOf({ scene, nsfw, isOwner = false }) {
+  if (isOwner || scene === SCENES.PRIVATE_OWNER) return 'owner';
   if (nsfw) return 'generic_nsfw';
   return 'normal';
 }

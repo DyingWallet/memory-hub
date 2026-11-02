@@ -62,7 +62,7 @@ export function createDrawService({
       return { ok: false, ...policy, scene };
     }
 
-    const tier = quotaTierOf({ scene, nsfw: p.nsfw });
+    const tier = quotaTierOf({ scene, nsfw: p.nsfw, isOwner: String(userId) === String(ownerQQ) });
     const q = quota.check({ key, userId, tier });
     if (!q.ok) {
       log('draw_quota', { key, userId, preset, code: q.code });
