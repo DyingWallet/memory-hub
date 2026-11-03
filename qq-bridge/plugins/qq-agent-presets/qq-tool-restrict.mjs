@@ -177,10 +177,24 @@ const MEMORY_ROOT_TOOLS = Object.freeze([
   'mcp__memory__memory_review', 'mcp__memory__memory_persist', 'mcp__memory__memory_call',
 ])
 
-function restrictMemoryRootTools(scopeCtx) {
+/**
+ * 桌宠（pet-chat）放行的只读记忆工具。
+ *
+ * QQ 群友会话必须挡住整组 root 视图工具（那份 server 用桌面 root token，不认场景）；
+ * 但桌宠只给主人自己看，注入的记忆又常常不够精确，所以只读三项放开，写入/遗忘仍然不给。
+ * 由 preset 显式传 `allowMemoryRoot: true` 才生效——不传就是原来的全拒。
+ */
+const MEMORY_ROOT_READONLY = Object.freeze([
+  'mcp__memory__memory_search', 'mcp__memory__memory_get', 'mcp__memory__memory_recent',
+])
+
+function restrictMemoryRootTools(scopeCtx, allowMemoryRoot = false) {
   if (!scopeCtx?.tools?.restrict) return false;
   try {
-    scopeCtx.tools.restrict({ deny: [...MEMORY_ROOT_TOOLS] });
+    const deny = allowMemoryRoot
+      ? MEMORY_ROOT_TOOLS.filter((name) => !MEMORY_ROOT_READONLY.includes(name))
+      : MEMORY_ROOT_TOOLS;
+    scopeCtx.tools.restrict({ deny: [...deny] });
     return true;
   } catch {
     return false;
@@ -233,6 +247,8 @@ export function apply(ctx, config = {}) {
   // 'operator' = L2/L3 运维 Agent（只拒绝派生/编排/插件类工具与凭据读取，其余交给审批闸门）。
   const readonlyAgent = config?.profile === 'readonly-agent'
   const operator = config?.profile === 'operator'
+  // 桌宠专用：允许只读记忆工具（search/get/recent）。QQ 群友的 L1 不传这个开关。
+  const allowMemoryRoot = config?.allowMemoryRoot === true
   if (operator) {
     for (const name of OPERATOR_DENY_TOOLS) {
       try { ctx.tools.restrict({ deny: [name] }) } catch (error) { console.error(`[qq-tool-restrict] skip restrict ${name}: ${error?.message ?? error}`) }
@@ -247,6 +263,7 @@ export function apply(ctx, config = {}) {
     return
   }
   const extraAllowed = new Set(readonlyAgent ? READONLY_AGENT_TOOLS : [])
+  if (allowMemoryRoot) for (const name of MEMORY_ROOT_READONLY) extraAllowed.add(name)
   // 1) 把已知危险全局工具从 schema 隐藏（restrict 只影响继承的全局层，
   //    不会误删 preset 自己注册的 scoped 工具）。
   // 逐个 restrict：当前 DSH 版本不存在的工具名会单独抛错并跳过，
@@ -273,7 +290,7 @@ export function apply(ctx, config = {}) {
   let memoryRootRestricted = false
   const tryRestrictMemoryRootTools = (scopeCtx) => {
     if (memoryRootRestricted) return
-    memoryRootRestricted = restrictMemoryRootTools(scopeCtx)
+    memoryRootRestricted = restrictMemoryRootTools(scopeCtx, allowMemoryRoot)
     if (memoryRootRestricted) console.error('[qq-tool-restrict] memory root tools hidden (deferred restrict)')
   }
   tryRestrictMemoryRootTools(ctx)
