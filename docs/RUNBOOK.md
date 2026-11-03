@@ -525,6 +525,55 @@ Copy-Item data\qq-tokens\*.token qq-bridge\state\ -Force
 | memd 起不来 | 看 `logs\memd.log`；`loadConfig` 拒绝非回环 host |
 | 记忆「消失」 | 先查 `privacy=sensitive` 与 token 是否带 scope，再看 audience |
 | 检索不到旧数据 | `reindex --force` 从 JSONL 重建；确认事实行没有 `deleted:true` |
+| QQ 那边一直 `DeepSeek Messages request failed (400)` | 多半是会话历史里的**半个 emoji**（孤立代理项）。见 7.1 |
+
+### 7.1 400 循环：孤立代理项 / 半个 emoji（2026-11-04）
+
+**现象**：桥接每次唤醒都失败，DSH 只报 `DeepSeek Messages request failed (400)`；换话题、重启桥接都没用。
+
+**机理**：`slice()` 按 UTF-16 码元截断，切在 emoji 的代理对中间会留下半个字符（`U+D83C` 之类）。DeepSeek Messages API 的 JSON 解析器零容忍，整份请求 400，且响应体是纯文本（不是 JSON 错误对象），DSH 拿不到 `error.message`，只能显示成上面那句；400 又不在重试白名单里 —— 于是每次请求都失败，永不恢复。坏字符已经写进会话历史，所以**修写侧也不会让旧会话自愈**。
+
+**判据**：会话文件里出现孤立的 `\ud8xx`/`\udcxx` 转义（不在代理对里）。用脚本的 dry-run 看，不要手工 grep：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\fix-qq-400-recovery.ps1 -DryRun
+```
+
+它会列出每个中招的文件、坏字符个数、第一处的上下文（原始切片 vs 修复后）。
+
+**处置**（必须按顺序，DSH 持有会话文件，先改会被内存态覆盖）：
+
+```powershell
+# 停桥接 → 关 DSH → 改写所有会话文件（自动备份 + 逐行 JSON 校验）
+# 脚本**不负责启动**：改完 DSH 和桥接仍是停的，由你自己拉起
+powershell -ExecutionPolicy Bypass -File scripts\fix-qq-400-recovery.ps1
+```
+
+参数与边界：
+
+| 参数 | 用途 |
+|---|---|
+| `-DryRun` | 只扫描，不动任何服务 |
+| `-TrimTail` | 丢弃文件末尾那半行（DSH 被强杀时正在写的记录）。默认遇到半行是**拒绝**而不是硬修 |
+| `-Session <片段>` | 只修一个会话；片段匹配到多个会列出来并拒绝 |
+| `-Force` | 跳过「当前在 DSH 里跑」的自检和确认提示 |
+
+- **必须在 DSH 外面跑**：脚本会关 DSH，在 DSH 的终端/沙箱里执行会把自己一起杀掉（脚本有自检，`-DryRun` 除外）。
+- **脚本只管停和修，不管启动**：跑完 DSH 与桥接都是停的，自己执行 `scripts\start-stack.ps1`。
+- 失败时不会偷偷启动任何东西：打印失败原因 + 当前状态（桥接停没停、DSH 停没停、fixer 退出码），退非 0。
+- 备份落在 `memory-hub\backups\sessions\<时间戳>\<会话目录>\`，**不留在会话目录**（避免 DSH 扫描时撞上 `session*.jsonl*`）。
+- 修复前会等会话文件 mtime/size 稳定（默认最多 20s），避免强杀时还有缓冲写在路上。
+- 退出码：0 成功、1 失败（见输出）、2 结构校验失败（没写任何文件）、3 node 没有 zstd。
+- **已被桥接退役的会话修好也不会回到旧上下文**：桥接连续几轮空响应会自动退役映射，之后走的是新会话。修文件的价值是拆掉这颗雷，不是找回上下文。
+- 回归测试：`node scripts/test-fix-session-surrogates.mjs`（干净文件不动 / 孤立代理被替换 / 末尾半行需 `-TrimTail` / 中间行损坏必须拒绝 / 备份位置）。
+
+**根因已修在写侧**（不修的话还会再犯）：
+
+- `qq-bridge/src/md-to-plain.js`：`truncateText`/`truncateTextTail` 按码点截断，`toWellFormed` 兜底清洗；桥接投递前对所有 prompt 文本过一次。
+- `qq-bridge/src/memory/memory-bridge.js`：`【最近记得的事】` 用 `truncateText`，写镜像事实前过 `toWellFormed`。
+- `memory-hub/packages/server/src/recall-format.ts`：记忆块按码点截断并清洗存量坏字符（此前 `text.slice(0, perLine)` 是主要来源）。
+- `memory-hub/packages/server/src/semantic.ts`：语义检索结果同样按码点截断。
+
 
 ## 8. 备份与安全检查
 

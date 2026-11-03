@@ -374,7 +374,10 @@ export class SemanticIndex {
     maxChars: number,
     explain = false,
   ): SearchHit {
-    const text = row.text.length > maxChars ? `${row.text.slice(0, maxChars)}…` : row.text;
+    // 按码点截断：slice 会把 emoji 的代理对切一半，孤立代理项进提示词后
+    // DeepSeek Messages API 整份 400（2026-11-04 事故）。
+    const chars = Array.from(row.text);
+    const text = chars.length > maxChars ? `${chars.slice(0, maxChars).join('')}…` : row.text;
     // 记忆加权必须同时作用于两条检索路径，否则 mergeHybrid 里 FTS 那半边带权重、
     // 语义这半边不带，加权等于半残。
     const baseScore = score;

@@ -27,6 +27,28 @@ function textOf(result: MemoryResult): string {
   return (text || result.title || '').replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * 按**码点**截断。直接 `slice()` 按 UTF-16 码元切，切在 emoji 的代理对中间会留下
+ * 孤立代理项；这条记忆块会被拼进 QQ 桥接的提示词，DeepSeek Messages API 的 JSON
+ * 解析器对孤立代理项零容忍，整份请求 400（"lone leading surrogate in hex escape"），
+ * 而且坏字符进入 DSH 会话历史后该会话永久失败（2026-11-04 事故）。
+ * 注意 @memsvc/core 的 truncate 会加省略号，这里保持原来的「不留尾巴」行为。
+ */
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+/** 把孤立代理项换成 U+FFFD（lib 是 ES2023，没有 String.prototype.toWellFormed 的类型）。 */
+function wellFormed(text: string): string {
+  return text.replace(LONE_SURROGATE, '\uFFFD');
+}
+
+function clip(text: string, maxChars: number): string {
+  if (maxChars <= 0) return '';
+  // 先清理已存在的孤立代理（历史上被切坏的存量数据），再按码点截断。
+  const clean = wellFormed(text);
+  const chars = Array.from(clean);
+  return chars.length <= maxChars ? clean : chars.slice(0, maxChars).join('');
+}
+
 /** 只渲染记忆列表（不带 live 段）。`/v1/recent` 的 block 也用它，标题可换。 */
 export function renderMemoryBlock(
   results: readonly MemoryResult[],
@@ -41,7 +63,7 @@ export function renderMemoryBlock(
     const text = textOf(row);
     if (!text) continue;
     const marker = row.disclosure === 'owner_initiated' ? '（对方自己提起过的）' : '';
-    lines.push(`- ${marker}${text.slice(0, perLine)}`);
+    lines.push(`- ${marker}${clip(text, perLine)}`);
   }
   return lines.join('\n').trim();
 }
@@ -62,7 +84,7 @@ export function renderRecallBlock(
     for (const row of liveList) {
       const text = textOf(row);
       if (!text) continue;
-      lines.push(`- ${clockOf(row.updated_at)}${text.slice(0, perLine)}`);
+      lines.push(`- ${clockOf(row.updated_at)}${clip(text, perLine)}`);
     }
     lines.push('');
   }
