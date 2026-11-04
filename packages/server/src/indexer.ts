@@ -322,9 +322,16 @@ function replaceDoc(db: Db, input: ReplaceDocInput): void {
   }
 }
 
-function deleteDoc(db: Db, docId: string): void {
+function deleteDoc(db: Db, docId: string, options?: { clearIdem?: boolean }): void {
   db.exec('BEGIN');
   try {
+    // 显式遗忘时要连幂等键一起清：routes.ts 的 /v1/write 命中 `idem:` 直接返回
+    // duplicate、不回查文档是否还在，悬空的键会让这条记忆永远写不回来
+    // （2026-11-04 对账 missing 1 就是这个：rev2 的文档 10-31 被 forget，
+    //  idem 还指着它，之后 reconcile --fix 一直 duplicate）。
+    if (options?.clearIdem) {
+      db.prepare("DELETE FROM meta WHERE (key LIKE 'idem:%' OR key LIKE 'dedupe:%') AND value = ?").run(docId);
+    }
     deleteDocRows(db, docId);
     db.prepare('DELETE FROM docs WHERE id = ?').run(docId);
     db.exec('COMMIT');
@@ -446,7 +453,7 @@ export function forgetFact(db: Db, config: ServerConfig, id: string): boolean {
   };
   mkdirSync(dirname(absPath), { recursive: true });
   appendFileSync(absPath, `${JSON.stringify(tombstone)}\n`, 'utf8');
-  deleteDoc(db, id);
+  deleteDoc(db, id, { clearIdem: true });
   return true;
 }
 

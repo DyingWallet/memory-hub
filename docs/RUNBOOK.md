@@ -246,6 +246,42 @@ node scripts\adopt-legacy.mjs --drop  "qq:private:1793813578:404" --apply # 不�
 - `--drop`：先 `memory-remove` 删轻量条目，再 tombstone `import:` 副本——两层都不留；
 - 每个动作写 `logs\reconcile\adopt-<日期>.jsonl`（含旧文档 id 与文本），可逐条回滚。
 
+### 2.6.4 missing 修不掉：悬空幂等键（2026-11-04）
+
+**现象**：对账每天都报同一条 `missing`（`reason: doc-gone`），`--fix missing` 日志写
+`action: write, duplicate: true`，但下一次对账还是那条。
+
+**机理**：`forgetFact` 以前只删 `docs`/`chunks`，**不清 `meta` 里的 `idem:*`**。
+`/v1/write` 命中 `idem:` 时直接返回 duplicate、不回查文档是否还在（`dedupe:` 那条路径
+是有 alive 检查的），于是：
+
+1. 某条记忆被 forget，文档没了，`idem:` 还指着它的旧 id；
+2. 轻量层（`social-v2.json`）里这条还在 → 对账报 missing；
+3. `--fix` 用同一个 idempotency_key 重写 → 命中悬空 idem → duplicate → 没写；
+4. 下一次对账重复第 2 步，永远修不完。
+
+**已修（2026-11-04）**：
+
+- `indexer.ts` 的 `forgetFact` → `deleteDoc(..., { clearIdem: true })`，遗忘时连带清掉
+  `idem:%` / `dedupe:%` 里指向它的键；
+- `routes.ts` 的 `/v1/write` 幂等命中后先查文档是否存活，悬空就让这次写覆盖映射
+  （存量悬空不用清库也能自愈）。
+
+**存量清理**（可选，`index.db` 里可能还有一批历史悬空键）：
+
+```powershell
+powershell -File scripts\stop.ps1                      # memd 独占这个 SQLite 文件
+node scripts\clean-dangling-idem.mjs                   # 只列
+node scripts\clean-dangling-idem.mjs --apply           # 删
+powershell -File scripts\start.ps1
+```
+
+**注意一个副作用**：主动忘掉的条目如果还在轻量层里，`--fix` 会把它写回来
+（2026-11-04 那条 `m:404` 就是这样：10-31 被 forget，11-04 对账又补写了一条新的）。
+要彻底忘掉，得删轻量层那一侧——用 `qq_memory_remove`（`memberImpression` 用 `target`
+指定），或者 `adopt-legacy.mjs --drop` 的同类做法。
+
+
 ## 3. 令牌
 
 签发（明文只显示一次）：

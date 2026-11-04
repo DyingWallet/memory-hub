@@ -872,9 +872,16 @@ function sourceForScene(scene: string): TFactRecord['source'] {
       const idempotencyKey = body.idempotency_key ?? null;
       if (idempotencyKey) {
         const existing = getMeta(db, `idem:${idempotencyKey}`);
+        // 幂等键可能指向一篇已经被 forget 掉的文档（forgetFact 在 2026-11-04 之前
+        // 不清这个映射）。以前这里直接返回 duplicate，于是那条记忆永远写不回来：
+        // 对账一直报 missing、reconcile --fix 每次都被判成「已修好」。
+        // 现在只要文档还活着才认幂等，悬空的映射直接让这次写覆盖它。
         if (existing) {
-          finish('write', auth, started, [existing], undefined, 1);
-          return { id: existing, indexed: false, duplicate: true };
+          const alive = db.prepare('SELECT 1 FROM docs WHERE id = ?').get(existing);
+          if (alive) {
+            finish('write', auth, started, [existing], undefined, 1);
+            return { id: existing, indexed: false, duplicate: true };
+          }
         }
       }
 
