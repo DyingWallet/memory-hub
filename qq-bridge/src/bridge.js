@@ -134,6 +134,16 @@ const ROLE_STATE_FILE = path.join(STATE_DIR, 'current-role.json');
 const SLANG_FILE = path.join(STATE_DIR, 'slang.json');
 const SLANG_SESSION_FILE = path.join(STATE_DIR, 'slang-session.json');
 const SOCIAL_V2_FILE = path.join(STATE_DIR, 'social-v2.json');
+// 成员印象的「只增不减」快照（2026-11-04）。
+//
+// 为什么单独存一份：social-v2.json 是整份覆盖写的，任何一次「旧内存态回写」
+// （两个桥接实例同时启动、或旧进程没退干净）都会把别人刚写的条目整段抹掉。
+// 2026-11-04 就是这样丢了 404 的印象（rev 从 3 退回 2），对账从此报 missing。
+// 快照只保存 memberImpressions，每次保存时与旧快照取并集（rev 取大），
+// 加载时再与主文件合并——主文件被覆盖也能捞回来。
+// 显式删除（qq_memory_remove / clear / 改名 / 超过 50 条淘汰）通过
+// impressionDeletions 从快照里移除，不会「删了又复活」。
+const SOCIAL_V2_SNAPSHOT = path.join(STATE_DIR, 'social-v2.snapshot.json');
 // 操作者为每个会话预写的「初始提示词」（见 main() 里的 initialPrompts）。
 // 单独一个文件：它属于操作者配置，不能随 social-v2.json 的会话状态一起被重置清掉。
 const INITIAL_PROMPTS_FILE = path.join(STATE_DIR, 'initial-prompts.json');
@@ -7522,7 +7532,7 @@ async function main() {
           if (req.headers['x-agent-token'] && !v2SessionAllowed(key)) { sendJson({ ok: false, error: '目标不在当前模式允许范围内' }, 403); return; }
           if (req.headers['x-agent-token'] && !v2ToolEnabled('memory')) { sendJson({ ok: false, error: '工具未启用：qq_memory_append' }, 403); return; }
           const st = getSocialV2State(key);
-          const entry = appendMemoryV2(st, category, content, extra);
+          const entry = appendMemoryV2(key, st, category, content, extra);
           // 镜像到 memd：fire-and-forget，服务不可用时静默失败（模块内部 catch）。
           // entry 带 id / rev，镜像键是 qq:mirror:<scene>:<category>:<id>:<rev>。
           //
@@ -7614,7 +7624,10 @@ async function main() {
               im.traits = newContent.split(/[,，、]/).map((s) => s.trim()).filter(Boolean).slice(0, 20);
             }
             if (cleanNewExtra.interactionCount !== undefined) im.interactionCount = Math.max(0, Number(cleanNewExtra.interactionCount) || 0);
-            if (newTarget !== oldTarget) delete st.memberImpressions[oldTarget];
+            if (newTarget !== oldTarget) {
+              markImpressionDeleted(key, oldTarget);
+              delete st.memberImpressions[oldTarget];
+            }
             // 身份跟着 target 走；只有 traits 真的变了才涨 rev。
             const newTraitsText = Array.isArray(im.traits) ? im.traits.join('、') : '';
             im.id = `m:${newTarget}`;
@@ -7638,7 +7651,10 @@ async function main() {
             const impressionEntries = Object.entries(st.memberImpressions);
             if (impressionEntries.length > 50) {
               impressionEntries.sort((a, b) => (Number(a[1]?.lastSeenAt) || 0) - (Number(b[1]?.lastSeenAt) || 0));
-              for (let i = 0; i < impressionEntries.length - 50; i += 1) delete st.memberImpressions[impressionEntries[i][0]];
+              for (let i = 0; i < impressionEntries.length - 50; i += 1) {
+                markImpressionDeleted(key, impressionEntries[i][0]);
+                delete st.memberImpressions[impressionEntries[i][0]];
+              }
             }
           }
           // 普通类别（activeTopic / pendingThought）编辑：用旧 rev 忘、用新 rev 写。
@@ -7701,6 +7717,7 @@ async function main() {
           } else if (category === 'memberImpression' && st.memberImpressions && typeof st.memberImpressions === 'object') {
             const removed = st.memberImpressions[target];
             const removedTraits = Array.isArray(removed?.traits) ? removed.traits.join('、') : '';
+            markImpressionDeleted(key, target);
             delete st.memberImpressions[target];
             if (removedTraits) {
               memory.mirrorForget(key, category, removedTraits, {
@@ -7739,6 +7756,7 @@ async function main() {
           if (!category || category === 'memberImpression') {
             for (const [name, entry] of Object.entries(st.memberImpressions && typeof st.memberImpressions === 'object' ? st.memberImpressions : {})) {
               const traits = Array.isArray(entry?.traits) ? entry.traits.join('、') : '';
+              markImpressionDeleted(key, name);
               if (traits) {
                 memory.mirrorForget(key, 'memberImpression', traits, {
                   target: name,
@@ -9448,6 +9466,21 @@ async function main() {
     paused: false, // 控制台可暂停整个二代 AI 活动（停止唤醒/等待）
   };
 
+  // 本进程显式删掉的成员印象：key -> Set<target>。
+  //
+  // 为什么需要：saveSocialV2State 落盘前会把磁盘上「rev 更新 / 内存里没有」的印象合并回来，
+  // 防止旧内存态把更新的状态覆盖掉（2026-11-04：404 的印象 rev 从 3 退回 2，对账从此报 missing）。
+  // 但主动删除（qq_memory_remove / memory-clear / 改名 / 50 条淘汰）也会让「磁盘有、内存没有」——
+  // 那不该被合并回来，否则删了又复活。所以删除路径先在这里登记，合并时跳过。
+  const impressionDeletions = new Map(); // key -> Set<target>
+  function markImpressionDeleted(key, target) {
+    const name = String(target ?? '').trim();
+    if (!key || !name) return;
+    const set = impressionDeletions.get(key) ?? new Set();
+    set.add(name);
+    impressionDeletions.set(key, set);
+  }
+
   // 一代/普通模式的图片/表情元数据存储：key -> Map<messageId/seq, media[]>
   // 二代模式则直接存在 socialV2 会话的 recentMessages/unread 消息对象上。
   const messageMediaStore = new Map();
@@ -9713,6 +9746,9 @@ async function main() {
         }
       })();
       const raw = readJsonSafe(SOCIAL_V2_FILE, null);
+      // 印象快照：主文件可能已被旧内存态覆盖过，加载时按 rev 取大补回来。
+      const snap = readJsonSafe(SOCIAL_V2_SNAPSHOT, null);
+      let restoredImpressions = 0;
       socialV2.paused = raw?.paused === true;
       if (raw && typeof raw.conversations === 'object') {
         const seenTokens = new Set();
@@ -9767,6 +9803,22 @@ async function main() {
             })(),
             ownerRules: normalizeRules(val.ownerRules)
           };
+          // 与印象快照合并：主文件可能被旧内存态整段覆盖过（见 SOCIAL_V2_SNAPSHOT 注释），
+          // 快照里 rev 更高或主文件缺失的条目补回来。
+          const snapConv = snap?.conversations?.[key];
+          if (snapConv && typeof snapConv.memberImpressions === 'object' && snapConv.memberImpressions) {
+            for (const [impTarget, impEntry] of Object.entries(snapConv.memberImpressions)) {
+              if (!impEntry || typeof impEntry !== 'object') continue;
+              if (['__proto__', 'constructor', 'prototype'].includes(impTarget)) continue;
+              const current = st.memberImpressions[impTarget];
+              const currentRev = Number(current?.rev) > 0 ? Number(current.rev) : 0;
+              const snapRev = Number(impEntry.rev) > 0 ? Number(impEntry.rev) : 1;
+              if (!current || snapRev > currentRev) {
+                st.memberImpressions[impTarget] = impEntry;
+                restoredImpressions += 1;
+              }
+            }
+          }
           // 旧状态/异常状态里的指定成员名单也统一归一化，防止“null”/非法值污染。
           if (st.wakeConfig?.triggers && typeof st.wakeConfig.triggers === 'object') {
             st.wakeConfig.triggers.speakerIds = normalizeSpeakerIdsV2(st.wakeConfig.triggers.speakerIds);
@@ -9814,10 +9866,46 @@ async function main() {
         } else {
           saveSocialV2State();
         }
+        if (restoredImpressions > 0) {
+          log(`[social-v2] 从印象快照补回 ${restoredImpressions} 条（主文件里缺失或 rev 更低，多半是旧内存态覆盖过）`);
+        }
       }
     } catch (error) {
       log('读取 socialV2 状态失败:', error?.message ?? error);
     }
+  }
+
+  /**
+   * 生成印象快照：旧快照 ∪ 当前内存，rev 取大；本进程显式删掉的 target 剔除。
+   * 只存 memberImpressions（几十 KB），与主文件的会话状态生命周期无关。
+   */
+  function snapshotImpressions() {
+    const prev = readJsonSafe(SOCIAL_V2_SNAPSHOT, null);
+    const prevConvs = prev && typeof prev.conversations === 'object' ? prev.conversations : {};
+    const out = { schemaVersion: 1, conversations: Object.create(null) };
+    const keys = new Set([...Object.keys(prevConvs), ...socialV2.conversations.keys()]);
+    for (const key of keys) {
+      const st = socialV2.conversations.get(key);
+      const mem = st && st.memberImpressions && typeof st.memberImpressions === 'object' ? st.memberImpressions : {};
+      const before = prevConvs[key] && prevConvs[key].memberImpressions && typeof prevConvs[key].memberImpressions === 'object'
+        ? prevConvs[key].memberImpressions
+        : {};
+      const deleted = impressionDeletions.get(key);
+      const merged = Object.create(null);
+      for (const [target, entry] of Object.entries(before)) {
+        if (!entry || typeof entry !== 'object') continue;
+        if (deleted && deleted.has(target)) continue;
+        merged[target] = entry;
+      }
+      for (const [target, entry] of Object.entries(mem)) {
+        if (!entry || typeof entry !== 'object') continue;
+        const prevRev = Number(merged[target]?.rev) > 0 ? Number(merged[target].rev) : 0;
+        const nextRev = Number(entry.rev) > 0 ? Number(entry.rev) : 1;
+        if (!merged[target] || nextRev > prevRev) merged[target] = entry;
+      }
+      if (Object.keys(merged).length > 0) out.conversations[key] = { memberImpressions: merged };
+    }
+    return out;
   }
 
   function saveSocialV2State() {
@@ -9856,6 +9944,12 @@ async function main() {
         };
       }
       atomicWriteJson(SOCIAL_V2_FILE, obj);
+      // 印象快照：主文件被旧内存态覆盖时，这份还能把条目捞回来（见常量注释）。
+      try {
+        atomicWriteJson(SOCIAL_V2_SNAPSHOT, snapshotImpressions());
+      } catch (snapshotError) {
+        log('保存印象快照失败（不影响主状态）:', snapshotError?.message ?? snapshotError);
+      }
     } catch (error) {
       log('保存 socialV2 状态失败:', error?.message ?? error);
     }
@@ -10092,7 +10186,7 @@ async function main() {
   /** 条目 id：8 位十六进制。单会话 ≤ 50 条，碰撞可以忽略。 */
   const newEntryId = () => crypto.randomBytes(4).toString('hex');
 
-  function appendMemoryV2(st, category, content, extra = {}) {
+  function appendMemoryV2(key, st, category, content, extra = {}) {
     if (!st) return null;
     const text = redactKnownTokensOnly(String(content ?? '')).trim();
     const cat = String(category || '').trim();
@@ -10176,6 +10270,7 @@ async function main() {
       if (impressionEntries.length > 50) {
         impressionEntries.sort((a, b) => (Number(a[1]?.lastSeenAt) || 0) - (Number(b[1]?.lastSeenAt) || 0));
         for (let i = 0; i < impressionEntries.length - 50; i++) {
+          markImpressionDeleted(key, impressionEntries[i][0]);
           delete st.memberImpressions[impressionEntries[i][0]];
         }
       }

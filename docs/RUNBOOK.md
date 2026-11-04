@@ -276,10 +276,37 @@ node scripts\clean-dangling-idem.mjs --apply           # 删
 powershell -File scripts\start.ps1
 ```
 
-**注意一个副作用**：主动忘掉的条目如果还在轻量层里，`--fix` 会把它写回来
-（2026-11-04 那条 `m:404` 就是这样：10-31 被 forget，11-04 对账又补写了一条新的）。
+**注意一个副作用**：主动忘掉的条目如果还在轻量层里，`--fix` 会把它写回来。
 要彻底忘掉，得删轻量层那一侧——用 `qq_memory_remove`（`memberImpression` 用 `target`
 指定），或者 `adopt-legacy.mjs --drop` 的同类做法。
+
+### 2.6.5 rev 会「回落」：social-v2.json 被旧内存态覆盖（2026-11-04）
+
+**现象**：同一条成员印象的 `rev` 忽然从 3 退回 2（`traits` 也只剩一条、`interactionCount`
+回到 1），对账按新 rev 算键，撞上一个历史键名 → `doc-gone` / missing。
+
+**机理**：`social-v2.json` 是**整份覆盖写**。桥接反复重启的窗口里，如果旧进程没退干净、
+或第二个实例加载后立刻回写，就会拿旧内存态把磁盘上更新的条目整段抹掉。
+2026-11-04 的 404 印象就是这样掉的：10-31 明明写过 rev=3（`tnrblq-bfd9`），
+11-04 16:39 `qq_memory_append` 时却看到旧条目为空 → rev 从 1 起算变 2 →
+命中 10-29 留下的悬空键 → 写失败 → 对账从此报 missing。
+
+当时排除了所有主动删除路径（没有 `qq_memory_remove`/`memory-clear` 调用、改名与
+50 条淘汰都保留 rev、编辑只增不减），日志已轮转，所以只能定位到「状态文件被覆盖」。
+
+**已修（2026-11-04）**：
+
+- 新增 `state/social-v2.snapshot.json`：只存 `memberImpressions`，每次保存时与旧快照
+  取**并集**（rev 取大），加载时与主文件合并——主文件被覆盖也能补回来；
+- 删除路径（`qq_memory_remove` / `memory-clear` / 改名 / 超过 50 条淘汰）先登记
+  `impressionDeletions`，快照合并时跳过，避免「删了又复活」；
+- 补回时日志会打 `[social-v2] 从印象快照补回 N 条`，看到它就说明主文件被覆盖过。
+
+**验证方式**（做过一次，可复现）：停桥接 → 从 `social-v2.json` 删掉某个 target →
+启动 → 日志出现补回一条，条目带着原 rev/traits 回来。
+
+快照只覆盖印象，`activeTopics`/`pendingThoughts` 有退役与过期语义，不做这种保护。
+
 
 
 ## 3. 令牌
