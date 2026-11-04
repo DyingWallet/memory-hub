@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { checkDrawPolicy, sceneOf, quotaTierOf } from '../src/draw/policy.js';
+import { checkDrawPolicy, sceneOf, quotaTierOf, QUOTA_TABLE } from '../src/draw/policy.js';
 import { createQuotaStore } from '../src/draw/quota.js';
 import { createSerialQueue } from '../src/draw/queue.js';
 import { isPathInside, createSendImageHandler } from '../src/draw/send-image.js';
@@ -56,17 +56,29 @@ t('配额档位', () => {
 });
 
 console.log('quota');
+t('三档额度一致（2026-11-04：所有人同 owner 限额）', () => {
+  const owner = QUOTA_TABLE.owner;
+  for (const tier of ['owner', 'normal', 'generic_nsfw']) {
+    assert.deepEqual(
+      { ...QUOTA_TABLE[tier] },
+      { perUserDaily: owner.perUserDaily, cooldownMs: owner.cooldownMs, perGroupDaily: owner.perGroupDaily },
+      `${tier} 应与 owner 档一致`,
+    );
+  }
+});
 t('每人每日上限 + 冷却', () => {
   const dir = mkdtempSync(join(tmpdir(), 'drawq-'));
   let clock = 1_000_000;
   const q = createQuotaStore(dir, { now: () => clock });
-  // 普通档：15 张/日、10 分钟冷却
-  for (let i = 0; i < 15; i += 1) {
-    assert.equal(q.check({ key: 'group:1', userId: 'u1', tier: 'normal' }).ok, true, `第 ${i + 1} 张应放行`);
+  const tier = 'normal';
+  const { perUserDaily, cooldownMs } = QUOTA_TABLE[tier];
+  assert.ok(Number.isFinite(perUserDaily), '该档应有每日上限');
+  for (let i = 0; i < perUserDaily; i += 1) {
+    assert.equal(q.check({ key: 'group:1', userId: 'u1', tier }).ok, true, `第 ${i + 1} 张应放行`);
     q.consume({ key: 'group:1', userId: 'u1' });
-    clock += 11 * 60_000;
+    clock += cooldownMs + 1000;
   }
-  const r = q.check({ key: 'group:1', userId: 'u1', tier: 'normal' });
+  const r = q.check({ key: 'group:1', userId: 'u1', tier });
   assert.equal(r.ok, false);
   assert.equal(r.code, 'quota_user');
 });
@@ -80,28 +92,39 @@ t('冷却拦截', () => {
   assert.equal(r.code, 'cooldown');
   assert.ok(r.waitMs > 0);
 });
-t('any:nsfw 档更紧（3 张 / 30 分钟）', () => {
+t('any:nsfw 档同样按额度表算', () => {
   const dir = mkdtempSync(join(tmpdir(), 'drawq-'));
   let clock = 1_000_000;
   const q = createQuotaStore(dir, { now: () => clock });
-  for (let i = 0; i < 3; i += 1) {
+  const tier = 'generic_nsfw';
+  const { perUserDaily, cooldownMs } = QUOTA_TABLE[tier];
+  assert.ok(Number.isFinite(perUserDaily), '该档应有每日上限');
+  for (let i = 0; i < perUserDaily; i += 1) {
     q.consume({ key: 'group:1', userId: 'u3' });
-    clock += 31 * 60_000;
+    clock += cooldownMs + 1000;
   }
-  const r = q.check({ key: 'group:1', userId: 'u3', tier: 'generic_nsfw' });
+  const r = q.check({ key: 'group:1', userId: 'u3', tier });
   assert.equal(r.code, 'quota_user');
-  assert.equal(r.limit, 3);
+  assert.equal(r.limit, perUserDaily);
 });
-t('每群每日上限', () => {
+t('每群每日上限（Infinity = 不限）', () => {
   const dir = mkdtempSync(join(tmpdir(), 'drawq-'));
   let clock = 1_000_000;
   const q = createQuotaStore(dir, { now: () => clock });
-  for (let i = 0; i < 60; i += 1) {
+  const { perGroupDaily } = QUOTA_TABLE.normal;
+  if (!Number.isFinite(perGroupDaily)) {
+    for (let i = 0; i < 200; i += 1) {
+      q.consume({ key: 'group:7', userId: `u${i}` });
+      clock += 1;
+    }
+    assert.equal(q.check({ key: 'group:7', userId: 'newbie', tier: 'normal' }).ok, true);
+    return;
+  }
+  for (let i = 0; i < perGroupDaily; i += 1) {
     q.consume({ key: 'group:7', userId: `u${i}` });
     clock += 1;
   }
-  const r = q.check({ key: 'group:7', userId: 'newbie', tier: 'normal' });
-  assert.equal(r.code, 'quota_group');
+  assert.equal(q.check({ key: 'group:7', userId: 'newbie', tier: 'normal' }).code, 'quota_group');
 });
 
 console.log('queue');
