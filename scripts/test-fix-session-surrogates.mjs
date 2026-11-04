@@ -139,6 +139,29 @@ const bkFiles = fs.existsSync(bkDir) ? fs.readdirSync(bkDir, { recursive: true }
 check(bkFiles.some((f) => f.includes('bad.v4.jsonl.zstd')), 'backup: created for bad');
 check(!fs.readdirSync(dir).some((f) => f.includes('.bak-')), 'backup: no .bak beside sessions');
 
+// --- case 6: 单帧文件必须被重新分帧（2026-11-04 事故回归）------------------
+// DSH 要求会话日志每行一帧、第一帧恰好是一行 header；整份压成一帧会被判 corrupt。
+const multiText =
+  [JSON.stringify({ type: 'session', id: 'multi' }), JSON.stringify({ data: { text: 'a' } }), JSON.stringify({ type: 'turn/end' })].join('\n') + '\n';
+fs.writeFileSync(path.join(dir, 'single.v4.jsonl.zstd'), zlib.zstdCompressSync(Buffer.from(multiText, 'utf8')));
+const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
+const framesOf = (buf) => {
+  let n = 0;
+  let i = 0;
+  while ((i = buf.indexOf(ZSTD_MAGIC, i)) !== -1) {
+    n++;
+    i += 4;
+  }
+  return n;
+};
+const singleBefore = fs.readFileSync(path.join(dir, 'single.v4.jsonl.zstd'));
+check(framesOf(singleBefore) === 1, 'single-frame: starts as one frame', String(framesOf(singleBefore)));
+r = run([path.join(dir, 'single.v4.jsonl.zstd'), '--apply', '--backup-dir', path.join(dir, 'bk')]);
+const singleAfter = fs.readFileSync(path.join(dir, 'single.v4.jsonl.zstd'));
+check(r.status === 0, 'single-frame: exit 0', String(r.status));
+check(framesOf(singleAfter) > 1, 'single-frame: split into per-line frames', String(framesOf(singleAfter)));
+check(zlib.zstdDecompressSync(singleAfter).toString('utf8') === multiText, 'single-frame: content preserved');
+
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURES`);
 process.exit(failures === 0 ? 0 : 1);

@@ -563,9 +563,10 @@ powershell -ExecutionPolicy Bypass -File scripts\fix-qq-400-recovery.ps1
 - 失败时不会偷偷启动任何东西：打印失败原因 + 当前状态（桥接停没停、DSH 停没停、fixer 退出码），退非 0。
 - 备份落在 `memory-hub\backups\sessions\<时间戳>\<会话目录>\`，**不留在会话目录**（避免 DSH 扫描时撞上 `session*.jsonl*`）。
 - 修复前会等会话文件 mtime/size 稳定（默认最多 20s），避免强杀时还有缓冲写在路上。
-- 退出码：0 成功、1 失败（见输出）、2 结构校验失败（没写任何文件）、3 node 没有 zstd。
+- 退出码：0 成功、1 失败（见输出）、2 结构校验失败（没写任何文件）、4 有文件写入失败（被占用/权限）。
 - **已被桥接退役的会话修好也不会回到旧上下文**：桥接连续几轮空响应会自动退役映射，之后走的是新会话。修文件的价值是拆掉这颗雷，不是找回上下文。
-- 回归测试：`node scripts/test-fix-session-surrogates.mjs`（干净文件不动 / 孤立代理被替换 / 末尾半行需 `-TrimTail` / 中间行损坏必须拒绝 / 备份位置）。
+- 回归测试：`node scripts/test-fix-session-surrogates.mjs`（干净文件不动 / 孤立代理被替换 / 末尾半行需 `-TrimTail` / 中间行损坏必须拒绝 / 备份位置 / 单帧文件重分帧）。
+- **会话文件是「每行一帧」的 zstd 追加日志**，第一帧必须**恰好**是一行 header。整份压成一帧会被 DSH 判 `corrupt Zstandard session log: first frame is not exactly one header line`，事件流反复重连失败（2026-11-04 修复脚本第一版就踩了这个）。现版按行分帧写回，并用 zstd 魔数（`28 B5 2F FD`）识别单帧文件自动重分帧；写前解压回读校验内容一致。
 
 **根因已修在写侧**（不修的话还会再犯）：
 

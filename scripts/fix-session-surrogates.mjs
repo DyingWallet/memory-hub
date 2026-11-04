@@ -47,6 +47,9 @@ const argv = process.argv.slice(2);
 const apply = argv.includes('--apply');
 const trimTail = argv.includes('--trim-tail');
 const quiet = argv.includes('--quiet');
+// 重新分帧：内容不变，只把 zstd 帧结构改回 DSH 期望的「每行一帧」。
+// 用于修 2026-11-04 那次事故——旧版 fixer 把整份内容压成了一帧。
+const reframe = argv.includes('--reframe');
 const backupDirArg = (() => {
   const i = argv.indexOf('--backup-dir');
   return i >= 0 && argv[i + 1] ? argv[i + 1] : '';
@@ -69,6 +72,46 @@ const log = (...args) => {
 const WRITE_ATTEMPTS = 10;
 const WRITE_RETRY_MS = 800;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * 把会话文本编码成 DSH 期望的 zstd 格式：**每行一帧**的追加日志。
+ *
+ * DSH 校验第一帧必须恰好是一行 header（`{"type":"session",...}`），所以
+ * 整份压成一帧会被判 corrupt：`first frame is not exactly one header line`
+ * （2026-11-04 实测，四个会话因此打不开）。
+ */
+function encodeSession(text, isZstd) {
+  if (!isZstd) return Buffer.from(text, 'utf8');
+  const lines = text.split('\n');
+  if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+  const frames = lines.map((line) => zlib.zstdCompressSync(Buffer.from(`${line}\n`, 'utf8')));
+  return Buffer.concat(frames);
+}
+
+/** 分帧后必须能解出同样的文本（忽略末尾换行差异），否则拒绝写入。 */
+function frameRoundTrips(buf, text, isZstd) {
+  if (!isZstd) return true;
+  try {
+    const back = zlib.zstdDecompressSync(buf).toString('utf8');
+    const norm = (s) => s.replace(/\r\n/gu, '\n').replace(/\n+$/u, '');
+    return norm(back) === norm(text);
+  } catch {
+    return false;
+  }
+}
+
+// zstd 帧魔数（28 B5 2F FD）。DSH 的会话日志每行一帧，所以多帧文件里这个
+// 序列会出现很多次；整份压成一帧的文件只出现 1 次（2026-11-04 事故就长这样）。
+const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
+function countFrames(buf) {
+  let n = 0;
+  let i = 0;
+  while ((i = buf.indexOf(ZSTD_MAGIC, i)) !== -1) {
+    n++;
+    i += 4;
+  }
+  return n;
+}
 
 /** JSON 文本里位于 index 之前的连续反斜杠数量：用于区分真正的转义和字面量 `\\u`。 */
 function backslashRunBefore(text, index) {
@@ -177,6 +220,9 @@ let writeFailed = 0;
 for (const file of files) {
   const raw = fs.readFileSync(file);
   const isZstd = file.endsWith('.zstd');
+  const frameCount = isZstd ? countFrames(raw) : 0;
+  // --reframe 只处理被压成单帧的文件；正常的分帧文件原样跳过。
+  if (reframe && isZstd && frameCount > 1) continue;
   let text;
   try {
     text = isZstd ? zlib.zstdDecompressSync(raw).toString('utf8') : raw.toString('utf8');
@@ -224,7 +270,11 @@ for (const file of files) {
   }
 
   const { text: fixed, fixed: count } = fixText(working);
-  if (count === 0 && !tailBroken) continue;
+  // 单帧但没有坏字符的文件在 DSH 眼里同样是坏的（first frame is not exactly one
+  // header line），所以「需要重新分帧」本身也算一项要修的东西。
+  const nonEmptyTotal = lines.filter((line) => line.trim()).length;
+  const needsReframe = isZstd && frameCount <= 1 && nonEmptyTotal > 1;
+  if (count === 0 && !tailBroken && !needsReframe) continue;
 
   touched++;
   const sessionDir = path.basename(path.dirname(file));
@@ -241,6 +291,7 @@ for (const file of files) {
     log(`       上下文: ${JSON.stringify(lineText.slice(Math.max(0, col - 70), col + 20))}`);
   }
   if (tailBroken) log(`[${apply ? 'fix' : 'dry'}] ${sessionDir}: 末尾半行将被丢弃（--trim-tail）`);
+  if (needsReframe && count === 0) log(`[${apply ? 'fix' : 'dry'}] ${sessionDir}: 重新分帧（${frameCount} 帧 → 每行一帧）`);
 
   // 结构校验：修复后每行仍是合法 JSON；非空行数只允许因为丢弃末尾半行少 1
   const fixedLines = fixed.split('\n');
@@ -278,9 +329,12 @@ for (const file of files) {
     continue;
   }
 
-  const outBuf = isZstd
-    ? zlib.zstdCompressSync(Buffer.from(fixed, 'utf8'))
-    : Buffer.from(fixed, 'utf8');
+  const outBuf = encodeSession(fixed, isZstd);
+  if (!frameRoundTrips(outBuf, fixed, isZstd)) {
+    console.log(`[abort] ${sessionDir}: 分帧后解压内容与修复结果不一致，拒绝写入`);
+    refused++;
+    continue;
+  }
 
   // 写回要重试：DSH 强杀后句柄释放有延迟，杀软也可能短暂占用。
   // 每次先以 r+ 探测（只打开不写），拿到句柄才覆盖。
