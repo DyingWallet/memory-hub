@@ -49,9 +49,10 @@ export function checkDrawPolicy({ scene, character, nsfw }) {
  * isOwner 优先于 scene：主人在群里要图时 scene 是 group，会掉进 generic_nsfw 的
  * 额度里被卡住。他要的是「我的限制」——所以按身份给 owner 档。
  *
- * 2026-11-04：三档统一成 owner 档（100 张/日 + 30 秒冷却、群额度不限）。
- * 此前 normal 是 15 张/10 分钟、generic_nsfw 是 3 张/30 分钟。保留档位结构，
- * 以后要分档只改表即可；要单独放开某一档也可以走 config.draw.quotaOverride。
+ * 2026-11-04：三档统一成 owner 档（100 张/日 + 冷却、群额度不限）。此前 normal
+ * 是 15 张/10 分钟、generic_nsfw 是 3 张/30 分钟。同日晚些时候冷却从 30 秒调到
+ * 1 分钟。保留档位结构，以后要分档只改表即可；要单独放开某一档也可以走
+ * config.draw.quotaOverride。
  */
 export function quotaTierOf({ scene, nsfw, isOwner = false }) {
   if (isOwner || scene === SCENES.PRIVATE_OWNER) return 'owner';
@@ -62,7 +63,7 @@ export function quotaTierOf({ scene, nsfw, isOwner = false }) {
 /** 所有档位共用的额度（原 owner 档）。 */
 const SHARED_TIER = Object.freeze({
   perUserDaily: 100,
-  cooldownMs: 30_000,
+  cooldownMs: 60_000,
   perGroupDaily: Infinity,
 });
 
