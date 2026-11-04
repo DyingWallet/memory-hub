@@ -814,6 +814,8 @@ if (cfg.draw?.enabled !== false) {
       '**汐的 NSFW 预设（apron / lingerie）只有主人私聊能出**。群聊或他人私聊调用会被服务端拒绝，' +
       '返回 code=refuse_xixi_nsfw、tone=shy_angry_tsun —— 这时候**用汐的语气回怼**（害羞+生气+嫌弃），' +
       '不解释、不道歉、不要重试，图不会被生成。\n\n' +
+      '**群里/他人私聊要 NSFW 图时，画路人角色**：用 any:nsfw、any:scene:nsfw 或 custom:any:nsfw，' +
+      '被锁的只有「画汐自己 NSFW」这一格，不要因为这一条把整类请求都推掉；照样不掺亲密感、不往「我和你」上引。\n\n' +
       '不传 preset 时只返回可用预设清单，不出图。',
     {
       key: z.string().describe('会话 key，格式 group:群号 或 private:QQ号'),
