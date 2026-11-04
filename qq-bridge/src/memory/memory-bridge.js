@@ -26,6 +26,9 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { idemKey, mirrorKey, forgetKeys } from './idem.js';
 import { createMirrorJournal } from './mirror-journal.js';
+// 截断一律走 truncateText：按码元 slice 会把 emoji 的代理对切一半，
+// 孤立代理项进提示词后 DeepSeek Messages API 整份 400（见 md-to-plain.js 的注释）。
+import { toWellFormed, truncateText } from '../md-to-plain.js';
 
 const RECALL_CACHE_MS = 5000;
 /** 【最近记得的事】的缓存：比召回长，因为它按时间兜底、不随 query 变。 */
@@ -247,7 +250,7 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
           .map((item) => String(item?.title || item?.text || '').replace(/\s+/g, ' ').trim())
           .filter(Boolean)
           .slice(0, 8)
-          .map((text) => `- ${text.slice(0, 80)}`);
+          .map((text) => `- ${truncateText(text, 80)}`);
         const block = lines.length > 0 ? `【最近记得的事】\n${lines.join('\n')}` : '';
         recentCache.set(cacheKey, { text: block, at: Date.now() });
         if (recentCache.size > 50) recentCache.clear();
@@ -270,7 +273,7 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
           ...(message.id ? { id: String(message.id) } : {}),
           role: message.role === 'assistant' ? 'assistant' : 'user',
           ...(message.author ? { author: String(message.author) } : {}),
-          text: message.text,
+          text: toWellFormed(message.text),
           ...(message.ts ? { ts: String(message.ts) } : {}),
         }));
       if (usable.length === 0) return false;
@@ -290,7 +293,9 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
     /** Fire-and-forget mirror into facts/. Never awaited on the reply path. */
     mirrorWrite(key, category, content, extra = {}) {
       if (!enabled || memoryConfig.writeMirror === false) return;
-      const text = String(content ?? '').trim();
+      // 写入/遗忘两侧都要过 toWellFormed：它同时参与 idempotency key 的计算，
+      // 处理不一致会让「忘掉这条」匹配不上原来那条。
+      const text = toWellFormed(String(content ?? '')).trim();
       if (text.length === 0) return;
       const scene = sceneOf(key, cfg?.ownerQQ);
       const entry = normalizeEntry(extra, category);
@@ -328,7 +333,9 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
     /** QQ 侧删除一条记忆时，同步让 memd 忘掉镜像事实（tombstone）。 */
     mirrorForget(key, category, content, extra = {}) {
       if (!enabled || memoryConfig.writeMirror === false) return;
-      const text = String(content ?? '').trim();
+      // 写入/遗忘两侧都要过 toWellFormed：它同时参与 idempotency key 的计算，
+      // 处理不一致会让「忘掉这条」匹配不上原来那条。
+      const text = toWellFormed(String(content ?? '')).trim();
       if (text.length === 0) return;
       const scene = sceneOf(key, cfg?.ownerQQ);
       const entry = normalizeEntry(extra, category);

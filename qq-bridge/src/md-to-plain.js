@@ -95,6 +95,25 @@ export function truncateText(value, max) {
 }
 
 /**
+ * 把文本里的孤立代理项（lone surrogate）统一换成 U+FFFD。
+ *
+ * 为什么必须兜底：`slice()` 类截断只要切在 emoji 的代理对中间，就会留下半个字符。
+ * DeepSeek Messages API 的 JSON 解析器对孤立代理项零容忍，整份请求直接 400
+ * （`Failed to parse the request body as JSON: ... lone leading surrogate in hex escape`），
+ * 而且返回体是纯文本、DSH 只能显示成 `DeepSeek Messages request failed (400)`；
+ * 更麻烦的是坏字符一旦写进 DSH 会话历史，那个会话此后每次请求都会 400，
+ * 且 400 不在重试白名单里 —— 不会自愈。
+ *
+ * 所以**投递到 DSH 之前**永远过一次这个函数，无论上游是谁拼出来的文本。
+ */
+export function toWellFormed(value) {
+  const s = String(value ?? '');
+  // Node 20+ 有原生实现；正则版给老的便携 node 兜底。
+  if (typeof s.toWellFormed === 'function') return s.toWellFormed();
+  return s.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '\uFFFD');
+}
+
+/**
  * {@link truncateText} 的尾部版本：保留**最后** `max` 个字符。
  *
  * 对应 `text.slice(-max)` —— 它同样按码元切，只是切点落在**低**代理上：

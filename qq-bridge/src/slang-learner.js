@@ -285,9 +285,9 @@ export function buildResearchPrompt(candidates) {
   const list = (candidates || [])
     .map((e, i) => {
       const evidence = Array.isArray(e.evidence) && e.evidence.length
-        ? e.evidence.slice(-2).map((x) => `（群友语境：${escapeLearnerText(String(x.text || '').slice(0, 80))}）`).join('')
+        ? e.evidence.slice(-2).map((x) => `（群友语境：${escapeLearnerText(truncateText(String(x.text || ''), 80))}）`).join('')
         : '';
-      return `${i + 1}. ${escapeLearnerText(String(e.content || '').slice(0, 50))}${evidence}`;
+      return `${i + 1}. ${escapeLearnerText(truncateText(String(e.content || ''), 50))}${evidence}`;
     })
     .join('\n');
   return `你是群聊黑话研究员。请针对以下候选网络用语/黑话做**深度联网考究**：先结合给出的群友语境判断可能含义，再使用 web_search 搜索确认，并对最相关的 1~2 个结果用 web_fetch 抓取正文阅读（只读搜索/抓取，不要执行任何本地操作）。不要只依赖搜索摘要。

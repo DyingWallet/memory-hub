@@ -17,7 +17,7 @@ import { GEN1_ROLE_LINE_RE, parseRoleSections, roleCharStats, roleSectionReport,
 import { fileURLToPath } from 'node:url';
 import { SnowLumaWebSocketClient, text } from '@snowluma/sdk';
 import { NodeApiClient, unwrap, createTurnCollector, discoverDshLaunchToken, resolveDshHome } from './dsh-client.js';
-import { mdToPlain, splitForQQ, truncateText, truncateTextTail } from './md-to-plain.js';
+import { mdToPlain, splitForQQ, toWellFormed, truncateText, truncateTextTail } from './md-to-plain.js';
 import { SENSITIVE_RE } from './sensitive.js';
 import { looksLikeUnfinished } from './v2-wait.js';
 import { compactModelMessage } from './qq-model-view.js';
@@ -10596,7 +10596,10 @@ async function main() {
     if (archiveRebuiltKeys.delete(key)) {
       promptText += '\n\n【会话刚重建】上一个 DSH 会话已被归档，这条消息由一个全新会话处理。请先对照 readThroughSeq 和最近消息：已经回复过的不要再回一次，没回过的补上。';
     }
-    const modelText = withSlangContext(withHandover(key, promptText));
+    // 投递前最后一次「良构化」：promptText 由记忆块、黑话表、快照、转述等十几处拼成，
+    // 任何一处切坏 emoji 都会留下孤立代理项，DeepSeek Messages API 会以 400 拒绝整份请求，
+    // 且坏字符进入 DSH 会话历史后该会话永久失败（2026-11-04 事故）。这里兜住所有上游。
+    const modelText = toWellFormed(withSlangContext(withHandover(key, promptText)));
     let content = [{ type: 'text', text: modelText }];
     if (Array.isArray(opts.media) && opts.media.length > 0) {
       const imageParts = await resolveMediaList(opts.media);
@@ -11766,11 +11769,14 @@ async function main() {
     const label = key.startsWith('group:') ? '群摘要' : '聊天摘要';
     const topics = (state.activeTopics || [])
       .slice(-3)
-      .map((topic) => String(topic?.text || '').replace(/\s+/g, ' ').slice(0, 40))
+      .map((topic) => truncateText(String(topic?.text || '').replace(/\s+/g, ' '), 40))
       .filter(Boolean);
     const lines = picked.map((message) => {
-      const who = String(message.sender || '').slice(0, 20);
-      const text = String(message.plain || message.text || '').replace(/\s+/g, ' ').slice(0, 60);
+      // 这里必须用 truncateText 而不是 slice：摘要会写进 memd 再被【最近记得的事】
+      // 读回提示词，切在 emoji 代理对中间会留下孤立代理项，DeepSeek 直接 400，
+      // 而且坏字符进会话历史后会永久 400（2026-11-04 事故）。
+      const who = truncateText(String(message.sender || ''), 20);
+      const text = truncateText(String(message.plain || message.text || '').replace(/\s+/g, ' '), 60);
       return who ? `${who}: ${text}` : text;
     });
     const text = [
@@ -12838,7 +12844,10 @@ async function main() {
       }
       throw error;
     }
-    const modelText = withSlangContext(withHandover(key, promptText));
+    // 投递前最后一次「良构化」：promptText 由记忆块、黑话表、快照、转述等十几处拼成，
+    // 任何一处切坏 emoji 都会留下孤立代理项，DeepSeek Messages API 会以 400 拒绝整份请求，
+    // 且坏字符进入 DSH 会话历史后该会话永久失败（2026-11-04 事故）。这里兜住所有上游。
+    const modelText = toWellFormed(withSlangContext(withHandover(key, promptText)));
     let content = [{ type: 'text', text: modelText }];
     if (Array.isArray(mediaList) && mediaList.length > 0) {
       const imageParts = await resolveMediaList(mediaList);
