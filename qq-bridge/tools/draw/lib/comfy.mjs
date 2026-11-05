@@ -73,11 +73,39 @@ export function buildWorkflow({
   prefix,
   lora = null,
   loraStrength = 1,
+  // Anima 系（Qwen 文本编码器）必须走 UNETLoader + CLIPLoader + VAELoader 三件套，
+  // 不能用 CheckpointLoaderSimple 加载。
+  arch = 'sdxl',
+  unet = null,
+  textEncoder = null,
+  vae = null,
 }) {
-  const wf = {
-    5: { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: model } },
-    6: { class_type: 'CLIPTextEncode', inputs: { text: positive, clip: ['5', 1] } },
-    7: { class_type: 'CLIPTextEncode', inputs: { text: negative, clip: ['5', 1] } },
+  const isAnima = arch === 'anima';
+  const wf = {};
+  let modelSrc;
+  let clipSrc;
+  let vaeSrc;
+
+  if (isAnima) {
+    if (!unet || !textEncoder || !vae) {
+      throw new Error('Anima 需要 unet / textEncoder / vae 三个字段');
+    }
+    wf[5] = { class_type: 'UNETLoader', inputs: { unet_name: unet, weight_dtype: 'default' } };
+    wf[20] = { class_type: 'CLIPLoader', inputs: { clip_name: textEncoder, type: 'stable_diffusion' } };
+    wf[21] = { class_type: 'VAELoader', inputs: { vae_name: vae } };
+    modelSrc = ['5', 0];
+    clipSrc = ['20', 0];
+    vaeSrc = ['21', 0];
+  } else {
+    wf[5] = { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: model } };
+    modelSrc = ['5', 0];
+    clipSrc = ['5', 1];
+    vaeSrc = ['5', 2];
+  }
+
+  Object.assign(wf, {
+    6: { class_type: 'CLIPTextEncode', inputs: { text: positive, clip: clipSrc } },
+    7: { class_type: 'CLIPTextEncode', inputs: { text: negative, clip: clipSrc } },
     10: { class_type: 'EmptyLatentImage', inputs: { width, height, batch_size: 1 } },
     8: {
       class_type: 'KSampler',
@@ -88,19 +116,20 @@ export function buildWorkflow({
         sampler_name: sampler,
         scheduler,
         denoise: 1,
-        model: ['5', 0],
+        model: modelSrc,
         positive: ['6', 0],
         negative: ['7', 0],
         latent_image: ['10', 0],
       },
     },
-    9: { class_type: 'VAEDecode', inputs: { samples: ['8', 0], vae: ['5', 2] } },
+    9: { class_type: 'VAEDecode', inputs: { samples: ['8', 0], vae: vaeSrc } },
     11: { class_type: 'SaveImage', inputs: { images: ['9', 0], filename_prefix: prefix } },
-  };
+  });
+
   if (lora) {
     wf[30] = {
       class_type: 'LoraLoader',
-      inputs: { model: ['5', 0], clip: ['5', 1], lora_name: lora, strength_model: loraStrength, strength_clip: loraStrength },
+      inputs: { model: modelSrc, clip: clipSrc, lora_name: lora, strength_model: loraStrength, strength_clip: loraStrength },
     };
     wf[6].inputs.clip = ['30', 1];
     wf[7].inputs.clip = ['30', 1];
@@ -164,6 +193,10 @@ export async function generateToFile({
   sampler = 'euler_ancestral',
   scheduler = 'normal',
   timeoutMs = 300_000,
+  arch = 'sdxl',
+  unet = null,
+  textEncoder = null,
+  vae = null,
 }) {
   const [width, height] = SIZES[size] ?? SIZES['2:3'];
   const useSeed = seed ?? Math.floor(Math.random() * 2 ** 31);
@@ -183,6 +216,10 @@ export async function generateToFile({
     prefix,
     lora,
     loraStrength,
+    arch,
+    unet,
+    textEncoder,
+    vae,
   });
 
   const queued = await api('/prompt', {
@@ -203,12 +240,12 @@ export async function generateToFile({
   writeFileSync(
     destPath.replace(/\.png$/i, '.json'),
     JSON.stringify(
-      { prompt, negative, model, lora, loraStrength: lora ? loraStrength : null, size, steps, cfg, seed: useSeed, sampler, scheduler },
+      { prompt, negative, model, arch, unet, textEncoder, vae, lora, loraStrength: lora ? loraStrength : null, size, steps, cfg, seed: useSeed, sampler, scheduler },
       null,
       2,
     ),
     'utf8',
   );
 
-  return { file: destPath, seed: useSeed, params: { model, lora, loraStrength, size, steps, cfg } };
+  return { file: destPath, seed: useSeed, params: { model, arch, lora, loraStrength, size, steps, cfg } };
 }

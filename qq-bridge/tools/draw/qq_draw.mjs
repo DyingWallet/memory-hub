@@ -134,11 +134,18 @@ async function main() {
   const checkpoints = await listCheckpoints();
   // 底模解析顺序：预设自带 model > 顶层 model > ComfyUI 第一个可用。
   // 有了它，「场景/成人向用 WAI、白底立绘用 Illustrious」可以按预设分别指定。
-  const model = p.model ?? presets.model ?? checkpoints[0];
-  if (!Array.isArray(checkpoints) || !checkpoints.includes(model)) {
+  // Anima 系不走 checkpoint，用 unet + textEncoder + vae 三件套。
+  const arch = p.arch ?? presets.arch ?? 'sdxl';
+  const unet = p.unet ?? presets.unet ?? null;
+  const textEncoder = p.textEncoder ?? presets.textEncoder ?? null;
+  const vae = p.vae ?? presets.vae ?? null;
+  const model = arch === 'anima' ? unet : (p.model ?? presets.model ?? checkpoints[0]);
+  if (arch === 'anima') {
+    if (!unet || !textEncoder || !vae) fail('bad_model', 'Anima 预设缺少 unet / textEncoder / vae');
+  } else if (!Array.isArray(checkpoints) || !checkpoints.includes(model)) {
     fail('bad_model', `ComfyUI 里没有基座 ${model}；可用：${(checkpoints || []).join(', ')}`);
   }
-  // 只加载预设需要的 LoRA；generic 不挂 v15。
+  // 只加载预设需要的 LoRA；generic 不挂角色 LoRA。
   const lora = p.lora || null;
   if (lora && !checkpoints.length) fail('bad_model', 'ComfyUI 不可用');
 
@@ -156,6 +163,10 @@ async function main() {
       prompt,
       negative,
       model,
+      arch,
+      unet,
+      textEncoder,
+      vae,
       lora,
       loraStrength: p.loraStrength ?? 1,
       size,
