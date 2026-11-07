@@ -22,6 +22,8 @@ export const ROOT_SCOPE = '*';
 export const SHARED_SCOPE = 'shared';
 export const NORMAL_LABEL = 'normal';
 export const PERSONAL_LABEL = 'personal';
+/** 场景私密级：强制钉在来源场景，不进 main / qq:owner（2026-11-07 新增）。 */
+export const PRIVATE_LABEL = 'private';
 export const SENSITIVE_LABEL = 'sensitive';
 export const SECRET_LABEL = 'secret';
 
@@ -96,6 +98,8 @@ export function isSceneAllowed(token: TokenView, scene: string): boolean {
 
 export function isSensitive(privacy: Privacy): boolean {
   if (privacy === SENSITIVE_LABEL) return true;
+  // `private` 是场景私密级，不是主人独占级——它自己管自己的可见范围（钉在来源场景）。
+  if (privacy === PRIVATE_LABEL) return false;
   // Unknown / legacy labels are treated as sensitive (fail closed).
   return privacy !== NORMAL_LABEL && privacy !== PERSONAL_LABEL && privacy !== SECRET_LABEL;
 }
@@ -106,7 +110,8 @@ export function isRestricted(privacy: Privacy, _policy: PrivacyPolicy = DEFAULT_
 }
 
 export function allowedPrivacy(scopes: readonly string[], policy: PrivacyPolicy = DEFAULT_POLICY): string[] {
-  const allowed = [NORMAL_LABEL, PERSONAL_LABEL];
+  // `private` 对所有令牌开放：它的可见范围靠 audience 钉在来源场景，不需要额外 scope。
+  const allowed = [NORMAL_LABEL, PERSONAL_LABEL, PRIVATE_LABEL];
   if (hasCapability(scopes, policy)) allowed.push(SENSITIVE_LABEL);
   if (hasSecretRead(scopes)) allowed.push(SECRET_LABEL);
   return allowed;
@@ -204,6 +209,12 @@ export function audienceForWrite(
   const base = normalizeAudience(requestedAudience, kind, scene);
   // secret 只钉在 secretAudiences，不随请求来的 audience 扩散。
   if (privacy === SECRET_LABEL) return [...policy.secretAudiences];
+  // private 反过来：只允许留在来源场景。不管请求里写了什么，都不进 main / qq:owner。
+  // 目的是「不同人各有自己的私密内容」，而不是「统一送给主人」。
+  if (privacy === PRIVATE_LABEL) {
+    if (!scene || scene === 'main') return base;
+    return [scene];
+  }
   if (!isSensitive(privacy)) return base;
   const pinned = base.filter((scope) => policy.sensitiveAudiences.includes(scope));
   return Array.from(new Set(pinned.length > 0 ? pinned : policy.sensitiveAudiences));

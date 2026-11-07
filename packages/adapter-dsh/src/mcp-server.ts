@@ -267,10 +267,10 @@ export function createMemoryMcpServer(client: MemoryApi, options: McpServerOptio
         text: z.string().min(1).max(8000),
         tags: z.array(z.string().max(64)).max(24).optional(),
         privacy: z
-          .enum(['normal', 'personal', 'sensitive', 'secret', 'work', 'financial'])
+          .enum(['normal', 'personal', 'private', 'sensitive', 'secret', 'work', 'financial'])
           .optional()
           .describe(
-            '隐私级别：normal / personal / sensitive / secret（secret 需要 root 或 secret:write）；work、financial 是旧别名，按 sensitive 处理',
+            '隐私级别：normal / personal / private / sensitive / secret。private = 场景私密级，可见范围钉在来源场景（第三人私聊用这个，不要用 sensitive）；sensitive = 主人独占（钉 main/qq:owner，需要 sensitive:read）；work、financial 是旧别名，按 sensitive 处理',
           ),
         audience: z.array(z.string().max(120)).max(32).optional().describe('可见范围；省略按类型默认'),
         subject: z

@@ -73,7 +73,12 @@
 - 只产出「值得长期保留」的内容：承诺、偏好、决定、关于主人的事实、对他人的印象。
 - 不产出：提问、请求、寒暄、工具输出、日志、链接。
 - **audience 有硬边界**（2026-11-02 改）：来源是私聊（`qq:owner` / `qq:private:*`）里的具体对话内容——原话、承诺、亲密互动、身体与偏好细节——audience **绝不能**包含 `qq:group:*` 或 `shared`；涉及第三人具体言行的，audience **只**包含来源场景；真正能跨场景的只有「不含原话的事实性结论」，拿不准就只写来源场景。
-- **privacy 按内容判**：私聊里的关系、身体、偏好细节标 `personal` 或 `sensitive`，普通事实才用 `normal`。标错一级，等于把私密内容放进了别人的可见范围。
+- **privacy 分级（2026-11-07 改，它比 audience 更早决定可见范围）**：
+  - **主人自己**的私密内容 → `sensitive`（钉在 `main`/`qq:owner`，只有主人能读）
+  - **第三人私聊**的私密内容 → **`private`**（钉在来源场景，只有那个人和 root 读得到）
+  - 普通事实 → `normal` / `personal`，可见范围交给 audience
+  - **别把第三人的内容标成 `sensitive`**：`audienceForWrite` 会把 sensitive 的 audience 改写成 `sensitiveAudiences`（`['main','qq:owner']`），等于把第三人的私密事送进主会话。2026-11-05/06 就出过这事——黑天炎私聊里的改图要求被写成 `sensitive`，audience 被钉到 main。
+  - `private` 的实现：`policy.ts` 的 `PRIVATE_LABEL` + `audienceForWrite` 的 private 分支（`return [scene]`）+ `allowedPrivacy` 默认含它；`routes.ts` 的 `isKnownPrivacy` 接受它。不需要额外 scope。
 - 更新旧事实用 `supersedes`；确认过时的用 `forget`。
 - 每条写 `reason`，便于复查。
 - **工程决策、方案定稿已写进 `docs/` 或 `memories/40-decisions/` 的，不重复记正文**——只在记忆里留一条「某天定了什么」的索引（一句话 + 指向哪份文档），方便召回时知道去哪查。

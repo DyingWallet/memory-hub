@@ -1175,7 +1175,9 @@ function monthKeyOf(ms: number): string {
 }
 
 function isKnownPrivacy(label: string): boolean {
-  return label === 'normal' || label === 'personal' || label === 'sensitive' || label === 'secret';
+  // `private` 是 2026-11-07 新增的场景私密级：可见范围钉在来源场景，不需要敏感 scope。
+  return label === 'normal' || label === 'personal' || label === 'private'
+    || label === 'sensitive' || label === 'secret';
 }
 
 /**
