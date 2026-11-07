@@ -42,6 +42,8 @@ export interface MemoryItem {
   expires_at?: string;
   /** 召回分数（0–1）；主会话也拿得到，QQ 侧保持一致。 */
   score?: number;
+  /** 归属：owner / self / other（缺省 = owner）。 */
+  subject?: 'owner' | 'self' | 'other';
 }
 
 /** 与主会话一致的查询参数（`kinds` / `subject` 只做过滤，不扩权）。 */
@@ -55,7 +57,9 @@ export interface MirrorEntry {
   kind: 'qq-topic' | 'qq-impression';
   text: string;
   scene: string;
-  privacy?: 'normal' | 'personal';
+  privacy?: 'normal' | 'personal' | 'private';
+  /** 归属：他人私聊的镜像应标 `other`，避免 root 视角误当成主人自己的。 */
+  subject?: 'owner' | 'self' | 'other';
   tags?: string[];
   idempotencyKey?: string;
 }
@@ -325,6 +329,8 @@ export function createQQMemoryClient(options: QQMemoryOptions): QQMemoryClient {
           audience: [entry.scene],
           privacy: entry.privacy ?? (entry.kind === 'qq-impression' ? 'personal' : 'normal'),
           source: 'qq',
+          // 归属透传：他人私聊的镜像标 other，避免 root 视角把群友的事当成主人的。
+          ...(entry.subject ? { subject: entry.subject } : {}),
           ...(entry.tags ? { tags: entry.tags } : {}),
           ...(entry.idempotencyKey ? { idempotency_key: entry.idempotencyKey } : {}),
         });
@@ -394,6 +400,11 @@ function normalizeResults(raw: unknown): MemoryItem[] {  if (!Array.isArray(raw)
       ...(value.stage === 'short' || value.stage === 'long' ? { stage: value.stage } : {}),
       ...(typeof value.expires_at === 'string' ? { expires_at: value.expires_at } : {}),
       ...(typeof value.score === 'number' ? { score: Math.round(value.score * 1e4) / 1e4 } : {}),
+      // 归属要透传：root 令牌能读全部场景，模型没有「这是谁的」就会把
+      // 群友的课表/喜好当成主人自己的（2026-11-07 事故）。
+      ...(value.subject === 'owner' || value.subject === 'self' || value.subject === 'other'
+        ? { subject: value.subject }
+        : {}),
     });
   }
   return out;

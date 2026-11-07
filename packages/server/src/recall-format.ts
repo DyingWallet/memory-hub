@@ -63,7 +63,13 @@ export function renderMemoryBlock(
     const text = textOf(row);
     if (!text) continue;
     const marker = row.disclosure === 'owner_initiated' ? '（对方自己提起过的）' : '';
-    lines.push(`- ${marker}${clip(text, perLine)}`);
+    // 记忆归属：root 令牌能读全部场景，但模型没有"这是谁的"这个信息时，
+    // 会把群友的课表/喜好当成主人自己的（2026-11-07 事故）。
+    const who =
+      row.subject === 'other' ? '（关于别人的事，别当成主人自己的）'
+      : row.subject === 'self' ? '（你自己从前的判断）'
+      : '';
+    lines.push(`- ${marker}${who}${clip(text, perLine)}`);
   }
   return lines.join('\n').trim();
 }

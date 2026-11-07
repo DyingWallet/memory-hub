@@ -299,6 +299,10 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
       if (text.length === 0) return;
       const scene = sceneOf(key, cfg?.ownerQQ);
       const entry = normalizeEntry(extra, category);
+      // 归属：他人私聊里记的东西是「关于别人的」，别让 root 视角的主力会话
+      // 把它当成主人自己的日程/喜好（2026-11-07 事故）。
+      const ownerKey = `private:${String(cfg?.ownerQQ ?? '')}`;
+      const subject = String(key).startsWith('private:') && String(key) !== ownerKey ? 'other' : 'owner';
       void (async () => {
         try {
           const api = await getClient(scene);
@@ -315,6 +319,7 @@ export function createMemoryBridge({ cfg, log = console, root = process.cwd() })
             kind,
             text,
             scene,
+            subject,
             privacy: category === 'memberImpression' ? 'personal' : 'normal',
             tags: [category],
             idempotencyKey: mirrorKey(scene, category, entry, text),
