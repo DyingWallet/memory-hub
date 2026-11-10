@@ -2,153 +2,127 @@
   "_comment": "QQ 侧出图预设。character=xixi 才挂 v15；generic 走基座直出。nsfw=true 的预设只在主人私聊放行（汐），generic 的 nsfw 群聊可见。",
   "model": null,
   "defaults": {
-    "size": "2:3",
-    "steps": 28,
+    "size": "moss-hd",
+    "steps": 32,
     "cfg": 3.5,
-    "sampler": "er_sde",
-    "scheduler": "simple"
+    "sampler": "euler",
+    "scheduler": "sgm_uniform"
   },
   "negatives": {
-    "xi_sfw": "lowres, bad anatomy, bad hands, extra fingers, fused fingers, missing fingers, too many fingers, malformed hands, deformed hands, long fingers, claws, mutated hands, worst quality, low quality, jpeg artifacts, blurry, pink ears, cat ears, animal ears, pointy ears, elf ears, horns, human ears, flat color, oversaturated, thick outlines, text, watermark, signature, scenery, landscape, indoors, room, furniture, picture frame, plant, two tails, multiple tails, extra tails, split tail, double tail, forked tail, detached tail, tail on both sides, tail from hip, two flukes, floating tail, dorsal fin, fin on head, head fin, shark fin, triangular hair, fin ears on top of head, score_1, score_2, score_3, artist name, light blue hair, cyan hair, pale hair, pastel hair, fluffy, fur, furry, feathery, feathers, fuzzy, wool, hair-like ears, soft fluffy texture, plush, plain smooth ears, featureless ears, flat ears, no ear detail",
-    "xi_outfit": "maid outfit, apron, maid headdress, frills, snake tail, whip tail, thin pointed tail, two figures, multiple girls, extra legs, extra limbs, lowres, bad anatomy, worst quality, low quality, text, watermark, signature, two tails, multiple tails, extra tails, split tail, double tail, forked tail, detached tail, tail on both sides, tail from hip, two flukes, floating tail, extra fingers, fused fingers, missing fingers, too many fingers, malformed hands, deformed hands, long fingers, claws, mutated hands, dorsal fin, fin on head, head fin, shark fin, triangular hair, fin ears on top of head, score_1, score_2, score_3, artist name, light blue hair, cyan hair, pale hair, pastel hair, fluffy, fur, furry, feathery, feathers, fuzzy, wool, hair-like ears, soft fluffy texture, plush, plain smooth ears, featureless ears, flat ears, no ear detail",
-    "xi_nsfw": "dress, skirt, bra, panties, maid outfit, two figures, multiple girls, extra legs, extra limbs, censor bar, mosaic, censored, text, watermark, lowres, bad anatomy, worst quality, two tails, multiple tails, extra tails, split tail, double tail, forked tail, detached tail, tail on both sides, tail from hip, two flukes, floating tail, extra fingers, fused fingers, missing fingers, too many fingers, malformed hands, deformed hands, long fingers, claws, mutated hands, dorsal fin, fin on head, head fin, shark fin, triangular hair, fin ears on top of head, male, penis, 2girls, multiple girls, futanari, sex, score_1, score_2, score_3, artist name, light blue hair, cyan hair, pale hair, pastel hair, fluffy, fur, furry, feathery, feathers, fuzzy, wool, hair-like ears, soft fluffy texture, plush, plain smooth ears, featureless ears, flat ears, no ear detail",
-    "generic": "lowres, bad anatomy, bad hands, worst quality, low quality, jpeg artifacts, blurry, text, watermark, signature, extra legs, extra limbs, multiple views, mutilated, score_1, score_2, score_3, artist name, light blue hair, cyan hair, pale hair, pastel hair, fluffy, fur, furry, feathery, feathers, fuzzy, wool, hair-like ears, soft fluffy texture, plush, plain smooth ears, featureless ears, flat ears, no ear detail",
-    "generic_nsfw": "(worst quality, low quality:1.3), (bad anatomy:1.2), bad hands, extra fingers, fused fingers, extra limbs, extra legs, malformed limbs, deformed, disfigured, mutated, blurry, jpeg artifacts, 3d, realistic, photo, realistic photo, sketch, monochrome, child, loli, shota, aged down, text, watermark, signature, logo, censor bar, mosaic, censored, pixelated, bad face, ugly face, asymmetric eyes, oversaturated, color cast, magenta cast, flat shading, flat color, score_1, score_2, score_3, artist name, light blue hair, cyan hair, pale hair, pastel hair, fluffy, fur, furry, feathery, feathers, fuzzy, wool, hair-like ears, soft fluffy texture, plush, plain smooth ears, featureless ears, flat ears, no ear detail",
-    "xi_scene": "lowres, bad anatomy, bad hands, extra fingers, fused fingers, missing fingers, too many fingers, malformed hands, deformed hands, long fingers, claws, mutated hands, worst quality, low quality, jpeg artifacts, blurry, pink ears, cat ears, animal ears, pointy ears, elf ears, horns, human ears, flat color, oversaturated, thick outlines, text, watermark, signature, two tails, multiple tails, extra tails, split tail, double tail, forked tail, detached tail, tail on both sides, tail from hip, two flukes, floating tail, dorsal fin, fin on head, head fin, shark fin, triangular hair, fin ears on top of head, score_1, score_2, score_3, artist name, light blue hair, cyan hair, pale hair, pastel hair, fluffy, fur, furry, feathery, feathers, fuzzy, wool, hair-like ears, soft fluffy texture, plush, plain smooth ears, featureless ears, flat ears, no ear detail",
-    "xi_scene_nsfw": "dress, skirt, bra, panties, maid outfit, two figures, multiple girls, extra legs, extra limbs, censor bar, mosaic, censored, text, watermark, lowres, bad anatomy, worst quality, two tails, multiple tails, extra tails, split tail, double tail, forked tail, detached tail, tail on both sides, tail from hip, two flukes, floating tail, extra fingers, fused fingers, missing fingers, too many fingers, malformed hands, deformed hands, long fingers, claws, mutated hands, dorsal fin, fin on head, head fin, shark fin, triangular hair, fin ears on top of head, male, penis, 2girls, multiple girls, futanari, sex, score_1, score_2, score_3, artist name, light blue hair, cyan hair, pale hair, pastel hair, fluffy, fur, furry, feathery, feathers, fuzzy, wool, hair-like ears, soft fluffy texture, plush, plain smooth ears, featureless ears, flat ears, no ear detail",
-    "xi_scene_nothighs": "lowres, bad anatomy, bad hands, extra fingers, fused fingers, missing fingers, too many fingers, malformed hands, deformed hands, long fingers, claws, mutated hands, worst quality, low quality, jpeg artifacts, blurry, pink ears, cat ears, animal ears, pointy ears, elf ears, horns, human ears, flat color, oversaturated, thick outlines, text, watermark, signature, two tails, multiple tails, extra tails, split tail, double tail, forked tail, detached tail, tail on both sides, tail from hip, two flukes, floating tail, dorsal fin, fin on head, head fin, shark fin, triangular hair, fin ears on top of head, white thighhighs, score_1, score_2, score_3, artist name, light blue hair, cyan hair, pale hair, pastel hair, fluffy, fur, furry, feathery, feathers, fuzzy, wool, hair-like ears, soft fluffy texture, plush, plain smooth ears, featureless ears, flat ears, no ear detail"
+    "xi_sfw": "long ear fins, elongated fins, flowing fins, fins extending past shoulders, giant fins, slender fins, towel texture on skin, fabric texture on skin, cloth pattern on skin, lowres, bad anatomy, bad hands, extra fingers, fused fingers, missing fingers, too many fingers, malformed hands, deformed hands, long fingers, claws, mutated hands, worst quality, low quality, jpeg artifacts, blurry, flat color, oversaturated, thick outlines, text, watermark, signature, scenery, landscape, indoors, room, furniture, picture frame, plant, two tails, multiple tails, extra tails, split tail, double tail, forked tail, detached tail, tail on both sides, tail from hip, two flukes, floating tail, dorsal fin, fin on head, head fin, shark fin, triangular hair, fin ears on top of head, score_1, score_2, score_3, artist name, light blue hair, cyan hair, pale hair, pastel hair, plain smooth ears, featureless ears, flat ears, no ear detail, large tail, oversized tail, thick tail, wide fluke, huge fluke, tail covering legs, massive tail fin, dorsal fin, fin on tail, fins along tail, on tail, spiky tail, ridged tail, shark tail fins, fish fins on head, spiky ears, hard edges, sharp points, jagged edges, needle-like tips, spiky ears, long ears, elongated ears, fluffy ears, fuzzy ears, upright ears, triangular ears, cat ears on top of head, gradient ear, color bleed, long ears, pointy ears, fox ears, wolf ears, elf ears, pointed ears, ear tips pointing up, fish fins on head, fin ears, dorsal fin, side fins, shark fins, webbed, fuzzy ears, fluffy ears, animal ears on top of head, cat ears, rabbit ears, upright ears, head_fins, ear_fins, fin_ears, fish_ears, headfins, ear_fin, fin_ear, glossy skin, shiny skin, wet skin, plastic skin, translucent skin, two pairs of ears, four ears, double ears, multiple fin ears, more than two ear fins, extra fin ears, duplicated fin ears, twin fins on the same side, fins on top of head, fins on back of head, back fins, head fins, dorsal fins on head, grey ears, dull ears, solid dark ears",
+    "xi_outfit": "long ear fins, elongated fins, flowing fins, fins extending past shoulders, giant fins, slender fins, towel texture on skin, fabric texture on skin, cloth pattern on skin, maid outfit, apron, maid headdress, frills, snake tail, whip tail, thin pointed tail, two figures, multiple girls, extra legs, extra limbs, lowres, bad anatomy, worst quality, low quality, text, watermark, signature, two tails, multiple tails, extra tails, split tail, double tail, forked tail, detached tail, tail on both sides, tail from hip, two flukes, floating tail, extra fingers, fused fingers, missing fingers, too many fingers, malformed hands, deformed hands, long fingers, claws, mutated hands, dorsal fin, fin on head, head fin, shark fin, triangular hair, fin ears on top of head, score_1, score_2, score_3, artist name, light blue hair, cyan hair, pale hair, pastel hair, plain smooth ears, featureless ears, flat ears, no ear detail, large tail, oversized tail, thick tail, wide fluke, huge fluke, tail covering legs, massive tail fin, dorsal fin, fin on tail, fins along tail, on tail, spiky tail, ridged tail, shark tail fins, fish fins on head, spiky ears, hard edges, sharp points, jagged edges, needle-like tips, spiky ears, long ears, elongated ears, fluffy ears, fuzzy ears, upright ears, triangular ears, cat ears on top of head, gradient ear, color bleed, long ears, pointy ears, fox ears, wolf ears, elf ears, pointed ears, ear tips pointing up, fish fins on head, fin ears, dorsal fin, side fins, shark fins, webbed, fuzzy ears, fluffy ears, animal ears on top of head, cat ears, rabbit ears, upright ears, head_fins, ear_fins, fin_ears, fish_ears, headfins, ear_fin, fin_ear, glossy skin, shiny skin, wet skin, plastic skin, translucent skin, two pairs of ears, four ears, double ears, multiple fin ears, more than two ear fins, extra fin ears, duplicated fin ears, twin fins on the same side, fins on top of head, fins on back of head, back fins, head fins, dorsal fins on head, grey ears, dull ears, solid dark ears",
+    "xi_nsfw": "long ear fins, elongated fins, flowing fins, fins extending past shoulders, giant fins, slender fins, towel texture on skin, fabric texture on skin, cloth pattern on skin, dress, skirt, bra, panties, maid outfit, two figures, multiple girls, extra legs, extra limbs, censor bar, mosaic, censored, text, watermark, lowres, bad anatomy, worst quality, two tails, multiple tails, extra tails, split tail, double tail, forked tail, detached tail, tail on both sides, tail from hip, two flukes, floating tail, extra fingers, fused fingers, missing fingers, too many fingers, malformed hands, deformed hands, long fingers, claws, mutated hands, dorsal fin, fin on head, head fin, shark fin, triangular hair, fin ears on top of head, male, penis, 2girls, multiple girls, futanari, sex, score_1, score_2, score_3, artist name, light blue hair, cyan hair, pale hair, pastel hair, plain smooth ears, featureless ears, flat ears, no ear detail, large tail, oversized tail, thick tail, wide fluke, huge fluke, tail covering legs, massive tail fin, dorsal fin, fin on tail, fins along tail, on tail, spiky tail, ridged tail, shark tail fins, fish fins on head, spiky ears, hard edges, sharp points, jagged edges, needle-like tips, spiky ears, long ears, elongated ears, fluffy ears, fuzzy ears, upright ears, triangular ears, cat ears on top of head, gradient ear, color bleed, long ears, pointy ears, fox ears, wolf ears, elf ears, pointed ears, ear tips pointing up, fish fins on head, fin ears, dorsal fin, side fins, shark fins, webbed, fuzzy ears, fluffy ears, animal ears on top of head, cat ears, rabbit ears, upright ears, head_fins, ear_fins, fin_ears, fish_ears, headfins, ear_fin, fin_ear, glossy skin, shiny skin, wet skin, plastic skin, translucent skin, two pairs of ears, four ears, double ears, multiple fin ears, more than two ear fins, extra fin ears, duplicated fin ears, twin fins on the same side, fins on top of head, fins on back of head, back fins, head fins, dorsal fins on head, grey ears, dull ears, solid dark ears",
+    "generic": "long ear fins, elongated fins, flowing fins, fins extending past shoulders, giant fins, slender fins, towel texture on skin, fabric texture on skin, cloth pattern on skin, lowres, bad anatomy, bad hands, worst quality, low quality, jpeg artifacts, blurry, text, watermark, signature, extra legs, extra limbs, multiple views, mutilated, score_1, score_2, score_3, artist name, light blue hair, cyan hair, pale hair, pastel hair, plain smooth ears, featureless ears, flat ears, no ear detail, large tail, oversized tail, thick tail, wide fluke, huge fluke, tail covering legs, massive tail fin, dorsal fin, fin on tail, fins along tail, on tail, spiky tail, ridged tail, shark tail fins, fish fins on head, spiky ears, hard edges, sharp points, jagged edges, needle-like tips, spiky ears, long ears, elongated ears, fluffy ears, fuzzy ears, upright ears, triangular ears, cat ears on top of head, gradient ear, color bleed, long ears, pointy ears, fox ears, wolf ears, elf ears, pointed ears, ear tips pointing up, fish fins on head, fin ears, dorsal fin, side fins, shark fins, webbed, fuzzy ears, fluffy ears, animal ears on top of head, cat ears, rabbit ears, upright ears, head_fins, ear_fins, fin_ears, fish_ears, headfins, ear_fin, fin_ear, glossy skin, shiny skin, wet skin, plastic skin, translucent skin, two pairs of ears, four ears, double ears, multiple fin ears, more than two ear fins, extra fin ears, duplicated fin ears, twin fins on the same side, fins on top of head, fins on back of head, back fins, head fins, dorsal fins on head, grey ears, dull ears, solid dark ears",
+    "generic_nsfw": "long ear fins, elongated fins, flowing fins, fins extending past shoulders, giant fins, slender fins, towel texture on skin, fabric texture on skin, cloth pattern on skin, (worst quality, low quality:1.3), (bad anatomy:1.2), bad hands, extra fingers, fused fingers, extra limbs, extra legs, malformed limbs, deformed, disfigured, mutated, blurry, jpeg artifacts, 3d, realistic, photo, realistic photo, sketch, monochrome, shota, aged down, text, watermark, signature, logo, censor bar, mosaic, censored, pixelated, bad face, ugly face, asymmetric eyes, oversaturated, color cast, magenta cast, flat shading, flat color, score_1, score_2, score_3, artist name, light blue hair, cyan hair, pale hair, pastel hair, plain smooth ears, featureless ears, flat ears, no ear detail, large tail, oversized tail, thick tail, wide fluke, huge fluke, tail covering legs, massive tail fin, dorsal fin, fin on tail, fins along tail, on tail, spiky tail, ridged tail, shark tail fins, fish fins on head, spiky ears, hard edges, sharp points, jagged edges, needle-like tips, spiky ears, long ears, elongated ears, fluffy ears, fuzzy ears, upright ears, triangular ears, cat ears on top of head, gradient ear, color bleed, long ears, pointy ears, fox ears, wolf ears, elf ears, pointed ears, ear tips pointing up, fish fins on head, fin ears, dorsal fin, side fins, shark fins, webbed, fuzzy ears, fluffy ears, animal ears on top of head, cat ears, rabbit ears, upright ears, head_fins, ear_fins, fin_ears, fish_ears, headfins, ear_fin, fin_ear, glossy skin, shiny skin, wet skin, plastic skin, translucent skin, two pairs of ears, four ears, double ears, multiple fin ears, more than two ear fins, extra fin ears, duplicated fin ears, twin fins on the same side, fins on top of head, fins on back of head, back fins, head fins, dorsal fins on head, grey ears, dull ears, solid dark ears",
+    "xi_scene": "long ear fins, elongated fins, flowing fins, fins extending past shoulders, giant fins, slender fins, towel texture on skin, fabric texture on skin, cloth pattern on skin, lowres, bad anatomy, bad hands, extra fingers, fused fingers, missing fingers, too many fingers, malformed hands, deformed hands, long fingers, claws, mutated hands, worst quality, low quality, jpeg artifacts, blurry, flat color, oversaturated, thick outlines, text, watermark, signature, two tails, multiple tails, extra tails, split tail, double tail, forked tail, detached tail, tail on both sides, tail from hip, two flukes, floating tail, dorsal fin, fin on head, head fin, shark fin, triangular hair, fin ears on top of head, score_1, score_2, score_3, artist name, light blue hair, cyan hair, pale hair, pastel hair, plain smooth ears, featureless ears, flat ears, no ear detail, large tail, oversized tail, thick tail, wide fluke, huge fluke, tail covering legs, massive tail fin, dorsal fin, fin on tail, fins along tail, on tail, spiky tail, ridged tail, shark tail fins, fish fins on head, spiky ears, hard edges, sharp points, jagged edges, needle-like tips, spiky ears, long ears, elongated ears, fluffy ears, fuzzy ears, upright ears, triangular ears, cat ears on top of head, gradient ear, color bleed, long ears, pointy ears, fox ears, wolf ears, elf ears, pointed ears, ear tips pointing up, fish fins on head, fin ears, dorsal fin, side fins, shark fins, webbed, fuzzy ears, fluffy ears, animal ears on top of head, cat ears, rabbit ears, upright ears, head_fins, ear_fins, fin_ears, fish_ears, headfins, ear_fin, fin_ear, glossy skin, shiny skin, wet skin, plastic skin, translucent skin, two pairs of ears, four ears, double ears, multiple fin ears, more than two ear fins, extra fin ears, duplicated fin ears, twin fins on the same side, fins on top of head, fins on back of head, back fins, head fins, dorsal fins on head, grey ears, dull ears, solid dark ears",
+    "xi_scene_nsfw": "long ear fins, elongated fins, flowing fins, fins extending past shoulders, giant fins, slender fins, towel texture on skin, fabric texture on skin, cloth pattern on skin, dress, skirt, bra, panties, maid outfit, two figures, multiple girls, extra legs, extra limbs, censor bar, mosaic, censored, text, watermark, lowres, bad anatomy, worst quality, two tails, multiple tails, extra tails, split tail, double tail, forked tail, detached tail, tail on both sides, tail from hip, two flukes, floating tail, extra fingers, fused fingers, missing fingers, too many fingers, malformed hands, deformed hands, long fingers, claws, mutated hands, dorsal fin, fin on head, head fin, shark fin, triangular hair, fin ears on top of head, male, penis, 2girls, multiple girls, futanari, sex, score_1, score_2, score_3, artist name, light blue hair, cyan hair, pale hair, pastel hair, plain smooth ears, featureless ears, flat ears, no ear detail, large tail, oversized tail, thick tail, wide fluke, huge fluke, tail covering legs, massive tail fin, dorsal fin, fin on tail, fins along tail, on tail, spiky tail, ridged tail, shark tail fins, fish fins on head, spiky ears, hard edges, sharp points, jagged edges, needle-like tips, spiky ears, long ears, elongated ears, fluffy ears, fuzzy ears, upright ears, triangular ears, cat ears on top of head, gradient ear, color bleed, long ears, pointy ears, fox ears, wolf ears, elf ears, pointed ears, ear tips pointing up, fish fins on head, fin ears, dorsal fin, side fins, shark fins, webbed, fuzzy ears, fluffy ears, animal ears on top of head, cat ears, rabbit ears, upright ears, head_fins, ear_fins, fin_ears, fish_ears, headfins, ear_fin, fin_ear, glossy skin, shiny skin, wet skin, plastic skin, translucent skin, two pairs of ears, four ears, double ears, multiple fin ears, more than two ear fins, extra fin ears, duplicated fin ears, twin fins on the same side, fins on top of head, fins on back of head, back fins, head fins, dorsal fins on head, grey ears, dull ears, solid dark ears",
+    "xi_scene_nothighs": "long ear fins, elongated fins, flowing fins, fins extending past shoulders, giant fins, slender fins, towel texture on skin, fabric texture on skin, cloth pattern on skin, lowres, bad anatomy, bad hands, extra fingers, fused fingers, missing fingers, too many fingers, malformed hands, deformed hands, long fingers, claws, mutated hands, worst quality, low quality, jpeg artifacts, blurry, flat color, oversaturated, thick outlines, text, watermark, signature, two tails, multiple tails, extra tails, split tail, double tail, forked tail, detached tail, tail on both sides, tail from hip, two flukes, floating tail, dorsal fin, fin on head, head fin, shark fin, triangular hair, fin ears on top of head, white thighhighs, score_1, score_2, score_3, artist name, light blue hair, cyan hair, pale hair, pastel hair, plain smooth ears, featureless ears, flat ears, no ear detail, large tail, oversized tail, thick tail, wide fluke, huge fluke, tail covering legs, massive tail fin, dorsal fin, fin on tail, fins along tail, on tail, spiky tail, ridged tail, shark tail fins, fish fins on head, spiky ears, hard edges, sharp points, jagged edges, needle-like tips, spiky ears, long ears, elongated ears, fluffy ears, fuzzy ears, upright ears, triangular ears, cat ears on top of head, gradient ear, color bleed, long ears, pointy ears, fox ears, wolf ears, elf ears, pointed ears, ear tips pointing up, fish fins on head, fin ears, dorsal fin, side fins, shark fins, webbed, fuzzy ears, fluffy ears, animal ears on top of head, cat ears, rabbit ears, upright ears, head_fins, ear_fins, fin_ears, fish_ears, headfins, ear_fin, fin_ear, glossy skin, shiny skin, wet skin, plastic skin, translucent skin, two pairs of ears, four ears, double ears, multiple fin ears, more than two ear fins, extra fin ears, duplicated fin ears, twin fins on the same side, fins on top of head, fins on back of head, back fins, head fins, dorsal fins on head, grey ears, dull ears, solid dark ears"
   },
   "presets": {
     "stand": {
       "character": "xixi",
       "nsfw": false,
       "label": "单人立绘",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
       "negative": "xi_sfw",
-      "prompt": "front view, facing viewer, xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, dark blue maid outfit, white apron, standing, looking at viewer, white background, simple background, full body, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "front view, facing viewer, xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, dark navy maid dress with a white apron, short skirt with the hem reaching mid-thigh, white thighhighs, standing, looking at viewer, white background, simple background, full body, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": true
     },
     "side": {
       "character": "xixi",
       "nsfw": false,
       "label": "侧面立绘",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
       "negative": "xi_sfw",
-      "prompt": "xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, side view, standing, white background, full body, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, side view, standing, white background, full body, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": true
     },
     "back": {
       "character": "xixi",
       "nsfw": false,
       "label": "背面立绘",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
       "negative": "xi_sfw",
-      "prompt": "xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, from behind, standing, tail from lower back, tail fin, fluke, white background, full body, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, from behind, standing, tail from lower back, tail fin, fluke, white background, full body, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": true
     },
     "daily": {
       "character": "xixi",
       "nsfw": false,
       "label": "日常场景",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
       "negative": "xi_sfw",
-      "prompt": "front view, facing viewer, xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, {extra}, warm light, indoors, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "front view, facing viewer, xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, {extra}, warm light, indoors, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": true
     },
     "chibi": {
       "character": "xixi",
       "nsfw": false,
       "label": "Q 版表情包",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
-      "size": "1:1",
+      "size": "moss-hd",
       "steps": 24,
       "negative": "xi_sfw",
-      "prompt": "front view, facing viewer, xixi, 1girl, solo, chibi, royal blue hair, webbed ears on head sides, white ear membrane, blue tips, cute, simple background, upper body, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "front view, facing viewer, xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, chibi, royal blue hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, cute, simple background, upper body, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": true
     },
     "outfit:yukata": {
       "character": "xixi",
       "nsfw": false,
       "label": "浴衣",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
       "negative": "xi_outfit",
-      "prompt": "xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, yukata, floral pattern, obi, no apron, no maid headdress, tail from lower back, tail fin, fluke, from behind, standing, full body, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, yukata, floral pattern, obi, no apron, no maid headdress, tail from lower back, tail fin, fluke, from behind, standing, full body, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": true
     },
     "outfit:jk": {
       "character": "xixi",
       "nsfw": false,
       "label": "JK 制服",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
       "negative": "xi_outfit",
-      "prompt": "front view, facing viewer, xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, school uniform, sailor collar, pleated skirt, back vent, tail through vent, tail fin, fluke, no apron, standing, full body, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "front view, facing viewer, xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, school uniform, sailor collar, pleated skirt, back vent, tail through vent, tail fin, fluke, no apron, standing, full body, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": true
     },
     "outfit:lolita": {
       "character": "xixi",
       "nsfw": false,
       "label": "洛丽塔",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
       "negative": "xi_outfit",
-      "prompt": "xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, lolita dress, layers of frills, back bow opening, tail from lower back, tail fin, fluke, no apron, from behind, standing, full body, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, lolita dress, layers of frills, back bow opening, tail from lower back, tail fin, fluke, no apron, from behind, standing, full body, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": true
     },
     "outfit:gothic": {
       "character": "xixi",
       "nsfw": false,
       "label": "哥特长裙",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
       "negative": "xi_outfit",
-      "prompt": "xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, gothic lolita dress, corset, back lacing, tail from lower back, tail fin, fluke, no apron, from behind, standing, full body, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, gothic lolita dress, corset, back lacing, tail from lower back, tail fin, fluke, no apron, from behind, standing, full body, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": true
     },
     "outfit:qipao": {
       "character": "xixi",
       "nsfw": false,
       "label": "长旗袍",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
       "negative": "xi_outfit",
-      "prompt": "xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, long qipao, ankle-length, high side slit, tail through slit, tail fin, fluke, no apron, side view, standing, full body, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, long qipao, ankle-length, high side slit, tail through slit, tail fin, fluke, no apron, side view, standing, full body, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": true
     },
     "gown": {
       "character": "xixi",
       "nsfw": false,
       "label": "礼服",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
       "negative": "xi_outfit",
-      "prompt": "xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, ball gown, open back, long dress, no apron, no maid headdress, tail from lower back, tail fin, fluke, from behind, standing, full body, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, ball gown, open back, long dress, no apron, no maid headdress, tail from lower back, tail fin, fluke, standing, full body, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": true
     },
     "apron": {
       "character": "xixi",
       "nsfw": true,
       "label": "裸体围裙",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
       "negative": "xi_nsfw",
-      "prompt": "front view, facing viewer, xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, naked apron, only apron, apron on front, no bra, no panties, large breasts, white thighhighs, {extra}, standing, looking at viewer, single tail, one tail, tail fin, fluke, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "front view, facing viewer, xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, naked apron, only apron, apron on front, no bra, no panties, large breasts, white thighhighs, {extra}, standing, looking at viewer, single tail, one tail, tail fin, fluke, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": false
     },
     "lingerie": {
       "character": "xixi",
       "nsfw": true,
       "label": "内衣",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
       "negative": "xi_nsfw",
-      "prompt": "front view, facing viewer, xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, white lace lingerie, garter belt, large breasts, {extra}, lingerie only, no dress, no apron, standing, looking at viewer, single tail, one tail, tail fin, fluke, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "front view, facing viewer, xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, white lace lingerie, garter belt, large breasts, {extra}, lingerie only, no dress, no apron, standing, looking at viewer, single tail, one tail, tail fin, fluke, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": true
     },
     "any:sfw": {
@@ -156,8 +130,7 @@
       "nsfw": false,
       "label": "通用人物",
       "lora": null,
-      "loraStrength": 0,
-      "size": "3:4",
+      "size": "moss-hd",
       "negative": "generic",
       "prompt": "1girl, solo, {extra}, detailed face, beautiful eyes, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
       "qqExposed": true
@@ -167,8 +140,7 @@
       "nsfw": true,
       "label": "通用人物（成人向）",
       "lora": null,
-      "loraStrength": 0,
-      "size": "2:3",
+      "size": "moss-hd",
       "negative": "generic_nsfw",
       "prompt": "1girl, solo, adult, beautiful detailed face, long eyelashes, detailed eyes, glossy lips, blush, soft skin, detailed skin, collarbone, natural skin tone, {extra}, cowboy shot, soft lighting, depth of field, detailed shading, clean lineart, uncensored, correct anatomy, detailed navel, masterpiece, best quality, absurdres, newest, score_9, score_8, score_7, very aesthetic, amazing quality",
       "qqExposed": true
@@ -177,46 +149,38 @@
       "character": "xixi",
       "nsfw": true,
       "label": "裸体围裙·背面",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
-      "size": "2:3",
+      "size": "moss-hd",
       "negative": "xi_nsfw",
-      "prompt": "xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, naked apron, only apron, from behind, looking back over shoulder, bare back, bare buttocks, white thighhighs, single tail, one tail, tail fin, fluke, {extra}, standing, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, naked apron, only apron, from behind, looking back over shoulder, bare back, bare buttocks, white thighhighs, single tail, one tail, tail fin, fluke, {extra}, standing, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": false
     },
     "apron:bend": {
       "character": "xixi",
       "nsfw": true,
       "label": "裸体围裙·俯身背面",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
-      "size": "2:3",
+      "size": "moss-hd",
       "negative": "xi_nsfw",
-      "prompt": "xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, naked apron, only apron, bent over, from behind, looking back, bare back, bare buttocks, pussy, uncensored, white thighhighs, single tail, one tail, tail fin, fluke, {extra}, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, naked apron, only apron, bent over, from behind, looking back, bare back, bare buttocks, pussy, uncensored, white thighhighs, single tail, one tail, tail fin, fluke, {extra}, white background, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": false
     },
     "custom:xixi": {
       "character": "xixi",
       "nsfw": false,
       "label": "自由提示词·汐",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
-      "size": "2:3",
-      "maxExtra": 320,
+      "size": "moss-hd",
+      "maxExtra": 2000,
       "negative": "xi_scene_nothighs",
-      "prompt": "front view, facing viewer, xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, {extra}, single tail, one tail, tail fin, fluke, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "front view, facing viewer, xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, {extra}, single tail, one tail, tail fin, fluke, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": true
     },
     "custom:xixi:nsfw": {
       "character": "xixi",
       "nsfw": true,
       "label": "自由提示词·汐（成人向）",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
-      "size": "2:3",
-      "maxExtra": 320,
+      "size": "moss-hd",
+      "maxExtra": 2000,
       "negative": "xi_scene_nothighs",
-      "prompt": "front view, facing viewer, xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, uncensored, {extra}, single tail, one tail, tail fin, fluke, masterpiece, best quality, absurdres, score_9, score_8, score_7, newest, very aesthetic, amazing quality",
+      "prompt": "front view, facing viewer, xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, uncensored, {extra}, single tail, one tail, tail fin, fluke, masterpiece, best quality, absurdres, score_9, score_8, score_7, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": true
     },
     "custom:any": {
@@ -224,9 +188,8 @@
       "nsfw": false,
       "label": "自由提示词·通用",
       "lora": null,
-      "loraStrength": 0,
-      "size": "2:3",
-      "maxExtra": 320,
+      "size": "moss-hd",
+      "maxExtra": 2000,
       "negative": "generic",
       "prompt": "1girl, solo, {extra}, masterpiece, best quality, absurdres, newest, score_9, score_8, score_7, very aesthetic, amazing quality",
       "qqExposed": true
@@ -236,9 +199,8 @@
       "nsfw": true,
       "label": "自由提示词·通用（成人向）",
       "lora": null,
-      "loraStrength": 0,
-      "size": "2:3",
-      "maxExtra": 320,
+      "size": "moss-hd",
+      "maxExtra": 2000,
       "negative": "generic_nsfw",
       "prompt": "1girl, solo, adult, uncensored, correct anatomy, {extra}, masterpiece, best quality, absurdres, newest, score_9, score_8, score_7, very aesthetic, amazing quality",
       "qqExposed": true
@@ -247,24 +209,20 @@
       "character": "xixi",
       "nsfw": false,
       "label": "汐·场景",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
-      "size": "2:3",
-      "maxExtra": 200,
+      "size": "moss-hd",
+      "maxExtra": 2000,
       "negative": "xi_scene",
-      "prompt": "front view, facing viewer, xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, single tail, one tail, tail fin, fluke, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "front view, facing viewer, xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, single tail, one tail, tail fin, fluke, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": true
     },
     "scene:nsfw": {
       "character": "xixi",
       "nsfw": true,
       "label": "汐·场景（成人向）",
-      "lora": "xi_lora_anima_v7_3200.safetensors",
-      "loraStrength": 0.85,
-      "size": "2:3",
-      "maxExtra": 200,
+      "size": "moss-hd",
+      "maxExtra": 2000,
       "negative": "xi_scene_nsfw",
-      "prompt": "front view, facing viewer, xixi, 1girl, solo, royal blue hair, very long hair, webbed ears on head sides, white ear membrane, blue tips, uncensored, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, single tail, one tail, tail fin, fluke, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality",
+      "prompt": "front view, facing viewer, xixi, 1girl, solo, cute young woman, a very youthful baby face with round cheeks, large round eyes and a small nose, a tiny fine-boned frame with tiny shoulders, small wrists and a tiny ribcage, diminutive but voluptuous, despite her small skeletal frame she is not skinny, her body has soft curves with large breasts and a narrow waist, wide hips and normal thighs, royal blue twintails, very long hair, stubby whale-fin ears ending at her cheek level, with smooth hair completely covering the top and back of her head, even though they are short in length they remain thick and wide, a deep navy upper base and a pure white lower half with a stark white contrast, the white half covered in deep prominent wavy ribbed ridges, uncensored, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, single tail, one tail, tail fin, fluke, masterpiece, best quality, score_9, score_8, score_7, absurdres, newest, very aesthetic, amazing quality, thin whale tail, tail tip at knee height, tiny fluke",
       "qqExposed": true
     },
     "any:scene": {
@@ -272,9 +230,8 @@
       "nsfw": false,
       "label": "通用·场景",
       "lora": null,
-      "loraStrength": 0,
-      "size": "2:3",
-      "maxExtra": 260,
+      "size": "moss-hd",
+      "maxExtra": 2000,
       "negative": "generic",
       "prompt": "1girl, solo, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, masterpiece, best quality, absurdres, newest, score_9, score_8, score_7, very aesthetic, amazing quality",
       "qqExposed": true
@@ -284,18 +241,51 @@
       "nsfw": true,
       "label": "通用·场景（成人向）",
       "lora": null,
-      "loraStrength": 0,
-      "size": "2:3",
-      "maxExtra": 300,
+      "size": "moss-hd",
+      "maxExtra": 2000,
       "negative": "generic_nsfw",
       "prompt": "1girl, solo, adult, uncensored, correct anatomy, {extra}, cowboy shot, looking at viewer, detailed background, scenery, soft lighting, depth of field, masterpiece, best quality, absurdres, newest, score_9, score_8, score_7, very aesthetic, amazing quality",
       "qqExposed": true
     }
   },
-  "_model_note": "底座 = Anima 2.9B（oneObsession_anima29BV2）+ Qwen TE + qwen_image_vae，走 UNETLoader/CLIPLoader/VAELoader 三件套。采样 er_sde / simple / 28步 / CFG 3.5。汐用 xi_lora_anima_v6_3200 @0.85（74 张数据集，3200 步）。Anima 的 Qwen 文本编码器不兼容 lazypos/lazyneg/lazyhand（SDXL embedding），已全局移除。质量词用 Anima 官方推荐 score_9/8/7 系列；负面补 score_1/2/3 + artist name。2026-11-05 四底座对比：Anima 手部最好、画风最干净；WAI 构图遵从差，JANKU 偶发糊手。 2026-11-05 清理：去重质量词、发色改 dark blue hair（Anima 只写 blue hair 会偏亮青）、side/back 预设移除 front view、stand 补标准女仆装。 耳朵最终写法（R4）：webbed ears on head sides, white ear membrane, blue tips；负面再加 plain smooth ears/featureless ears/flat ears/no ear detail 压「退化成一平滑片」。",
+  "_model_note": "底座 = Anima 2.9B（oneObsession_anima29BV2）+ Qwen TE + qwen_image_vae，走 UNETLoader/CLIPLoader/VAELoader 三件套。采样 er_sde / simple / 28步 / CFG 3.5。汐用 xi_lora_anima_v6_3200 @0.85（74 张数据集，3200 步）。Anima 的 Qwen 文本编码器不兼容 lazypos/lazyneg/lazyhand（SDXL embedding），已全局移除。质量词用 Anima 官方推荐 score_9/8/7 系列；负面补 score_1/2/3 + artist name。2026-11-05 四底座对比：Anima 手部最好、画风最干净；WAI 构图遵从差，JANKU 偶发糊手。 2026-11-05 清理：去重质量词、发色改 dark blue hair（Anima 只写 blue hair 会偏亮青）、side/back 预设移除 front view、stand 补标准女仆装。 耳朵最终写法（R4）：webbed ears on head sides, white ear membrane, blue tips；负面再加 plain smooth ears/featureless ears/flat ears/no ear detail 压「退化成一平滑片」。 2026-11-06 尾巴负面精确化：用 fin membrane on tail 替代裸 fin membrane（后者会误伤耳朵的膜）。 2026-11-06 耳朵定稿：fluffy drooping（V2）+ 淡蓝；负面移除 fluffy/fur 系列（毛绒是想要的），改压 fish fins/fin membrane/fin rays/webbed ears。 2026-11-08 定稿：底座 Anima + xi_lora_anima_v11_3200（92 全身 + 65 头肩裁切，3200 步）。耳朵用 L2 绒耳写法（layered ears + white lower rim + gentle shallow wave + subtle fuzzy + deep blue upper），稳定优先于鳍片质感（G 版半透明效果更好但只有 50-60% 命中率）。负面新增下划线鳍标签 head_fins/ear_fins/fin_ears 与皮肤质感压制。",
   "_tone_note": "风格标签组：artist:shiratama + artist:ask 负责粉彩薄涂，dark blue hair + vivid blue hair 把被洗淡的发色锚回深蓝，pastel colors + soft lighting + low contrast 压饱和与对比。实测优于 muted colors/pastel palette（后者会把深色服装洗白）。",
-  "arch": "anima",
-  "unet": "Anima\\oneObsession_anima29BV2.safetensors",
-  "textEncoder": "oneObsessionAnima_v40_txt.safetensors",
-  "vae": "qwen_image_vae.safetensors"
+  "arch": "moss",
+  "unet": "moss_image_sft_int8_convrot.safetensors",
+  "textEncoder": "qwen3.5_9b_w4a8_gptq.safetensors",
+  "vae": "flux2-vae.safetensors",
+  "clipType": "moss_image",
+  "slg": {
+    "scale": 3,
+    "start": 0.01,
+    "end": 0.15
+  },
+  "loras": [
+    {
+      "name": "xi_moss_v12.safetensors",
+      "strength": 0.7
+    },
+    {
+      "name": "moss_anime_lora.safetensors",
+      "strength": 0.48
+    }
+  ],
+  "adetailer": {
+    "hand": {
+      "detector": "bbox/hand_yolov8s.pt",
+      "guide": 768,
+      "denoise": 0.45
+    },
+    "face": {
+      "detector": "bbox/face_yolov8m.pt",
+      "guide": 1024,
+      "denoise": 0.32
+    }
+  },
+  "hiresFix": {
+    "upscale": 1.3,
+    "denoise": 0.4,
+    "steps": 20,
+    "model": "RealESRGAN_x4plus_anime_6B.pth"
+  }
 }
