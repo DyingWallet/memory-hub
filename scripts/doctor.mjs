@@ -67,6 +67,18 @@ export async function runDoctor({ deep = true } = {}) {
     const patchFile = join(profileDir, 'cordis.patch.yml');
     const patch = existsSync(patchFile) ? readFileSync(patchFile, 'utf8') : '';
     add('mcp.block', 'MCP 注册块', patch.includes('memory-hub MCP BEGIN'), patchFile);
+    // DSH 0.2.2：带 BOM 的 patch 能启动、能热加载、settings/describe 也正常，只有
+    // settings/update 回 settings/rejected —— 表现为 qq-mode 模式写不穿，最难发现。
+    const patchHead = existsSync(patchFile) ? readFileSync(patchFile).subarray(0, 3) : Buffer.alloc(0);
+    const patchHasBom = patchHead.length === 3 && patchHead[0] === 0xef && patchHead[1] === 0xbb && patchHead[2] === 0xbf;
+    add(
+      'profile.patchBom',
+      'cordis.patch.yml 无 UTF-8 BOM',
+      !patchHasBom,
+      patchHasBom
+        ? `${patchFile} 带 BOM：DSH 0.2.2 的 settings/update 会回 settings/rejected（qq-mode 模式写不穿）。修：scripts\\post-upgrade.ps1 -FixBom`
+        : patchFile,
+    );
   }
 
   /* ── 令牌 ─────────────────────────────────────────────────── */

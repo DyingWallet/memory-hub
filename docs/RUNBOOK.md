@@ -502,6 +502,7 @@ POST /memory-hub/tokens/revoke -> memd /v1/tokens/revoke  （需 Authorization�
 | 插件 | `dsh-memory`、`dsh-memory-panel` 的 dep/bundle/linked | 是 |
 | 加载 | 两个插件的加载标记（见 §5 的「重启后自动验证」） | 是 |
 | MCP | `cordis.patch.yml` 里的注册块 | 是 |
+| profile | `cordis.patch.yml` 无 UTF-8 BOM（见 §5.1.3） | 是 |
 | 令牌 | `~/.dsh/memory-token` | 是 |
 | memd | `/v1/health` | 是 |
 | 披露 | 披露令牌 / `POST /v1/disclose` / 群成员表 / 最近一次披露 | 令牌与接口是，其余提示 |
@@ -524,6 +525,37 @@ POST /memory-hub/tokens/revoke -> memd /v1/tokens/revoke  （需 Authorization�
 - doctor 的「上次启动自检」一行读的就是 `data/doctor-last.json`。
 
 关掉它：环境变量 `MEMD_BOOT_CHECK=0`。`runDoctor({ deep:false })` 可跳过披露探针（只查文件）。
+
+### 5.1.3 DSH 升级后复测（2026-11-12，0.2.2 实测）
+
+升级完先跑一遍 `scripts\post-upgrade.ps1`，它现在固定五项：memd、doctor、**patch BOM**、
+pet-llm、qq-bridge。全 OK 才算基线恢复。
+
+**patch BOM（本次踩的坑）**：`cordis.patch.yml` 首字节是 `EF BB BF` 时，DSH 0.2.2 的
+`settings/update` 会回 `settings/rejected: Unexpected scalar at node end`（报第 1 行
+`- id: ui-settings-account`），而启动、热加载、`settings/describe` 全部正常——插件全绿，
+qq-mode 模式却写不穿（只在本地生效）。根因：Windows PowerShell 5.1 的
+`Set-Content -Encoding UTF8` 默认写 BOM，`install-sleep-preset.ps1` 曾用它重写整份 patch。
+已修：该脚本改走 `[System.IO.File]::WriteAllText` + `UTF8Encoding($false)`；
+`doctor.mjs` 加 `profile.patchBom` 核心检查；`setup-dsh-mcp.mjs` 读入剥 BOM、
+`--check` 报 `patchHasBom`；`post-upgrade.ps1` 报 `patch BOM` 并可 `-FixBom` 一键修（自动备份）；
+`tests/unit/dsh-patch-bom.test.ts` 钉住这四个写入者/检查者。
+
+**升级后另外三处「脚本腐化」，都不是插件坏**：
+
+| 现象 | 原因 | 处置 |
+|---|---|---|
+| `verify-dsh-020-adaptation.mjs` 报「无法定位 DSH 安装目录下的 node_modules」 | 0.2.2 是 asar 打包，安装目录下没有 `node_modules` | 脚本失效；直接用活 DSH 的 `settings/describe` + `settings/update` 验 |
+| `verify-agent-presets-017.mjs` 报 `fetch failed` | 默认连 `http://127.0.0.1:3080` | 设 `DSH_BASE_URL=http://127.0.0.1:8219` 再跑 |
+| `test-mode-handover.mjs` 报 `resolveConsolePort is not defined` | vm harness 没把 `bridge.js` 新引入的 `ports.js` 符号注进上下文 | harness 待修；真实桥接进程正常 |
+
+**活 DSH 上验证 settings 写穿**（不用浏览器）：用桥接的 `dsh-client` 铸 Cookie，调
+`settings/describe` 看 `qq-mode` 在列，再 `settings/update({ns:'qq-mode',patch:{mode:'reserved2'}})`，
+返回 `SettingsNamespaceView` 即通。桥接每 5 秒调一次 `settings/describe` 探活，所以只要
+`/api/status` 的 `dshReady=true`，读链路就是活的。
+
+**ComfyUI 不随整栈自启**：要 `D:\AI_Stuff\ComfyUI_windows_portable\run_nvidia_gpu.bat` 手动起，
+8188 监听约 60–90 秒；没起时 `comfy_status` 报「ComfyUI 不可达」，`draw_image` 同样失败。
 
 ### 5.2 桌宠（dsh-pet-configurable-llm）
 

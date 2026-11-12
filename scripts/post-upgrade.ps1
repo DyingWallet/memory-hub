@@ -8,7 +8,8 @@
 #
 # Keep this file ASCII-only: Windows PowerShell 5.1 reads a BOM-less .ps1 as ANSI.
 param(
-  [switch]$SkipPetCheck
+  [switch]$SkipPetCheck,
+  [switch]$FixBom
 )
 
 $ErrorActionPreference = 'Continue'
@@ -93,6 +94,35 @@ try {
   Add-Result 'doctor' $false 'could not parse doctor output'
 }
 Remove-Item $doctorJson -ErrorAction SilentlyContinue
+
+# 2b. profile patch: UTF-8 BOM. DSH 0.2.2 rejects settings/update when the file
+# starts with a BOM (settings/rejected: Unexpected scalar at node end), while
+# startup, hot reload and settings/describe all keep working - so every plugin
+# looks green but qq-mode can never be written through. See ENVIRONMENT.md.
+$profileName = $env:DSH_PROFILE
+if (-not $profileName) { $profileName = 'desktop' }
+$patchFile = Join-Path $env:USERPROFILE (".dsh\profiles\{0}\cordis.patch.yml" -f $profileName)
+$patchBom = $false
+$patchExists = Test-Path -LiteralPath $patchFile
+if ($patchExists) {
+  $headBytes = [System.IO.File]::ReadAllBytes($patchFile)
+  if ($headBytes.Length -ge 3 -and $headBytes[0] -eq 0xEF -and $headBytes[1] -eq 0xBB -and $headBytes[2] -eq 0xBF) { $patchBom = $true }
+}
+if (-not $patchExists) {
+  Add-Result 'patch BOM' $false ("missing: {0}" -f $patchFile)
+} elseif ($patchBom -and $FixBom) {
+  $bomBackup = $patchFile + '.bak-debom-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
+  Copy-Item -LiteralPath $patchFile -Destination $bomBackup -Force
+  $allBytes = [System.IO.File]::ReadAllBytes($patchFile)
+  $noBom = New-Object byte[] ($allBytes.Length - 3)
+  [Array]::Copy($allBytes, 3, $noBom, 0, $noBom.Length)
+  [System.IO.File]::WriteAllBytes($patchFile, $noBom)
+  Add-Result 'patch BOM' $true ("removed; backup {0}" -f (Split-Path $bomBackup -Leaf))
+} elseif ($patchBom) {
+  Add-Result 'patch BOM' $false 'has UTF-8 BOM: settings/update is rejected; rerun with -FixBom'
+} else {
+  Add-Result 'patch BOM' $true 'clean'
+}
 
 # 3. pet-llm
 if ($SkipPetCheck) {

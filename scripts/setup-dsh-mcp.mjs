@@ -60,7 +60,16 @@ if (!existsSync(serverScript)) {
   process.exit(1);
 }
 
-const existing = readFileSync(patchFile, 'utf8');
+// DSH 0.2.2 的 settings/update 拒绝解析带 UTF-8 BOM 的 cordis.patch.yml
+// （settings/rejected: Unexpected scalar at node end），schemas 正常、写穿失败。
+// 读入时剥掉，写回时保持无 BOM；--check 会报 patchHasBom。
+const stripBom = (text) => (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+const hasUtf8Bom = (file) => {
+  const head = readFileSync(file).subarray(0, 3);
+  return head.length === 3 && head[0] === 0xef && head[1] === 0xbb && head[2] === 0xbf;
+};
+
+const existing = stripBom(readFileSync(patchFile, 'utf8'));
 const withoutBlock = stripBlock(existing);
 const hasBlock = withoutBlock !== existing;
 
@@ -69,6 +78,7 @@ if (has('check')) {
     profile,
     patchFile,
     blockPresent: hasBlock,
+    patchHasBom: hasUtf8Bom(patchFile),
     tokenFile,
     tokenPresent: existsSync(tokenFile),
     serverScript,
